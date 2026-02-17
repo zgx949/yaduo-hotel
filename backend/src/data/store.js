@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { decryptPoolToken, encryptPoolToken } from "../services/token-crypto.service.js";
 
 const now = () => new Date().toISOString();
 
@@ -93,7 +94,7 @@ const poolAccounts = [
     id: "pool_001",
     phone: "13800000001",
     auth: {
-      loginToken: "token_pool_001"
+      loginTokenCipher: ""
     },
     profile: {
       remark: "演示账号"
@@ -274,6 +275,32 @@ const deriveTier = (capabilities) => {
 };
 
 const deriveStatus = (runtime) => (runtime.isOnline ? "ACTIVE" : "OFFLINE");
+const canUseTier = (entity, tier) => {
+  if (!tier) {
+    return true;
+  }
+  if (tier === "NEW_USER") {
+    return Boolean(entity.capabilities.isNewUser);
+  }
+  if (tier === "PLATINUM") {
+    return Boolean(entity.capabilities.isPlatinum);
+  }
+  if (tier === "CORPORATE") {
+    return entity.capabilities.corporateBindings.length > 0;
+  }
+  return true;
+};
+const getDecryptedPoolToken = (entity) => {
+  const cipher = entity?.auth?.loginTokenCipher;
+  if (!cipher) {
+    return "";
+  }
+  try {
+    return decryptPoolToken(cipher);
+  } catch {
+    return "";
+  }
+};
 
 const projectPoolAccount = (entity) => {
   const tier = deriveTier(entity.capabilities);
@@ -283,7 +310,8 @@ const projectPoolAccount = (entity) => {
   return {
     id: entity.id,
     phone: entity.phone,
-    token: entity.auth.loginToken,
+    token: "",
+    token_configured: Boolean(entity.auth.loginTokenCipher),
     is_online: entity.runtime.isOnline,
     remark: entity.profile.remark || null,
     is_platinum: entity.capabilities.isPlatinum,
@@ -316,7 +344,7 @@ const normalizePoolPayload = (payload, existing = null) => {
     existing || {
       id: randomUUID(),
       phone: "",
-      auth: { loginToken: "" },
+      auth: { loginTokenCipher: "" },
       profile: { remark: null },
       capabilities: { isPlatinum: false, isNewUser: false, corporateBindings: [] },
       wallet: { points: 0, breakfastCoupons: 0, roomUpgradeCoupons: 0, lateCheckoutCoupons: 0, slippersCoupons: 0 },
@@ -331,7 +359,10 @@ const normalizePoolPayload = (payload, existing = null) => {
     next.phone = String(payload.phone || "").trim();
   }
   if (hasOwn(payload, "token")) {
-    next.auth.loginToken = String(payload.token || "").trim();
+    const plainToken = String(payload.token || "").trim();
+    if (plainToken) {
+      next.auth.loginTokenCipher = encryptPoolToken(plainToken);
+    }
   }
   if (hasOwn(payload, "remark")) {
     next.profile.remark = payload.remark ? String(payload.remark) : null;
@@ -577,7 +608,12 @@ export const store = {
     return item ? clone(projectPoolAccount(item)) : null;
   },
   isPoolTokenTaken(token, excludeId = null) {
-    return poolAccounts.some((it) => it.auth.loginToken === token && it.id !== excludeId);
+    return poolAccounts.some((it) => {
+      if (it.id === excludeId) {
+        return false;
+      }
+      return getDecryptedPoolToken(it) === token;
+    });
   },
   createPoolAccount(payload) {
     const normalized = normalizePoolPayload(payload, null);
@@ -601,6 +637,26 @@ export const store = {
     }
     poolAccounts.splice(idx, 1);
     return true;
+  },
+  acquirePoolToken(options = {}) {
+    const tier = options.tier ? String(options.tier).toUpperCase() : null;
+    const onlineAccounts = poolAccounts.filter((it) => it.runtime.isOnline);
+    const candidates = onlineAccounts.filter((it) => canUseTier(it, tier));
+    if (candidates.length === 0) {
+      return null;
+    }
+    const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+    for (const item of shuffled) {
+      const token = getDecryptedPoolToken(item);
+      if (token) {
+        return {
+          token,
+          accountId: item.id,
+          accountPhone: item.phone
+        };
+      }
+    }
+    return null;
   },
   createOrder(payload, creator) {
     const item = {

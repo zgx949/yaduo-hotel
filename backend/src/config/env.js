@@ -27,6 +27,8 @@ export const env = {
   atourUserAgent:
     process.env.ATOUR_USER_AGENT ||
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AtourBrowser-AtourLife/4.1.0/iOS",
+  poolTokenPublicKey: process.env.POOL_TOKEN_PUBLIC_KEY || "",
+  poolTokenPrivateKey: process.env.POOL_TOKEN_PRIVATE_KEY || "",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   geminiApiKey: process.env.GEMINI_API_KEY || "",
   googleApiKey: process.env.GOOGLE_API_KEY || "",

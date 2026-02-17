@@ -1,0 +1,38 @@
+# -------------------------------------------------------------------
+# Pool token encryption demo env
+# Copy fields to backend/.env and fill real values
+# -------------------------------------------------------------------
+
+# Existing backend env fields (keep your original values)
+NODE_ENV=development
+PORT=8787
+API_PREFIX=/api
+CORS_ORIGIN=http://localhost:3000
+
+# Optional fallback token (if no pool token is available)
+ATOUR_ACCESS_TOKEN=
+
+# -------------------------------------------------------------------
+# RSA key pair for pool token encryption at rest
+# -------------------------------------------------------------------
+# 1) Generate private key:
+#    openssl genpkey -algorithm RSA -out pool_token_private.pem -pkeyopt rsa_keygen_bits:2048
+#
+# 2) Export public key:
+#    openssl rsa -pubout -in pool_token_private.pem -out pool_token_public.pem
+#
+# 3) Convert to one-line env style (replace newlines with \n):
+#    awk '{printf "%s\\n",$0}' pool_token_private.pem
+#    awk '{printf "%s\\n",$0}' pool_token_public.pem
+#
+# 4) Paste outputs below:
+POOL_TOKEN_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nREPLACE_ME\n-----END PRIVATE KEY-----
+POOL_TOKEN_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\nREPLACE_ME\n-----END PUBLIC KEY-----
+
+# -------------------------------------------------------------------
+# LLM keys (optional)
+# -------------------------------------------------------------------
+OPENAI_API_KEY=
+GEMINI_API_KEY=
+GOOGLE_API_KEY=
+ANTHROPIC_API_KEY=

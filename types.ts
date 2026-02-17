@@ -53,7 +53,8 @@ export interface HotelAccount {
 }
 
 export interface PoolAccount extends HotelAccount {
-  token: string;
+  token?: string;
+  token_configured?: boolean;
   is_online: boolean;
   remark?: string | null;
   is_platinum: boolean;

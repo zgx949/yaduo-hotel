@@ -301,7 +301,7 @@ export const Accounts: React.FC = () => {
     setFormError('');
     setForm({
       phone: account.phone,
-      token: account.token || '',
+      token: '',
       remark: account.remark || '',
       is_online: account.is_online,
       is_platinum: account.is_platinum,
@@ -332,8 +332,8 @@ export const Accounts: React.FC = () => {
 
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.phone || !form.token) {
-      setFormError('手机号和 token 必填');
+    if (!form.phone || (!editingAccountId && !form.token)) {
+      setFormError(editingAccountId ? '手机号必填' : '手机号和 token 必填');
       return;
     }
 
@@ -341,7 +341,7 @@ export const Accounts: React.FC = () => {
     setFormError('');
 
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         ...form,
         is_corp_user: form.corporate_agreements.length > 0 ? true : form.is_corp_user,
         corporate_agreements: form.corporate_agreements,
@@ -349,6 +349,10 @@ export const Accounts: React.FC = () => {
         room_upgrade_coupons: Number(form.room_upgrade_coupons),
         late_checkout_coupons: Number(form.late_checkout_coupons)
       };
+
+      if (editingAccountId && !String(form.token || '').trim()) {
+        delete payload.token;
+      }
 
       if (editingAccountId) {
         const updated = await fetchWithAuth(`/api/pool/accounts/${editingAccountId}`, {
@@ -499,7 +503,7 @@ export const Accounts: React.FC = () => {
                   value={form.token}
                   onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  placeholder="token_xxx"
+                  placeholder={editingAccountId ? "留空则不修改，填写后将重新加密" : "token_xxx"}
                 />
               </div>
             </div>
@@ -753,6 +757,9 @@ export const Accounts: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="font-mono font-medium text-gray-900">{acc.phone}</div>
                         <div className="text-xs text-gray-400">ID: {acc.id}</div>
+                        <div className={`text-[10px] mt-1 ${acc.token_configured ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {acc.token_configured ? 'Token: 已加密配置' : 'Token: 未配置'}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${tierInfo.color}`}>

@@ -82,12 +82,19 @@ poolRoutes.post("/accounts", requireAuth, (req, res) => {
   if (store.isPoolTokenTaken(payload.token)) {
     return res.status(409).json({ message: "token already exists" });
   }
-  const item = store.createPoolAccount(payload);
-  return res.status(201).json(item);
+  try {
+    const item = store.createPoolAccount(payload);
+    return res.status(201).json(item);
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "failed to create pool account" });
+  }
 });
 
 poolRoutes.patch("/accounts/:id", requireAuth, (req, res) => {
-  const payload = req.body || {};
+  const payload = { ...(req.body || {}) };
+  if (Object.prototype.hasOwnProperty.call(payload, "token") && !String(payload.token || "").trim()) {
+    delete payload.token;
+  }
   const validationError = validatePatchPayload(payload);
   if (validationError) {
     return res.status(400).json({ message: validationError });
@@ -96,11 +103,15 @@ poolRoutes.patch("/accounts/:id", requireAuth, (req, res) => {
     return res.status(409).json({ message: "token already exists" });
   }
 
-  const item = store.updatePoolAccount(req.params.id, payload);
-  if (!item) {
-    return res.status(404).json({ message: "Pool account not found" });
+  try {
+    const item = store.updatePoolAccount(req.params.id, payload);
+    if (!item) {
+      return res.status(404).json({ message: "Pool account not found" });
+    }
+    return res.json(item);
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "failed to update pool account" });
   }
-  return res.json(item);
 });
 
 poolRoutes.delete("/accounts/:id", requireAuth, (req, res) => {

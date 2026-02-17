@@ -1,35 +1,16 @@
 import { env } from "../config/env.js";
 import { store } from "../data/store.js";
 
-const matchTier = (account, tier) => {
-  if (!tier || tier === "NORMAL") {
-    return true;
-  }
-  if (tier === "NEW_USER") {
-    return Boolean(account.is_new_user);
-  }
-  if (tier === "PLATINUM") {
-    return Boolean(account.is_platinum);
-  }
-  if (tier === "CORPORATE") {
-    return Boolean(account.is_corp_user);
-  }
-  return true;
-};
-
 export const pickPoolTokenForInternal = (options = {}) => {
-  const targetTier = options.tier ? String(options.tier).toUpperCase() : null;
-  const accounts = store.listPoolAccounts({ is_online: true });
-  const candidates = accounts.filter((account) => Boolean(account.token) && matchTier(account, targetTier));
-  if (candidates.length === 0) {
+  const picked = store.acquirePoolToken({ tier: options.tier });
+  if (!picked) {
     return null;
   }
-  const picked = candidates[Math.floor(Math.random() * candidates.length)];
   return {
     token: picked.token,
     source: "pool-account",
-    accountId: picked.id,
-    accountPhone: picked.phone
+    accountId: picked.accountId,
+    accountPhone: picked.accountPhone
   };
 };
 
