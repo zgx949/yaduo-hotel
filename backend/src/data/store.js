@@ -1,23 +1,90 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 
 const now = () => new Date().toISOString();
+
+const hashPassword = (plain) => {
+  const salt = randomBytes(16).toString("hex");
+  const digest = scryptSync(String(plain), salt, 64).toString("hex");
+  return `scrypt$${salt}$${digest}`;
+};
+
+const verifyPassword = (plain, encoded) => {
+  if (!encoded || !encoded.startsWith("scrypt$")) {
+    return false;
+  }
+  const [, salt, digest] = encoded.split("$");
+  if (!salt || !digest) {
+    return false;
+  }
+  const computed = scryptSync(String(plain), salt, 64);
+  const stored = Buffer.from(digest, "hex");
+  if (computed.length !== stored.length) {
+    return false;
+  }
+  return timingSafeEqual(computed, stored);
+};
+
+const createDefaultPermissions = () => ({
+  allowNewUserBooking: true,
+  newUserLimit: -1,
+  newUserQuota: -1,
+  allowPlatinumBooking: false,
+  platinumLimit: 0,
+  platinumQuota: 0,
+  allowCorporateBooking: false,
+  corporateLimit: 0,
+  corporateQuota: 0,
+  allowedCorporateNames: [],
+  corporateSpecificLimits: {},
+  corporateSpecificQuotas: {}
+});
+
+const normalizePermissions = (patch = {}, existing = createDefaultPermissions()) => ({
+  ...existing,
+  ...patch,
+  allowedCorporateNames: Array.isArray(patch.allowedCorporateNames)
+    ? patch.allowedCorporateNames.map((it) => String(it).trim()).filter(Boolean)
+    : existing.allowedCorporateNames,
+  corporateSpecificLimits: {
+    ...existing.corporateSpecificLimits,
+    ...(patch.corporateSpecificLimits || {})
+  },
+  corporateSpecificQuotas: {
+    ...existing.corporateSpecificQuotas,
+    ...(patch.corporateSpecificQuotas || {})
+  }
+});
 
 const users = [
   {
     id: "u_admin",
     username: "admin",
     name: "系统管理员",
+    password: hashPassword("123456"),
     role: "ADMIN",
     status: "ACTIVE",
-    createdAt: "2026-01-01"
+    permissions: {
+      ...createDefaultPermissions(),
+      allowPlatinumBooking: true,
+      platinumLimit: -1,
+      platinumQuota: -1,
+      allowCorporateBooking: true,
+      corporateLimit: -1,
+      corporateQuota: -1
+    },
+    createdAt: "2026-01-01",
+    approvedAt: "2026-01-01T00:00:00.000Z"
   },
   {
     id: "u_demo",
     username: "demo",
     name: "演示用户",
+    password: hashPassword("123456"),
     role: "USER",
     status: "ACTIVE",
-    createdAt: "2026-01-10"
+    permissions: createDefaultPermissions(),
+    createdAt: "2026-01-10",
+    approvedAt: "2026-01-10T00:00:00.000Z"
   }
 ];
 
@@ -56,6 +123,38 @@ const poolAccounts = [
 
 const orders = [];
 const tasks = [];
+const blacklistRecords = [
+  {
+    id: "bl_001",
+    chainId: "ATOUR",
+    hotelName: "上海人民广场大世界地铁站亚朵酒店",
+    severity: "MEDIUM",
+    reason: "前台态度极差，拒绝查单，且卫生间有异味。",
+    tags: ["态度恶劣", "卫生差"],
+    status: "ACTIVE",
+    reportedBy: "Agent-007",
+    reporterId: "u_admin",
+    source: "manual",
+    date: "2023-10-05",
+    createdAt: "2023-10-05T10:00:00.000Z",
+    updatedAt: "2023-10-05T10:00:00.000Z"
+  },
+  {
+    id: "bl_002",
+    chainId: "UNKNOWN",
+    hotelName: "北京某快捷酒店",
+    severity: "HIGH",
+    reason: "虚假宣传，无窗房当有窗卖，客户投诉退款难。",
+    tags: ["虚假宣传", "退款难"],
+    status: "ACTIVE",
+    reportedBy: "Agent-Alice",
+    reporterId: "u_demo",
+    source: "manual",
+    date: "2023-09-15",
+    createdAt: "2023-09-15T10:00:00.000Z",
+    updatedAt: "2023-09-15T10:00:00.000Z"
+  }
+];
 const sessions = new Map();
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -205,6 +304,7 @@ export const store = {
   poolAccounts,
   orders,
   tasks,
+  blacklistRecords,
   createSession(user) {
     const token = randomUUID();
     sessions.set(token, { userId: user.id, role: user.role, createdAt: now() });
@@ -217,27 +317,78 @@ export const store = {
     sessions.delete(token);
   },
   listUsers() {
-    return clone(users);
+    return clone(users.map((it) => {
+      const safe = { ...it };
+      delete safe.password;
+      return safe;
+    }));
+  },
+  getUserByUsername(username) {
+    return users.find((it) => it.username === username) || null;
+  },
+  verifyUserPassword(user, plainPassword) {
+    return verifyPassword(plainPassword, user?.password);
+  },
+  createRegistration(payload) {
+    const item = {
+      id: randomUUID(),
+      username: payload.username,
+      name: payload.name,
+      password: hashPassword(payload.password),
+      role: "USER",
+      status: "PENDING",
+      permissions: createDefaultPermissions(),
+      createdAt: now().slice(0, 10),
+      approvedAt: null
+    };
+    users.push(item);
+    const safe = { ...item };
+    delete safe.password;
+    return clone(safe);
   },
   createUser(payload) {
     const item = {
       id: randomUUID(),
       username: payload.username,
       name: payload.name,
+      password: hashPassword(payload.password || "123456"),
       role: payload.role || "USER",
       status: payload.status || "ACTIVE",
-      createdAt: now().slice(0, 10)
+      permissions: normalizePermissions(payload.permissions, createDefaultPermissions()),
+      createdAt: now().slice(0, 10),
+      approvedAt: payload.status === "ACTIVE" ? now() : null
     };
     users.push(item);
-    return clone(item);
+    const safe = { ...item };
+    delete safe.password;
+    return clone(safe);
   },
   updateUser(id, patch) {
     const idx = users.findIndex((it) => it.id === id);
     if (idx < 0) {
       return null;
     }
-    users[idx] = { ...users[idx], ...patch };
-    return clone(users[idx]);
+
+    const next = {
+      ...users[idx],
+      ...patch,
+      permissions: patch.permissions
+        ? normalizePermissions(patch.permissions, users[idx].permissions || createDefaultPermissions())
+        : users[idx].permissions
+    };
+
+    if (patch.password) {
+      next.password = hashPassword(patch.password);
+    }
+
+    if (patch.status === "ACTIVE" && !users[idx].approvedAt) {
+      next.approvedAt = now();
+    }
+
+    users[idx] = next;
+    const safe = { ...next };
+    delete safe.password;
+    return clone(safe);
   },
   listPoolAccounts(filters = {}) {
     let items = poolAccounts;
@@ -339,5 +490,148 @@ export const store = {
     }
     tasks[idx] = { ...tasks[idx], ...patch, updatedAt: now() };
     return clone(tasks[idx]);
+  },
+  listBlacklistRecords(filters = {}) {
+    let items = blacklistRecords;
+
+    if (filters.search) {
+      const keyword = String(filters.search).toLowerCase();
+      items = items.filter(
+        (it) =>
+          it.hotelName.toLowerCase().includes(keyword) ||
+          it.chainId.toLowerCase().includes(keyword) ||
+          it.reason.toLowerCase().includes(keyword) ||
+          it.tags.some((tag) => tag.toLowerCase().includes(keyword))
+      );
+    }
+
+    if (filters.chainId) {
+      const chainId = String(filters.chainId).toLowerCase();
+      items = items.filter((it) => it.chainId.toLowerCase() === chainId);
+    }
+
+    if (filters.severity) {
+      items = items.filter((it) => it.severity === filters.severity);
+    }
+
+    if (filters.status) {
+      items = items.filter((it) => it.status === filters.status);
+    }
+
+    return clone(items.sort((a, b) => b.date.localeCompare(a.date)));
+  },
+  getBlacklistRecord(id) {
+    const item = blacklistRecords.find((it) => it.id === id);
+    return item ? clone(item) : null;
+  },
+  createBlacklistRecord(payload, reporter) {
+    const item = {
+      id: randomUUID(),
+      chainId: String(payload.chainId || "UNKNOWN").trim(),
+      hotelName: String(payload.hotelName).trim(),
+      severity: payload.severity,
+      reason: String(payload.reason).trim(),
+      tags: Array.isArray(payload.tags)
+        ? Array.from(new Set(payload.tags.map((it) => String(it).trim()).filter(Boolean)))
+        : [],
+      status: payload.status || "ACTIVE",
+      reportedBy: payload.reportedBy || reporter.name,
+      reporterId: reporter.id,
+      source: payload.source || "manual",
+      date: payload.date || now().slice(0, 10),
+      createdAt: now(),
+      updatedAt: now()
+    };
+    blacklistRecords.unshift(item);
+    return clone(item);
+  },
+  updateBlacklistRecord(id, patch) {
+    const idx = blacklistRecords.findIndex((it) => it.id === id);
+    if (idx < 0) {
+      return null;
+    }
+
+    const next = {
+      ...blacklistRecords[idx],
+      ...patch,
+      updatedAt: now()
+    };
+
+    if (patch.tags) {
+      next.tags = Array.from(new Set(patch.tags.map((it) => String(it).trim()).filter(Boolean)));
+    }
+
+    blacklistRecords[idx] = next;
+    return clone(next);
+  },
+  deleteBlacklistRecord(id) {
+    const idx = blacklistRecords.findIndex((it) => it.id === id);
+    if (idx < 0) {
+      return false;
+    }
+    blacklistRecords.splice(idx, 1);
+    return true;
+  },
+  listBlacklistHotels(filters = {}) {
+    const map = new Map();
+    const severityWeight = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+
+    this.listBlacklistRecords(filters).forEach((record) => {
+      const key = `${record.chainId}::${record.hotelName}`;
+      const current = map.get(key) || {
+        chainId: record.chainId,
+        hotelName: record.hotelName,
+        count: 0,
+        maxSeverity: "LOW",
+        lastDate: "",
+        tags: new Set(),
+        records: []
+      };
+
+      current.count += 1;
+      current.records.push(record);
+      record.tags.forEach((tag) => current.tags.add(tag));
+
+      if (severityWeight[record.severity] > severityWeight[current.maxSeverity]) {
+        current.maxSeverity = record.severity;
+      }
+
+      if (record.date > current.lastDate) {
+        current.lastDate = record.date;
+      }
+
+      map.set(key, current);
+    });
+
+    return Array.from(map.values())
+      .map((it) => ({ ...it, tags: Array.from(it.tags) }))
+      .sort((a, b) => {
+        if (severityWeight[a.maxSeverity] !== severityWeight[b.maxSeverity]) {
+          return severityWeight[b.maxSeverity] - severityWeight[a.maxSeverity];
+        }
+        return b.count - a.count;
+      });
+  },
+  checkBlacklistedHotel(chainId, hotelName) {
+    const chain = String(chainId || "").toLowerCase();
+    const name = String(hotelName || "").toLowerCase();
+    const activeRecords = blacklistRecords.filter(
+      (it) =>
+        it.status === "ACTIVE" &&
+        ((chain && it.chainId.toLowerCase() === chain) || (name && it.hotelName.toLowerCase() === name))
+    );
+
+    const severityWeight = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+    const maxSeverity = activeRecords.reduce(
+      (acc, cur) => (severityWeight[cur.severity] > severityWeight[acc] ? cur.severity : acc),
+      "LOW"
+    );
+
+    return {
+      blacklisted: activeRecords.length > 0,
+      count: activeRecords.length,
+      maxSeverity,
+      records: clone(activeRecords)
+    };
   }
 };

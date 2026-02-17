@@ -82,12 +82,25 @@ PORT=8787
 API_PREFIX=/api
 CORS_ORIGIN=http://localhost:3000
 USE_MEMORY_STORE=true
+ATOUR_ACCESS_TOKEN=
+ATOUR_CLIENT_ID=363CB080-412A-4BFB-AF6E-8C3472F93814
+ATOUR_PLATFORM_TYPE=2
+ATOUR_CHANNEL_ID=20001
+ATOUR_APP_VERSION=4.1.0
+ATOUR_MEB_ID=
+ATOUR_COOKIE=
 ```
+
+说明：
+
+- 新建预订搜索通过 `/api/hotels/search` 代理亚朵搜索接口。
+- 未配置 `ATOUR_ACCESS_TOKEN` 时，前端会自动回退到本地 `MOCK_HOTELS`。
 
 ## 后端 API（当前骨架）
 
 - `GET /api/health`
 - `POST /api/auth/login`
+- `POST /api/auth/register`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `GET /api/users`（ADMIN）
@@ -102,6 +115,14 @@ USE_MEMORY_STORE=true
 - `GET /api/orders`
 - `POST /api/orders`
 - `GET /api/tasks/:taskId`
+- `POST /api/hotels/search`
+- `GET /api/blacklist/records`
+- `GET /api/blacklist/records/:id`
+- `POST /api/blacklist/records`
+- `PATCH /api/blacklist/records/:id`
+- `DELETE /api/blacklist/records/:id`
+- `GET /api/blacklist/hotels`
+- `GET /api/blacklist/hotel-check?chainId=&hotelName=`
 
 ## 快速联调示例
 
@@ -149,6 +170,28 @@ curl http://localhost:8787/api/tasks/<TASK_ID> \
 同时保留前端当前视图兼容字段（如 `tier/status/coupons/points`）。
 
 增强设计：一个账号可绑定多个企业协议（`corporate_agreements`），用于后续下单时按协议名选择。
+
+## 酒店黑名单字段（当前接口）
+
+核心标识：`chainId + hotelName`。
+
+记录字段：
+
+- `id`
+- `chainId`
+- `hotelName`
+- `severity` (`HIGH` / `MEDIUM` / `LOW`)
+- `reason`
+- `tags` (数组)
+- `status` (`ACTIVE` / `RESOLVED`)
+- `reportedBy`
+- `source`
+- `date`
+
+复用查询：
+
+- `/api/blacklist/hotels`：按酒店聚合，返回次数/最高风险/标签汇总
+- `/api/blacklist/hotel-check`：供其他模块快速判断酒店是否命中黑名单
 
 ## 下一步
 

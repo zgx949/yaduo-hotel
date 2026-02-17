@@ -9,11 +9,15 @@ usersRoutes.get("/", requireAuth, requireRole("ADMIN"), (req, res) => {
 });
 
 usersRoutes.post("/", requireAuth, requireRole("ADMIN"), (req, res) => {
-  const { username, name, role, status } = req.body || {};
+  const { username, name, role, status, password, permissions } = req.body || {};
   if (!username || !name) {
     return res.status(400).json({ message: "username and name are required" });
   }
-  const item = store.createUser({ username, name, role, status });
+  const existed = store.getUserByUsername(username);
+  if (existed) {
+    return res.status(409).json({ message: "username already exists" });
+  }
+  const item = store.createUser({ username, name, role, status, password, permissions });
   return res.status(201).json(item);
 });
 

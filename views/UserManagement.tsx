@@ -1,11 +1,14 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { MOCK_SYSTEM_USERS, CORPORATE_COMPANIES } from '../constants';
 import { SystemUser, UserPermissions } from '../types';
 
 export const UserManagement: React.FC = () => {
+  const TOKEN_KEY = 'skyhotel_auth_token';
   const [users, setUsers] = useState<SystemUser[]>(MOCK_SYSTEM_USERS);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
 
@@ -45,6 +48,53 @@ export const UserManagement: React.FC = () => {
     }
   });
 
+  const fetchWithAuth = async (url: string, options?: RequestInit) => {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) {
+          throw new Error('登录已过期，请重新登录');
+      }
+
+      const headers = new Headers(options?.headers || {});
+      headers.set('Authorization', `Bearer ${token}`);
+      if (options?.body && !headers.get('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+      }
+
+      const response = await fetch(url, {
+          ...options,
+          headers
+      });
+
+      if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.message || '请求失败');
+      }
+
+      if (response.status === 204) {
+          return null;
+      }
+
+      return response.json();
+  };
+
+  const loadUsers = async () => {
+      setLoading(true);
+      setError('');
+      try {
+          const data = await fetchWithAuth('/api/users');
+          setUsers(data.items || []);
+      } catch (err: any) {
+          setError(err.message || '加载用户失败，已回退本地数据');
+          setUsers(MOCK_SYSTEM_USERS);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  useEffect(() => {
+      loadUsers();
+  }, []);
+
   // --- Filter Logic ---
   const filteredUsers = useMemo(() => {
       return users.filter(user => {
@@ -54,6 +104,8 @@ export const UserManagement: React.FC = () => {
           return matchSearch && matchRole && matchStatus;
       });
   }, [users, searchQuery, roleFilter, statusFilter]);
+
+  const pendingUsers = useMemo(() => users.filter((u) => u.status === 'PENDING'), [users]);
 
   // --- Selection Logic ---
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,47 +158,96 @@ export const UserManagement: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.username || !formData.name) return;
 
-    if (editingUser) {
-        // Update existing
-        setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } as SystemUser : u));
-    } else {
-        // Create new
-        const newUser: SystemUser = {
-            id: `user-${Date.now()}`,
-            createdAt: new Date().toISOString().split('T')[0],
-            ...formData as SystemUser
-        };
-        setUsers([...users, newUser]);
+    const payload = {
+        username: formData.username,
+        name: formData.name,
+        role: formData.role,
+        status: formData.status,
+        permissions: formData.permissions
+    };
+
+    try {
+        if (editingUser) {
+            const updated = await fetchWithAuth(`/api/users/${editingUser.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify(payload)
+            });
+            setUsers(users.map(u => u.id === editingUser.id ? updated as SystemUser : u));
+        } else {
+            const created = await fetchWithAuth('/api/users', {
+                method: 'POST',
+                body: JSON.stringify({ ...payload, password: '123456' })
+            });
+            setUsers([...users, created as SystemUser]);
+        }
+        setShowModal(false);
+    } catch (err: any) {
+        alert(err.message || '保存失败');
     }
-    setShowModal(false);
   };
 
-  const toggleStatus = (id: string) => {
-      setUsers(users.map(u => u.id === id ? { ...u, status: u.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE' } : u));
+  const toggleStatus = async (id: string) => {
+      const target = users.find((u) => u.id === id);
+      if (!target) return;
+
+      const nextStatus = target.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+      try {
+          const updated = await fetchWithAuth(`/api/users/${id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: nextStatus })
+          });
+          setUsers(users.map(u => u.id === id ? updated as SystemUser : u));
+      } catch (err: any) {
+          alert(err.message || '更新状态失败');
+      }
+  };
+
+  const approveUser = async (id: string) => {
+      try {
+          const updated = await fetchWithAuth(`/api/users/${id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: 'ACTIVE' })
+          });
+          setUsers(users.map(u => u.id === id ? updated as SystemUser : u));
+      } catch (err: any) {
+          alert(err.message || '审核通过失败');
+      }
   };
 
   // --- Bulk Action Handlers ---
-  const executeBulkAction = () => {
+  const executeBulkAction = async () => {
       if (!bulkActionType) return;
       const enable = bulkActionType === 'ENABLE';
 
-      setUsers(prev => prev.map(user => {
-          if (!selectedIds.has(user.id)) return user;
+      try {
+          const updates = await Promise.all(
+              users
+                .filter((user) => selectedIds.has(user.id))
+                .map(async (user) => {
+                    const newPermissions = { ...user.permissions };
+                    if (bulkTargetPermissions.newUser) newPermissions.allowNewUserBooking = enable;
+                    if (bulkTargetPermissions.platinum) newPermissions.allowPlatinumBooking = enable;
+                    if (bulkTargetPermissions.corporate) newPermissions.allowCorporateBooking = enable;
 
-          const newPermissions = { ...user.permissions };
-          if (bulkTargetPermissions.newUser) newPermissions.allowNewUserBooking = enable;
-          if (bulkTargetPermissions.platinum) newPermissions.allowPlatinumBooking = enable;
-          if (bulkTargetPermissions.corporate) newPermissions.allowCorporateBooking = enable;
+                    const updated = await fetchWithAuth(`/api/users/${user.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ permissions: newPermissions })
+                    });
+                    return updated as SystemUser;
+                })
+          );
 
-          return { ...user, permissions: newPermissions };
-      }));
-
-      setBulkActionType(null);
-      setSelectedIds(new Set()); // Clear selection
+          const updateMap = new Map(updates.map((u) => [u.id, u]));
+          setUsers((prev) => prev.map((user) => updateMap.get(user.id) || user));
+          setBulkActionType(null);
+          setSelectedIds(new Set());
+      } catch (err: any) {
+          alert(err.message || '批量更新失败');
+      }
   };
 
   // Permission Change Helpers
@@ -223,6 +324,23 @@ export const UserManagement: React.FC = () => {
         </button>
       </div>
 
+      <div className="flex items-center gap-3">
+          <button
+            onClick={() => setStatusFilter('PENDING')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border ${statusFilter === 'PENDING' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+          >
+            待审核用户 {pendingUsers.length}
+          </button>
+          {statusFilter === 'PENDING' && (
+            <button
+              onClick={() => setStatusFilter('ALL')}
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            >
+              查看全部
+            </button>
+          )}
+      </div>
+
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center">
           <div className="relative flex-1 min-w-[200px]">
@@ -256,6 +374,7 @@ export const UserManagement: React.FC = () => {
               >
                   <option value="ALL">全部状态</option>
                   <option value="ACTIVE">正常</option>
+                  <option value="PENDING">待审核</option>
                   <option value="DISABLED">禁用</option>
               </select>
           </div>
@@ -264,6 +383,12 @@ export const UserManagement: React.FC = () => {
               共 {filteredUsers.length} 位用户
           </div>
       </div>
+
+      {error && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {error}
+          </div>
+      )}
 
       {/* User Table */}
       <Card className="flex-1 overflow-hidden flex flex-col p-0 pb-16">
@@ -288,7 +413,11 @@ export const UserManagement: React.FC = () => {
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                      {filteredUsers.map(user => (
+                      {loading ? (
+                          <tr>
+                              <td colSpan={7} className="px-6 py-12 text-center text-gray-400">加载中...</td>
+                          </tr>
+                      ) : filteredUsers.map(user => (
                           <tr key={user.id} className={`hover:bg-gray-50/50 ${selectedIds.has(user.id) ? 'bg-blue-50/30' : ''}`}>
                               <td className="px-6 py-4">
                                   <input 
@@ -312,12 +441,16 @@ export const UserManagement: React.FC = () => {
                               <td className="px-6 py-4">
                                   <button 
                                       onClick={() => toggleStatus(user.id)}
-                                      className={`px-2 py-1 rounded-full text-xs font-bold transition-colors ${
-                                          user.status === 'ACTIVE' ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'
-                                      }`}
-                                  >
-                                      {user.status === 'ACTIVE' ? '正常' : '禁用'}
-                                  </button>
+                                       className={`px-2 py-1 rounded-full text-xs font-bold transition-colors ${
+                                           user.status === 'ACTIVE'
+                                             ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                             : user.status === 'PENDING'
+                                               ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                                               : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                       }`}
+                                   >
+                                       {user.status === 'ACTIVE' ? '正常' : user.status === 'PENDING' ? '待审核' : '禁用'}
+                                   </button>
                               </td>
                               <td className="px-6 py-4">
                                   <div className="flex flex-col gap-2">
@@ -368,14 +501,24 @@ export const UserManagement: React.FC = () => {
                                       <span className="text-xs text-gray-400">无权使用</span>
                                   )}
                               </td>
-                              <td className="px-6 py-4 text-right">
-                                  <button 
-                                    onClick={() => handleEdit(user)}
-                                    className="text-blue-600 hover:underline text-xs font-medium"
-                                  >
-                                      配置/充值
-                                  </button>
-                              </td>
+                               <td className="px-6 py-4 text-right">
+                                   <div className="flex justify-end items-center gap-3">
+                                     {user.status === 'PENDING' && (
+                                       <button
+                                         onClick={() => approveUser(user.id)}
+                                         className="text-emerald-600 hover:underline text-xs font-medium"
+                                       >
+                                         一键通过
+                                       </button>
+                                     )}
+                                     <button 
+                                       onClick={() => handleEdit(user)}
+                                       className="text-blue-600 hover:underline text-xs font-medium"
+                                     >
+                                         配置/充值
+                                     </button>
+                                   </div>
+                               </td>
                           </tr>
                       ))}
                       {filteredUsers.length === 0 && (
@@ -537,6 +680,7 @@ export const UserManagement: React.FC = () => {
                                   value={formData.status}
                                   onChange={e => setFormData({...formData, status: e.target.value as any})}
                               >
+                                  <option value="PENDING">待审核</option>
                                   <option value="ACTIVE">正常启用</option>
                                   <option value="DISABLED">禁用账号</option>
                               </select>

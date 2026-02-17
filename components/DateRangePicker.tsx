@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 interface DateRangePickerProps {
   isOpen: boolean;
@@ -128,14 +129,14 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
       }
 
       if (isStart || isEnd) {
-          containerClass += " bg-[#1d3c34] text-white shadow-md"; // Dark green from screenshot
+          containerClass += " bg-[#2f5d50] text-white shadow-md";
           textClass = "text-white font-bold";
           subTextClass = "text-white/80";
           if (isStart) label = '入住';
           if (isEnd) label = '离店';
       } else if (isInRange) {
-          containerClass += " bg-[#e8f5e9] rounded-none"; // Light green range
-          textClass = "text-[#1d3c34]";
+          containerClass += " bg-[#eef7f0] rounded-none";
+          textClass = "text-[#2f5d50]";
       }
 
       days.push(
@@ -145,8 +146,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             className={`${containerClass}`}
         >
             {/* Range connector visuals */}
-            {(isInRange || isEnd) && startDate && <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-[#e8f5e9] -z-10" />}
-            {(isInRange || isStart) && endDate && <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-[#e8f5e9] -z-10" />}
+            {isInRange && startDate && <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-[#eef7f0] -z-10" />}
+            {isInRange && endDate && <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-[#eef7f0] -z-10" />}
             
             <span className={textClass}>{d}</span>
             <span className={`scale-90 ${subTextClass}`}>{label}</span>
@@ -174,8 +175,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
       return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
   };
 
-  return (
-    <div className="fixed inset-0 bg-white z-[100] flex flex-col animate-slideUp">
+  const content = (
+    <div className="fixed inset-0 bg-white z-[120] flex flex-col animate-slideUp">
       {/* Header */}
       <div className="bg-white border-b border-gray-100 p-4 shadow-sm z-30">
         <div className="flex justify-between items-center mb-4">
@@ -252,4 +253,10 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
       )}
     </div>
   );
+
+  if (typeof document === 'undefined') {
+    return content;
+  }
+
+  return createPortal(content, document.body);
 };

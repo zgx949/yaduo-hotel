@@ -3,19 +3,28 @@ import React, { useState } from 'react';
 
 interface LoginProps {
   onLogin: (username: string, password: string) => Promise<string | null>;
+  onRegister: (payload: { username: string; name: string; password: string }) => Promise<string | null>;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLogin }) => {
+export const Login: React.FC<LoginProps> = ({ onLogin, onRegister }) => {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) {
-        setError('请输入账号和密码');
+    if (!username || !password || (mode === 'register' && !name)) {
+        setError(mode === 'register' ? '请输入姓名、账号和密码' : '请输入账号和密码');
+        return;
+    }
+
+    if (mode === 'register' && password !== confirmPassword) {
+        setError('两次输入密码不一致');
         return;
     }
     
@@ -23,10 +32,17 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      const err = await onLogin(username, password);
+      const err = mode === 'login'
+        ? await onLogin(username, password)
+        : await onRegister({ name, username, password });
       setIsLoading(false);
       if (err) {
         setError(err);
+      } else if (mode === 'register') {
+        setError('注册成功，等待管理员审核后登录');
+        setMode('login');
+        setPassword('');
+        setConfirmPassword('');
       }
     } catch (err: any) {
       setIsLoading(false);
@@ -77,6 +93,39 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4 mb-8">
+            <div className="grid grid-cols-2 gap-2 bg-slate-800/50 p-1 rounded-xl border border-slate-700">
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(''); }}
+                className={`py-2 text-xs rounded-lg transition-colors ${mode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
+              >
+                登录
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('register'); setError(''); }}
+                className={`py-2 text-xs rounded-lg transition-colors ${mode === 'register' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
+              >
+                注册
+              </button>
+            </div>
+
+            {mode === 'register' && (
+              <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-300 ml-1">姓名</label>
+                  <div className="relative">
+                      <span className="absolute left-3 top-3 text-slate-500">👤</span>
+                      <input
+                          type="text"
+                          value={name}
+                          onChange={e => setName(e.target.value)}
+                          placeholder="请输入真实姓名"
+                          className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all text-sm"
+                      />
+                  </div>
+              </div>
+            )}
+
             <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-300 ml-1">账号</label>
                 <div className="relative">
@@ -122,6 +171,22 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
             </div>
 
+            {mode === 'register' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-300 ml-1">确认密码</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-3 text-slate-500">🔁</span>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="再次输入密码"
+                    className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
             {error && (
                 <div className="text-red-400 text-xs px-2 py-2 bg-red-500/10 rounded-lg border border-red-500/20 text-center animate-pulse flex items-center justify-center gap-2">
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -139,19 +204,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                         登录中...
                     </>
-                ) : '安全登录'}
+                ) : mode === 'login' ? '安全登录' : '提交注册'}
             </button>
         </form>
 
-        {/* Divider */}
-        <div className="flex items-center gap-3 mb-6">
-            <div className="h-px bg-slate-700 flex-1"></div>
-            <span className="text-xs text-slate-500">测试环境快捷通道</span>
-            <div className="h-px bg-slate-700 flex-1"></div>
-        </div>
+        {mode === 'login' && (
+          <>
+            <div className="flex items-center gap-3 mb-6">
+                <div className="h-px bg-slate-700 flex-1"></div>
+                <span className="text-xs text-slate-500">测试环境快捷通道</span>
+                <div className="h-px bg-slate-700 flex-1"></div>
+            </div>
 
-        {/* Quick Access */}
-        <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3">
             <button 
                 type="button"
                 onClick={() => quickLogin('admin')}
@@ -173,7 +238,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
                 <span className="text-slate-200 font-medium text-xs">普通用户 (User)</span>
             </button>
-        </div>
+            </div>
+          </>
+        )}
           
         <div className="mt-8 text-center">
              <p className="text-[10px] text-slate-600">

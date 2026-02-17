@@ -181,11 +181,11 @@ export const MOCK_ALERTS: PriceAlert[] = [
 ];
 
 export const MOCK_BLACKLIST: BlacklistRecord[] = [
-  { id: 'BL-01', hotelName: '上海人民广场大世界地铁站亚朵酒店', reason: '前台态度极差，拒绝查单，且卫生间有异味。', severity: 'MEDIUM', tags: ['态度恶劣', '卫生差'], reportedBy: 'Agent-007', date: '2023-10-05' },
-  { id: 'BL-02', hotelName: '北京某快捷酒店', reason: '虚假宣传，无窗房当有窗卖，客户投诉退款难。', severity: 'HIGH', tags: ['虚假宣传', '退款难'], reportedBy: 'Agent-Alice', date: '2023-09-15' },
-  { id: 'BL-03', hotelName: '上海人民广场大世界地铁站亚朵酒店', reason: '客户反馈半夜有装修噪音，酒店拒绝协调换房。', severity: 'MEDIUM', tags: ['噪音', '服务差'], reportedBy: 'Agent-Bob', date: '2023-10-08' },
-  { id: 'BL-04', hotelName: '上海人民广场大世界地铁站亚朵酒店', reason: '早餐非常敷衍，牛奶是兑水的。', severity: 'LOW', tags: ['餐饮差'], reportedBy: 'Agent-Cat', date: '2023-10-12' },
-  { id: 'BL-05', hotelName: '深圳北站维也纳酒店', reason: '前台私下索要客户好评，否则不给退押金。', severity: 'HIGH', tags: ['违规操作', '扣押金'], reportedBy: 'Agent-David', date: '2023-11-01' },
+  { id: 'BL-01', chainId: 'ATOUR', hotelName: '上海人民广场大世界地铁站亚朵酒店', reason: '前台态度极差，拒绝查单，且卫生间有异味。', severity: 'MEDIUM', tags: ['态度恶劣', '卫生差'], reportedBy: 'Agent-007', date: '2023-10-05', status: 'ACTIVE', source: 'manual' },
+  { id: 'BL-02', chainId: 'UNKNOWN', hotelName: '北京某快捷酒店', reason: '虚假宣传，无窗房当有窗卖，客户投诉退款难。', severity: 'HIGH', tags: ['虚假宣传', '退款难'], reportedBy: 'Agent-Alice', date: '2023-09-15', status: 'ACTIVE', source: 'manual' },
+  { id: 'BL-03', chainId: 'ATOUR', hotelName: '上海人民广场大世界地铁站亚朵酒店', reason: '客户反馈半夜有装修噪音，酒店拒绝协调换房。', severity: 'MEDIUM', tags: ['噪音', '服务差'], reportedBy: 'Agent-Bob', date: '2023-10-08', status: 'ACTIVE', source: 'manual' },
+  { id: 'BL-04', chainId: 'ATOUR', hotelName: '上海人民广场大世界地铁站亚朵酒店', reason: '早餐非常敷衍，牛奶是兑水的。', severity: 'LOW', tags: ['餐饮差'], reportedBy: 'Agent-Cat', date: '2023-10-12', status: 'ACTIVE', source: 'manual' },
+  { id: 'BL-05', chainId: 'VIENNA', hotelName: '深圳北站维也纳酒店', reason: '前台私下索要客户好评，否则不给退押金。', severity: 'HIGH', tags: ['违规操作', '扣押金'], reportedBy: 'Agent-David', date: '2023-11-01', status: 'ACTIVE', source: 'manual' },
 ];
 
 export const MOCK_HOTELS: Hotel[] = [

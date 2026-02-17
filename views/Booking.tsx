@@ -1,5 +1,6 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '../components/ui/Card';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { BookingType, Hotel, RatePlan, Room } from '../types';
@@ -8,6 +9,7 @@ import { MOCK_HOTELS, POPULAR_CITIES, VALUE_ADDED_SERVICES } from '../constants'
 type BookingStep = 'SEARCH' | 'LIST' | 'DETAIL' | 'CONFIRM';
 
 export const Booking: React.FC = () => {
+  const TOKEN_KEY = 'skyhotel_auth_token';
   const [step, setStep] = useState<BookingStep>('SEARCH');
   const [showCitySelector, setShowCitySelector] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false); // New state for calendar
@@ -24,20 +26,30 @@ export const Booking: React.FC = () => {
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   const [searchParams, setSearchParams] = useState({
-    city: '上海市',
+    city: '',
     checkIn: new Date().toISOString().split('T')[0],
     checkOut: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     keyword: ''
   });
 
   const [bookingForm, setBookingForm] = useState({
-    guestName: '刘心怡', // Mock default user
-    guestPhone: '183****2063',
+    guestName: '刘', // Mock default user
+    guestPhone: '181****1023',
     note: ''
   });
 
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [isLoadMoreLoading, setIsLoadMoreLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [hotelList, setHotelList] = useState<Hotel[]>(MOCK_HOTELS);
+  const [searchPageNo, setSearchPageNo] = useState(1);
+  const [searchHasNext, setSearchHasNext] = useState(false);
+  const [searchCacheKey, setSearchCacheKey] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreLockRef = useRef(false);
 
   // New state for Benefits in Confirm View
   const [selectedBenefits, setSelectedBenefits] = useState({
@@ -51,8 +63,9 @@ export const Booking: React.FC = () => {
 
   // Filter Hotels logic
   const filteredHotels = useMemo(() => {
-    return MOCK_HOTELS.filter(hotel => {
-        const matchCity = hotel.location.includes(searchParams.city.replace('市', '')); // basic matching
+    return hotelList.filter(hotel => {
+        const cityKeyword = searchParams.city.replace('市', '');
+        const matchCity = !cityKeyword || hotel.location.includes(cityKeyword);
         const matchKeyword = !searchParams.keyword || 
              hotel.name.includes(searchParams.keyword) || 
              hotel.location.includes(searchParams.keyword) || 
@@ -60,7 +73,124 @@ export const Booking: React.FC = () => {
         
         return matchCity && matchKeyword;
     });
-  }, [searchParams.city, searchParams.keyword]);
+  }, [hotelList, searchParams.city, searchParams.keyword]);
+
+  const fetchWithAuth = async (url: string, options?: RequestInit) => {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) {
+          throw new Error('登录已过期，请重新登录');
+      }
+
+      const headers = new Headers(options?.headers || {});
+      headers.set('Authorization', `Bearer ${token}`);
+      if (options?.body && !headers.get('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+      }
+
+      const response = await fetch(url, {
+          ...options,
+          headers
+      });
+
+      if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.message || '请求失败');
+      }
+
+      return response.json();
+  };
+
+  const parseNextPage = (data: any) => {
+      const next = Number(data?.page?.pageNo);
+      return Number.isFinite(next) && next > 0 ? next : 1;
+  };
+
+  const mergeHotels = (prev: Hotel[], next: Hotel[]) => {
+      const map = new Map<string, Hotel>();
+      prev.forEach((item) => map.set(String(item.id), item));
+      next.forEach((item) => map.set(String(item.id), item));
+      return Array.from(map.values());
+  };
+
+  const runSearch = async () => {
+      setIsSearchLoading(true);
+      setSearchError('');
+      try {
+          const data = await fetchWithAuth('/api/hotels/search', {
+              method: 'POST',
+              body: JSON.stringify({
+                  city: searchParams.city.trim(),
+                  keyword: searchParams.keyword,
+                  checkIn: searchParams.checkIn,
+                  checkOut: searchParams.checkOut,
+                  pageNo: 1
+              })
+          });
+
+          const items = Array.isArray(data.items) ? data.items : [];
+          setHotelList(items);
+          setSearchHasNext(Boolean(data?.page?.hasNext));
+          setSearchCacheKey(data?.page?.cacheKey || '');
+          setSearchPageNo(parseNextPage(data));
+          setHasSearched(true);
+          setStep('LIST');
+      } catch (err: any) {
+          setSearchError(err.message || '搜索失败，已回退本地数据');
+          setHotelList(MOCK_HOTELS);
+          setSearchHasNext(false);
+          setSearchCacheKey('');
+          setSearchPageNo(1);
+          setHasSearched(true);
+          setStep('LIST');
+      } finally {
+          setIsSearchLoading(false);
+      }
+  };
+
+  const loadMoreHotels = async () => {
+      if (isSearchLoading || isLoadMoreLoading || loadMoreLockRef.current || !searchHasNext) {
+          return;
+      }
+
+      loadMoreLockRef.current = true;
+      setIsLoadMoreLoading(true);
+      try {
+          const data = await fetchWithAuth('/api/hotels/search', {
+              method: 'POST',
+              body: JSON.stringify({
+                  city: searchParams.city.trim(),
+                  keyword: searchParams.keyword,
+                  checkIn: searchParams.checkIn,
+                  checkOut: searchParams.checkOut,
+                  pageNo: searchPageNo,
+                  cacheKey: searchCacheKey
+              })
+          });
+
+          const items = Array.isArray(data.items) ? data.items : [];
+          setHotelList((prev) => mergeHotels(prev, items));
+          setSearchHasNext(Boolean(data?.page?.hasNext));
+          setSearchCacheKey(data?.page?.cacheKey || '');
+          setSearchPageNo(parseNextPage(data));
+      } catch (err: any) {
+          setSearchError(err.message || '加载更多失败，请稍后重试');
+      } finally {
+          setIsLoadMoreLoading(false);
+          loadMoreLockRef.current = false;
+      }
+  };
+
+  const handleListScroll = (event: React.UIEvent<HTMLDivElement>) => {
+      if (!searchHasNext || isSearchLoading || isLoadMoreLoading) {
+          return;
+      }
+
+      const target = event.currentTarget;
+      const remain = target.scrollHeight - target.scrollTop - target.clientHeight;
+      if (remain < 280) {
+          loadMoreHotels();
+      }
+  };
 
   const handleDateConfirm = (start: string, end: string) => {
     setSearchParams(prev => ({ ...prev, checkIn: start, checkOut: end }));
@@ -125,8 +255,8 @@ export const Booking: React.FC = () => {
   // City Selector Modal
   const renderCitySelector = () => {
       if (!showCitySelector) return null;
-      return (
-        <div className="fixed inset-0 bg-gray-50 z-50 flex flex-col animate-fadeIn">
+      const content = (
+        <div className="fixed inset-0 bg-gray-50 z-[120] flex flex-col animate-fadeIn">
             <div className="bg-white p-4 flex items-center gap-3 border-b border-gray-100 shadow-sm">
                 <button onClick={() => setShowCitySelector(false)} className="p-1">
                     <svg className="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -147,7 +277,7 @@ export const Booking: React.FC = () => {
                     <h3 className="text-xs font-bold text-gray-400 mb-3">当前定位</h3>
                     <div className="flex gap-3">
                         <button className="flex items-center gap-1 px-4 py-2 bg-white rounded-lg border border-gray-200 text-sm font-medium text-blue-600 shadow-sm">
-                            📍 {searchParams.city}
+                            📍 {searchParams.city || '未指定城市'}
                         </button>
                     </div>
                 </div>
@@ -155,6 +285,19 @@ export const Booking: React.FC = () => {
                 <div className="mb-6">
                     <h3 className="text-xs font-bold text-gray-400 mb-3">热门城市</h3>
                     <div className="grid grid-cols-4 gap-3">
+                        <button
+                            onClick={() => {
+                                setSearchParams({...searchParams, city: ''});
+                                setShowCitySelector(false);
+                            }}
+                            className={`py-2 rounded-lg text-sm font-medium border ${
+                                !searchParams.city
+                                    ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                    : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                            不限城市
+                        </button>
                         {POPULAR_CITIES.map(city => (
                             <button 
                                 key={city}
@@ -176,6 +319,12 @@ export const Booking: React.FC = () => {
             </div>
         </div>
       );
+
+      if (typeof document === 'undefined') {
+        return content;
+      }
+
+      return createPortal(content, document.body);
   };
 
   // 1. Search Landing Page
@@ -209,7 +358,7 @@ export const Booking: React.FC = () => {
                 onClick={() => setShowCitySelector(true)}
               >
                   <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-gray-900">{searchParams.city}</span>
+                      <span className="text-xl font-bold text-gray-900">{searchParams.city || '不限城市'}</span>
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </div>
               </div>
@@ -242,12 +391,12 @@ export const Booking: React.FC = () => {
               <div className="flex flex-col gap-2">
                   <input 
                     type="text" 
-                    placeholder="搜索城市/地标/酒店" 
+                    placeholder="搜索地标/酒店（城市可不选）" 
                     className="w-full text-lg font-medium placeholder-gray-300 outline-none"
                     value={searchParams.keyword}
                     onChange={e => setSearchParams({...searchParams, keyword: e.target.value})}
                     onKeyDown={e => {
-                        if (e.key === 'Enter') setStep('LIST');
+                        if (e.key === 'Enter') runSearch();
                     }}
                   />
 
@@ -255,11 +404,18 @@ export const Booking: React.FC = () => {
 
               {/* Action Button */}
               <button 
-                onClick={() => setStep('LIST')}
+                onClick={runSearch}
+                disabled={isSearchLoading}
                 className="w-full bg-slate-800 text-amber-50 py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-slate-700 transition-colors"
               >
-                  立即预订
+                  {isSearchLoading ? '搜索中...' : '立即预订'}
               </button>
+
+              {searchError && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  {searchError}
+                </div>
+              )}
           </div>
       </div>
     </div>
@@ -288,7 +444,7 @@ export const Booking: React.FC = () => {
                         className="text-sm font-bold text-gray-900 flex items-center gap-1 cursor-pointer" 
                         onClick={() => setShowCitySelector(true)}
                     >
-                        {searchParams.city} 
+                        {searchParams.city || '不限城市'} 
                         {searchParams.keyword && <span className="font-normal text-gray-500">| {searchParams.keyword}</span>}
                     </div>
                     <div 
@@ -306,13 +462,25 @@ export const Booking: React.FC = () => {
         </div>
 
         {/* List */}
-        <div className="flex-1 space-y-4 pb-20 overflow-y-auto">
-            {filteredHotels.length === 0 ? (
+        <div ref={listContainerRef} onScroll={handleListScroll} className="flex-1 space-y-4 pb-20 overflow-y-auto">
+            {isSearchLoading ? (
+                 <div className="flex flex-col items-center justify-center pt-20 text-gray-400">
+                     <span className="text-3xl mb-2 animate-pulse">🔎</span>
+                     <p>正在查询酒店列表...</p>
+                 </div>
+            ) : filteredHotels.length === 0 ? (
                  <div className="flex flex-col items-center justify-center pt-20 text-gray-400">
                      <span className="text-4xl mb-2">🤔</span>
                      <p>未找到符合条件的酒店</p>
                      <button 
-                        onClick={() => setSearchParams({...searchParams, keyword: '', city: '上海市'})}
+                        onClick={() => {
+                            setSearchParams({...searchParams, keyword: '', city: ''});
+                            setHotelList(MOCK_HOTELS);
+                            setSearchHasNext(false);
+                            setSearchCacheKey('');
+                            setSearchPageNo(1);
+                            setHasSearched(false);
+                        }}
                         className="mt-4 text-blue-600 text-sm"
                     >
                         清除筛选
@@ -368,6 +536,13 @@ export const Booking: React.FC = () => {
                     </div>
                 </div>
             )))}
+
+            {isLoadMoreLoading && (
+              <div className="py-6 text-center text-xs text-gray-400">正在加载更多酒店...</div>
+            )}
+            {!isLoadMoreLoading && hasSearched && !searchHasNext && filteredHotels.length > 0 && (
+              <div className="py-6 text-center text-xs text-gray-400">已加载全部结果</div>
+            )}
         </div>
     </div>
   );

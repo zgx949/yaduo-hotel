@@ -47,8 +47,8 @@ const App: React.FC = () => {
     username: user.username || user.email || user.id,
     name: user.name || user.display_name || user.username || '未命名用户',
     role: user.role === 'ADMIN' ? 'ADMIN' : 'USER',
-    status: user.status === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
-    permissions: defaultPermissions,
+    status: user.status === 'DISABLED' ? 'DISABLED' : user.status === 'PENDING' ? 'PENDING' : 'ACTIVE',
+    permissions: user.permissions || defaultPermissions,
     createdAt: user.createdAt || user.created_at || new Date().toISOString().slice(0, 10),
     lastLogin: user.lastLogin || user.last_login_at
   });
@@ -90,6 +90,21 @@ const App: React.FC = () => {
     } else {
       setOpenTabs([{ id: 'booking', label: '新建预订' }]);
       setActiveTabId('booking');
+    }
+
+    return null;
+  };
+
+  const handleRegister = async (payload: { username: string; name: string; password: string }): Promise<string | null> => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ message: '注册失败' }));
+      return data.message || '注册失败';
     }
 
     return null;
@@ -213,7 +228,7 @@ const App: React.FC = () => {
 
   // --- Render Login View ---
   if (!isLoggedIn) {
-      return <Login onLogin={handleLogin} />;
+      return <Login onLogin={handleLogin} onRegister={handleRegister} />;
   }
 
   // --- Render Main App ---

@@ -210,12 +210,15 @@ export interface DailyCandle {
 
 export interface BlacklistRecord {
   id: string;
+  chainId: string;
   hotelName: string;
   reason: string;
   severity: 'HIGH' | 'MEDIUM' | 'LOW'; // HIGH: 严重避雷(诈骗/安全), MEDIUM: 体验差, LOW: 吐槽
   tags: string[]; // e.g. "卫生差", "乱收费", "态度恶劣"
   reportedBy: string; // Agent Name/ID
   date: string;
+  status?: 'ACTIVE' | 'RESOLVED';
+  source?: string;
 }
 
 // --- SYSTEM USER TYPES (User Management) ---
@@ -246,7 +249,7 @@ export interface SystemUser {
   username: string;
   name: string;
   role: 'ADMIN' | 'USER';
-  status: 'ACTIVE' | 'DISABLED';
+  status: 'ACTIVE' | 'DISABLED' | 'PENDING';
   permissions: UserPermissions;
   lastLogin?: string;
   createdAt: string;
