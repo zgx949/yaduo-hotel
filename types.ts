@@ -141,6 +141,11 @@ export interface RatePlan {
   tags: string[]; // e.g. ["含双早", "免费取消"]
   stock?: number;
   description?: string;
+  cancelTips?: string;
+  bookNotice?: string;
+  rewardPointText?: string;
+  breakfastCount?: number;
+  discountTexts?: string[];
 }
 
 export interface Room {
@@ -151,11 +156,13 @@ export interface Room {
   bed: string; // e.g. "1.8m大床"
   window: string; // e.g. "有窗"
   tags: string[]; // e.g. ["深睡枕", "智能客控"]
+  stock?: number;
   rates: RatePlan[];
 }
 
 export interface Hotel {
   id: string;
+  chainId?: string;
   name: string;
   location: string;
   address: string;
@@ -265,6 +272,7 @@ export interface ProxyNode {
   status: 'ONLINE' | 'OFFLINE' | 'LATENCY';
   lastChecked: string;
   location?: string;
+  failCount?: number;
 }
 
 export interface LLMConfig {
@@ -274,10 +282,15 @@ export interface LLMConfig {
   modelId: string;
   apiKey: string;
   systemPrompt: string;
+  baseUrl?: string;
+  temperature?: number;
+  maxTokens?: number;
   isActive: boolean;
 }
 
 export interface SystemConfig {
+  siteName: string;
+  supportContact: string;
   maintenanceMode: boolean;
   maintenanceMessage: string;
   

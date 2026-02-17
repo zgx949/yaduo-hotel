@@ -89,11 +89,14 @@ ATOUR_CHANNEL_ID=20001
 ATOUR_APP_VERSION=4.1.0
 ATOUR_MEB_ID=
 ATOUR_COOKIE=
+ATOUR_PLACE_SEARCH_CLIENT_ID=0354EF67-0288-4C6A-89B3-A5009DD8926E
+ATOUR_PLACE_SEARCH_BASE_URL=https://api2.yaduo.com/atourlife/placeSearch/searchV2
 ```
 
 说明：
 
 - 新建预订搜索通过 `/api/hotels/search` 代理亚朵搜索接口。
+- 搜索框联想通过 `/api/hotels/place-search?keyword=` 代理亚朵 `placeSearch/searchV2`。
 - 未配置 `ATOUR_ACCESS_TOKEN` 时，前端会自动回退到本地 `MOCK_HOTELS`。
 
 ## 后端 API（当前骨架）
@@ -115,6 +118,7 @@ ATOUR_COOKIE=
 - `GET /api/orders`
 - `POST /api/orders`
 - `GET /api/tasks/:taskId`
+- `GET /api/hotels/place-search?keyword=`
 - `POST /api/hotels/search`
 - `GET /api/blacklist/records`
 - `GET /api/blacklist/records/:id`

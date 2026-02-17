@@ -7,6 +7,7 @@ import { ordersRoutes } from "./orders.routes.js";
 import { tasksRoutes } from "./tasks.routes.js";
 import { blacklistRoutes } from "./blacklist.routes.js";
 import { hotelsRoutes } from "./hotels.routes.js";
+import { systemRoutes } from "./system.routes.js";
 
 export const apiRoutes = Router();
 
@@ -18,3 +19,4 @@ apiRoutes.use("/orders", ordersRoutes);
 apiRoutes.use("/tasks", tasksRoutes);
 apiRoutes.use("/blacklist", blacklistRoutes);
 apiRoutes.use("/hotels", hotelsRoutes);
+apiRoutes.use("/system", systemRoutes);

@@ -156,10 +156,88 @@ const blacklistRecords = [
   }
 ];
 const sessions = new Map();
+const proxyCursorByType = new Map();
+
+const createDefaultSystemConfig = () => ({
+  siteName: "SkyHotel Agent Pro",
+  supportContact: "400-888-9999",
+  maintenanceMode: false,
+  maintenanceMessage: "系统升级中，预计1小时后恢复。",
+  channels: {
+    enableNewUser: true,
+    enablePlatinum: true,
+    enableCorporate: true,
+    disabledCorporateNames: ["某某科技 (风控中)", "旧协议单位"]
+  },
+  proxies: [
+    {
+      id: "proxy-001",
+      ip: "192.168.1.101",
+      port: 8080,
+      type: "DYNAMIC",
+      status: "ONLINE",
+      lastChecked: now(),
+      location: "上海",
+      failCount: 0
+    },
+    {
+      id: "proxy-002",
+      ip: "10.0.0.55",
+      port: 3128,
+      type: "STATIC",
+      status: "ONLINE",
+      lastChecked: now(),
+      location: "北京",
+      failCount: 0
+    },
+    {
+      id: "proxy-003",
+      ip: "47.100.22.33",
+      port: 8888,
+      type: "DYNAMIC",
+      status: "OFFLINE",
+      lastChecked: now(),
+      location: "广州",
+      failCount: 3
+    }
+  ],
+  llmModels: [
+    {
+      id: "llm-gemini-main",
+      name: "Gemini 主模型",
+      provider: "GEMINI",
+      modelId: "gemini-2.5-flash",
+      apiKey: "",
+      systemPrompt: "你是专业的酒店预订助手，输出简洁、结构化。",
+      baseUrl: "",
+      temperature: 0.2,
+      maxTokens: 1024,
+      isActive: true
+    },
+    {
+      id: "llm-openai-backup",
+      name: "OpenAI 备用模型",
+      provider: "OPENAI",
+      modelId: "gpt-4o-mini",
+      apiKey: "",
+      systemPrompt: "",
+      baseUrl: "",
+      temperature: 0.2,
+      maxTokens: 1024,
+      isActive: false
+    }
+  ]
+});
+
+const systemConfig = createDefaultSystemConfig();
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const asNumber = (value, fallback = 0) => {
+  const num = Number(value);
+  return Number.isNaN(num) ? fallback : num;
+};
 
 const normalizeCorporateBindings = (input = [], existing = []) => {
   const source = Array.isArray(input) ? input : existing;
@@ -296,6 +374,90 @@ const normalizePoolPayload = (payload, existing = null) => {
 
   next.updatedAt = now();
   return next;
+};
+
+const normalizeProxyPayload = (payload = {}, existing = null) => {
+  const base = existing
+    ? clone(existing)
+    : {
+      id: `proxy-${randomUUID().slice(0, 8)}`,
+      ip: "",
+      port: 0,
+      type: "DYNAMIC",
+      status: "OFFLINE",
+      lastChecked: now(),
+      location: "",
+      failCount: 0
+    };
+
+  if (hasOwn(payload, "ip")) {
+    base.ip = String(payload.ip || "").trim();
+  }
+  if (hasOwn(payload, "port")) {
+    base.port = Math.max(0, asNumber(payload.port, 0));
+  }
+  if (hasOwn(payload, "type")) {
+    base.type = String(payload.type || "").toUpperCase() === "STATIC" ? "STATIC" : "DYNAMIC";
+  }
+  if (hasOwn(payload, "status")) {
+    const nextStatus = String(payload.status || "").toUpperCase();
+    base.status = ["ONLINE", "OFFLINE", "LATENCY"].includes(nextStatus) ? nextStatus : "OFFLINE";
+  }
+  if (hasOwn(payload, "location")) {
+    base.location = String(payload.location || "").trim();
+  }
+  if (hasOwn(payload, "failCount")) {
+    base.failCount = Math.max(0, asNumber(payload.failCount, 0));
+  }
+  base.lastChecked = now();
+  return base;
+};
+
+const normalizeLlmModel = (item = {}, existing = null) => {
+  const base = existing
+    ? clone(existing)
+    : {
+      id: `llm-${randomUUID().slice(0, 8)}`,
+      name: "",
+      provider: "OPENAI",
+      modelId: "",
+      apiKey: "",
+      systemPrompt: "",
+      baseUrl: "",
+      temperature: 0.2,
+      maxTokens: 1024,
+      isActive: false
+    };
+
+  if (hasOwn(item, "name")) {
+    base.name = String(item.name || "").trim();
+  }
+  if (hasOwn(item, "provider")) {
+    const provider = String(item.provider || "").toUpperCase();
+    base.provider = ["GEMINI", "OPENAI", "CLAUDE"].includes(provider) ? provider : "OPENAI";
+  }
+  if (hasOwn(item, "modelId")) {
+    base.modelId = String(item.modelId || "").trim();
+  }
+  if (hasOwn(item, "apiKey")) {
+    base.apiKey = String(item.apiKey || "").trim();
+  }
+  if (hasOwn(item, "systemPrompt")) {
+    base.systemPrompt = String(item.systemPrompt || "").trim();
+  }
+  if (hasOwn(item, "baseUrl")) {
+    base.baseUrl = String(item.baseUrl || "").trim();
+  }
+  if (hasOwn(item, "temperature")) {
+    base.temperature = Math.min(2, Math.max(0, asNumber(item.temperature, 0.2)));
+  }
+  if (hasOwn(item, "maxTokens")) {
+    base.maxTokens = Math.max(1, asNumber(item.maxTokens, 1024));
+  }
+  if (hasOwn(item, "isActive")) {
+    base.isActive = Boolean(item.isActive);
+  }
+  return base;
 };
 
 export const store = {
@@ -633,5 +795,123 @@ export const store = {
       maxSeverity,
       records: clone(activeRecords)
     };
+  },
+  getSystemConfig() {
+    return clone(systemConfig);
+  },
+  updateSystemConfig(patch = {}) {
+    if (hasOwn(patch, "siteName")) {
+      systemConfig.siteName = String(patch.siteName || "").trim();
+    }
+    if (hasOwn(patch, "supportContact")) {
+      systemConfig.supportContact = String(patch.supportContact || "").trim();
+    }
+    if (hasOwn(patch, "maintenanceMode")) {
+      systemConfig.maintenanceMode = Boolean(patch.maintenanceMode);
+    }
+    if (hasOwn(patch, "maintenanceMessage")) {
+      systemConfig.maintenanceMessage = String(patch.maintenanceMessage || "").trim();
+    }
+
+    if (patch.channels && typeof patch.channels === "object") {
+      const channels = patch.channels;
+      if (hasOwn(channels, "enableNewUser")) {
+        systemConfig.channels.enableNewUser = Boolean(channels.enableNewUser);
+      }
+      if (hasOwn(channels, "enablePlatinum")) {
+        systemConfig.channels.enablePlatinum = Boolean(channels.enablePlatinum);
+      }
+      if (hasOwn(channels, "enableCorporate")) {
+        systemConfig.channels.enableCorporate = Boolean(channels.enableCorporate);
+      }
+      if (hasOwn(channels, "disabledCorporateNames")) {
+        systemConfig.channels.disabledCorporateNames = Array.isArray(channels.disabledCorporateNames)
+          ? Array.from(new Set(channels.disabledCorporateNames.map((it) => String(it).trim()).filter(Boolean)))
+          : systemConfig.channels.disabledCorporateNames;
+      }
+    }
+
+    if (Array.isArray(patch.llmModels)) {
+      systemConfig.llmModels = patch.llmModels.map((it) => normalizeLlmModel(it));
+    }
+
+    return this.getSystemConfig();
+  },
+  listProxyNodes() {
+    return clone(systemConfig.proxies);
+  },
+  getProxyNode(id) {
+    const item = systemConfig.proxies.find((it) => it.id === id);
+    return item ? clone(item) : null;
+  },
+  createProxyNode(payload = {}) {
+    const node = normalizeProxyPayload(payload, null);
+    systemConfig.proxies.unshift(node);
+    return clone(node);
+  },
+  updateProxyNode(id, patch = {}) {
+    const idx = systemConfig.proxies.findIndex((it) => it.id === id);
+    if (idx < 0) {
+      return null;
+    }
+    const next = normalizeProxyPayload(patch, systemConfig.proxies[idx]);
+    systemConfig.proxies[idx] = next;
+    return clone(next);
+  },
+  deleteProxyNode(id) {
+    const idx = systemConfig.proxies.findIndex((it) => it.id === id);
+    if (idx < 0) {
+      return false;
+    }
+    systemConfig.proxies.splice(idx, 1);
+    return true;
+  },
+  acquireProxyNode(options = {}) {
+    const nodes = systemConfig.proxies.filter((it) => it.status === "ONLINE");
+    if (nodes.length === 0) {
+      return null;
+    }
+    const preferredType = options.type ? String(options.type).toUpperCase() : null;
+    const candidates = preferredType
+      ? nodes.filter((it) => it.type === preferredType)
+      : nodes;
+    const list = candidates.length > 0 ? candidates : nodes;
+    const cursorKey = preferredType || "ALL";
+    const cursor = proxyCursorByType.get(cursorKey) || 0;
+    const picked = list[cursor % list.length];
+    proxyCursorByType.set(cursorKey, cursor + 1);
+    return clone(picked);
+  },
+  markProxyHealth(id, status, extra = {}) {
+    const idx = systemConfig.proxies.findIndex((it) => it.id === id);
+    if (idx < 0) {
+      return null;
+    }
+    const nextStatus = String(status || "").toUpperCase();
+    systemConfig.proxies[idx].status = ["ONLINE", "OFFLINE", "LATENCY"].includes(nextStatus)
+      ? nextStatus
+      : systemConfig.proxies[idx].status;
+    if (nextStatus === "OFFLINE") {
+      systemConfig.proxies[idx].failCount += 1;
+    }
+    if (nextStatus === "ONLINE") {
+      systemConfig.proxies[idx].failCount = 0;
+    }
+    if (hasOwn(extra, "location")) {
+      systemConfig.proxies[idx].location = String(extra.location || "").trim();
+    }
+    systemConfig.proxies[idx].lastChecked = now();
+    return clone(systemConfig.proxies[idx]);
+  },
+  listLlmModels() {
+    return clone(systemConfig.llmModels);
+  },
+  getLlmModelById(modelId) {
+    const item = systemConfig.llmModels.find((it) => it.id === modelId);
+    return item ? clone(item) : null;
+  },
+  getActiveLlmModel() {
+    const item = systemConfig.llmModels.find((it) => it.isActive);
+    return item ? clone(item) : null;
   }
 };
