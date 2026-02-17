@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Sidebar, MENU_ITEMS, UserRole } from './components/Sidebar';
 import { Dashboard } from './views/Dashboard';
 import { Booking } from './views/Booking';
@@ -12,8 +12,7 @@ import { Blacklist } from './views/Blacklist';
 import { Login } from './views/Login';
 import { UserManagement } from './views/UserManagement';
 import { SystemSettings } from './views/SystemSettings';
-import { MOCK_SYSTEM_USERS } from './constants';
-import { SystemUser } from './types';
+import { SystemUser, UserPermissions } from './types';
 
 interface Tab {
   id: string;
@@ -21,10 +20,38 @@ interface Tab {
 }
 
 const App: React.FC = () => {
+  const TOKEN_KEY = 'skyhotel_auth_token';
+
   // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('ADMIN');
   const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
+
+  const defaultPermissions: UserPermissions = {
+    allowNewUserBooking: true,
+    newUserLimit: -1,
+    newUserQuota: -1,
+    allowPlatinumBooking: true,
+    platinumLimit: -1,
+    platinumQuota: -1,
+    allowCorporateBooking: true,
+    corporateLimit: -1,
+    corporateQuota: -1,
+    allowedCorporateNames: [],
+    corporateSpecificLimits: {},
+    corporateSpecificQuotas: {}
+  };
+
+  const mapApiUserToSystemUser = (user: any): SystemUser => ({
+    id: user.id,
+    username: user.username || user.email || user.id,
+    name: user.name || user.display_name || user.username || '未命名用户',
+    role: user.role === 'ADMIN' ? 'ADMIN' : 'USER',
+    status: user.status === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
+    permissions: defaultPermissions,
+    createdAt: user.createdAt || user.created_at || new Date().toISOString().slice(0, 10),
+    lastLogin: user.lastLogin || user.last_login_at
+  });
 
   // State for multiple tabs
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
@@ -36,29 +63,85 @@ const App: React.FC = () => {
 
   // --- Auth Handlers ---
 
-  const handleLogin = (role: UserRole) => {
+  const handleLogin = async (username: string, password: string): Promise<string | null> => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ message: '登录失败' }));
+      return data.message || '登录失败';
+    }
+
+    const data = await res.json();
+    const user = mapApiUserToSystemUser(data.user);
+    const role = user.role;
+
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setCurrentUser(user);
     setUserRole(role);
     setIsLoggedIn(true);
 
-    // Mock: Set current user based on role for demo purposes
-    // In a real app, this would come from the API/Login response
     if (role === 'ADMIN') {
-        setCurrentUser(MOCK_SYSTEM_USERS[0]); // admin
-        setOpenTabs([{ id: 'dashboard', label: '仪表盘' }]);
-        setActiveTabId('dashboard');
+      setOpenTabs([{ id: 'dashboard', label: '仪表盘' }]);
+      setActiveTabId('dashboard');
     } else {
-        setCurrentUser(MOCK_SYSTEM_USERS[1]); // agent_alice (as a default user)
-        setOpenTabs([{ id: 'booking', label: '新建预订' }]);
-        setActiveTabId('booking');
+      setOpenTabs([{ id: 'booking', label: '新建预订' }]);
+      setActiveTabId('booking');
     }
+
+    return null;
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => undefined);
+    }
+    localStorage.removeItem(TOKEN_KEY);
     setIsLoggedIn(false);
     setOpenTabs([]);
     setActiveTabId('');
     setCurrentUser(null);
   };
+
+  useEffect(() => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      return;
+    }
+
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('not logged');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        const user = mapApiUserToSystemUser(data.user);
+        setCurrentUser(user);
+        setUserRole(user.role);
+        setIsLoggedIn(true);
+        if (user.role === 'ADMIN') {
+          setOpenTabs([{ id: 'dashboard', label: '仪表盘' }]);
+          setActiveTabId('dashboard');
+        } else {
+          setOpenTabs([{ id: 'booking', label: '新建预订' }]);
+          setActiveTabId('booking');
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+      });
+  }, []);
 
   // --- Navigation Handlers ---
 

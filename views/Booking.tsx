@@ -430,7 +430,7 @@ export const Booking: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2 mb-2">
                              <span className="font-bold text-xl text-green-700">★ {selectedHotel.score}</span>
-                             <span className="text-sm underline text-gray-500">{selectedHotel.reviews}条 ></span>
+                              <span className="text-sm underline text-gray-500">{selectedHotel.reviews}条 {">"}</span>
                         </div>
                         <div className="text-sm text-gray-800 leading-relaxed pr-8 relative">
                             {selectedHotel.address}
@@ -693,7 +693,7 @@ export const Booking: React.FC = () => {
                              <span className="text-xs text-gray-500">明天</span>
                          </div>
                      </div>
-                     <p className="text-xs text-orange-400 mt-2">预订后不可取消及退款 ></p>
+                      <p className="text-xs text-orange-400 mt-2">预订后不可取消及退款 {">"}</p>
                  </div>
 
                  {/* Guest Info */}

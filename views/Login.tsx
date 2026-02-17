@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 
 interface LoginProps {
-  onLogin: (role: 'ADMIN' | 'USER') => void;
+  onLogin: (username: string, password: string) => Promise<string | null>;
 }
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -12,7 +12,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
         setError('请输入账号和密码');
@@ -22,23 +22,33 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
     setIsLoading(true);
 
-    // Simulate API Call
-    setTimeout(() => {
-        setIsLoading(false);
-        // Simple mock validation
-        if (username === 'admin' && password === '123456') {
-            onLogin('ADMIN');
-        } else if (username === 'user' && password === '123456') {
-            onLogin('USER');
-        } else {
-            // Error handling simulation
-            if (username === 'admin' || username === 'user') {
-                setError('密码错误 (测试密码: 123456)');
-            } else {
-                setError('账号不存在 (试用: admin / user)');
-            }
-        }
-    }, 1000);
+    try {
+      const err = await onLogin(username, password);
+      setIsLoading(false);
+      if (err) {
+        setError(err);
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err.message || '登录失败，请稍后重试');
+    }
+  };
+
+  const quickLogin = async (name: string) => {
+    setUsername(name);
+    setPassword('123456');
+    setError('');
+    setIsLoading(true);
+    try {
+      const err = await onLogin(name, '123456');
+      setIsLoading(false);
+      if (err) {
+        setError(err);
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err.message || '登录失败，请稍后重试');
+    }
   };
 
   return (
@@ -75,7 +85,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         type="text" 
                         value={username}
                         onChange={e => setUsername(e.target.value)}
-                        placeholder="请输入用户名 (admin/user)"
+                        placeholder="请输入用户名 (admin/demo)"
                         className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm"
                     />
                 </div>
@@ -89,7 +99,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        placeholder="请输入密码 (123456)"
+                        placeholder="请输入密码 (测试可任意)"
                         className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-2.5 pl-10 pr-10 text-white placeholder-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm"
                     />
                     <button
@@ -144,7 +154,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         <div className="grid grid-cols-2 gap-3">
             <button 
                 type="button"
-                onClick={() => onLogin('ADMIN')}
+                onClick={() => quickLogin('admin')}
                 className="group relative flex flex-col items-center justify-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500/50 rounded-xl transition-all active:scale-95"
             >
                 <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center mb-2 group-hover:bg-blue-600 group-hover:text-white transition-colors">
@@ -155,7 +165,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             <button 
                 type="button"
-                onClick={() => onLogin('USER')}
+                onClick={() => quickLogin('demo')}
                 className="group relative flex flex-col items-center justify-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500/50 rounded-xl transition-all active:scale-95"
             >
                 <div className="w-8 h-8 rounded-full bg-purple-900/50 text-purple-400 flex items-center justify-center mb-2 group-hover:bg-purple-600 group-hover:text-white transition-colors">

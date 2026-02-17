@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { MOCK_ACCOUNTS } from '../constants';
-import { AccountStatus, AccountTier, HotelAccount } from '../types';
+import { AccountStatus, AccountTier, PoolAccount } from '../types';
 
 // Helper to format date
 const formatDate = (isoString?: string) => {
@@ -46,13 +46,157 @@ const COUPON_CONFIG = {
 };
 
 export const Accounts: React.FC = () => {
+  const TOKEN_KEY = 'skyhotel_auth_token';
   const [filterType, setFilterType] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [accounts, setAccounts] = useState<HotelAccount[]>(MOCK_ACCOUNTS);
+  const [accounts, setAccounts] = useState<PoolAccount[]>(MOCK_ACCOUNTS as unknown as PoolAccount[]);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [loadingList, setLoadingList] = useState(false);
+  const [error, setError] = useState('');
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [savingForm, setSavingForm] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [agreementQuery, setAgreementQuery] = useState('');
+  const [agreementDropdownOpen, setAgreementDropdownOpen] = useState(false);
+  const [corporateOptions, setCorporateOptions] = useState<string[]>([]);
+  const agreementBoxRef = useRef<HTMLDivElement | null>(null);
+  const [form, setForm] = useState({
+    phone: '',
+    token: '',
+    remark: '',
+    is_online: true,
+    is_platinum: false,
+    is_corp_user: false,
+    is_new_user: false,
+    corporate_agreements: [] as string[],
+    breakfast_coupons: 0,
+    room_upgrade_coupons: 0,
+    late_checkout_coupons: 0
+  });
   
   // Modal State
-  const [selectedAccount, setSelectedAccount] = useState<HotelAccount | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<PoolAccount | null>(null);
+
+  const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
+
+  const fetchWithAuth = async (url: string, options?: RequestInit) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('登录已过期，请重新登录');
+    }
+
+    const headers = new Headers(options?.headers || {});
+    headers.set('Authorization', `Bearer ${token}`);
+    if (options?.body && !headers.get('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || '请求失败');
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
+
+    return response.json();
+  };
+
+  const loadAccounts = async () => {
+    setLoadingList(true);
+    setError('');
+    try {
+      const data = await fetchWithAuth('/api/pool/accounts');
+      setAccounts(data.items || []);
+    } catch (err: any) {
+      setError(err.message || '加载账号池失败，已回退到本地数据');
+      setAccounts(MOCK_ACCOUNTS as unknown as PoolAccount[]);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const loadCorporateOptions = async () => {
+    try {
+      const data = await fetchWithAuth('/api/pool/corporate-agreements');
+      const names = (data.items || []).map((it: { name: string }) => it.name).filter(Boolean);
+      setCorporateOptions(names);
+    } catch {
+      setCorporateOptions((prev) => prev);
+    }
+  };
+
+  useEffect(() => {
+    loadAccounts();
+    loadCorporateOptions();
+  }, []);
+
+  useEffect(() => {
+    if (!isFormOpen) {
+      return;
+    }
+
+    const onClickOutside = (event: MouseEvent) => {
+      if (!agreementBoxRef.current) {
+        return;
+      }
+      if (!agreementBoxRef.current.contains(event.target as Node)) {
+        setAgreementDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', onClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [isFormOpen]);
+
+  const knownCorporateNames = useMemo(() => {
+    const fromAccounts = accounts.flatMap((it) => (it.corporate_agreements || []).map((corp) => corp.name));
+    const merged = [...corporateOptions, ...fromAccounts];
+    return Array.from(new Set(merged.map((it) => it.trim()).filter(Boolean)));
+  }, [accounts, corporateOptions]);
+
+  const agreementSuggestions = useMemo(() => {
+    const query = agreementQuery.trim().toLowerCase();
+    return knownCorporateNames
+      .filter((name) => !form.corporate_agreements.includes(name))
+      .filter((name) => !query || name.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [knownCorporateNames, form.corporate_agreements, agreementQuery]);
+
+  const addCorporateAgreement = (rawName: string) => {
+    const name = rawName.trim();
+    if (!name || form.corporate_agreements.includes(name)) {
+      return;
+    }
+    setForm((prev) => ({
+      ...prev,
+      is_corp_user: true,
+      corporate_agreements: [...prev.corporate_agreements, name]
+    }));
+    setCorporateOptions((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setAgreementQuery('');
+    setAgreementDropdownOpen(false);
+  };
+
+  const removeCorporateAgreement = (name: string) => {
+    setForm((prev) => {
+      const next = prev.corporate_agreements.filter((it) => it !== name);
+      return {
+        ...prev,
+        corporate_agreements: next,
+        is_corp_user: next.length > 0 ? true : prev.is_corp_user
+      };
+    });
+  };
 
   // Stats
   const totalAccounts = accounts.length;
@@ -63,7 +207,8 @@ export const Accounts: React.FC = () => {
   const filteredAccounts = accounts.filter(acc => {
     const matchType = filterType === 'ALL' || acc.tier === filterType;
     const matchSearch = acc.phone.includes(searchQuery) || 
-                        (acc.corporateName && acc.corporateName.includes(searchQuery));
+                        (acc.corporateName && acc.corporateName.includes(searchQuery)) ||
+                        (acc.corporate_agreements || []).some((corp) => corp.name.includes(searchQuery));
     return matchType && matchSearch;
   });
 
@@ -124,6 +269,108 @@ export const Accounts: React.FC = () => {
   const handleBulkAction = (action: 'checkIn' | 'refresh') => {
       if (!window.confirm(`确定要对当前列表显示的 ${filteredAccounts.length} 个账号执行批量操作吗？`)) return;
       alert(`已将 ${filteredAccounts.length} 个任务加入后台队列，请稍后查看状态。`);
+  };
+
+  const resetForm = () => {
+    setEditingAccountId(null);
+    setFormError('');
+    setForm({
+      phone: '',
+      token: '',
+      remark: '',
+      is_online: true,
+      is_platinum: false,
+      is_corp_user: false,
+      is_new_user: false,
+      corporate_agreements: [],
+      breakfast_coupons: 0,
+      room_upgrade_coupons: 0,
+      late_checkout_coupons: 0
+    });
+    setAgreementQuery('');
+    setAgreementDropdownOpen(false);
+  };
+
+  const handleCreate = () => {
+    resetForm();
+    setIsFormOpen(true);
+  };
+
+  const handleEdit = (account: PoolAccount) => {
+    setEditingAccountId(account.id);
+    setFormError('');
+    setForm({
+      phone: account.phone,
+      token: account.token || '',
+      remark: account.remark || '',
+      is_online: account.is_online,
+      is_platinum: account.is_platinum,
+      is_corp_user: account.is_corp_user,
+      is_new_user: account.is_new_user,
+      corporate_agreements: (account.corporate_agreements || []).map((it) => it.name),
+      breakfast_coupons: account.breakfast_coupons,
+      room_upgrade_coupons: account.room_upgrade_coupons,
+      late_checkout_coupons: account.late_checkout_coupons
+    });
+    setAgreementQuery('');
+    setAgreementDropdownOpen(false);
+    setIsFormOpen(true);
+  };
+
+  const handleDelete = async (account: PoolAccount) => {
+    if (!window.confirm(`确认删除账号 ${account.phone} 吗？`)) {
+      return;
+    }
+
+    try {
+      await fetchWithAuth(`/api/pool/accounts/${account.id}`, { method: 'DELETE' });
+      setAccounts((prev) => prev.filter((it) => it.id !== account.id));
+    } catch (err: any) {
+      alert(err.message || '删除失败');
+    }
+  };
+
+  const handleSubmitForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.phone || !form.token) {
+      setFormError('手机号和 token 必填');
+      return;
+    }
+
+    setSavingForm(true);
+    setFormError('');
+
+    try {
+      const payload = {
+        ...form,
+        is_corp_user: form.corporate_agreements.length > 0 ? true : form.is_corp_user,
+        corporate_agreements: form.corporate_agreements,
+        breakfast_coupons: Number(form.breakfast_coupons),
+        room_upgrade_coupons: Number(form.room_upgrade_coupons),
+        late_checkout_coupons: Number(form.late_checkout_coupons)
+      };
+
+      if (editingAccountId) {
+        const updated = await fetchWithAuth(`/api/pool/accounts/${editingAccountId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload)
+        });
+        setAccounts((prev) => prev.map((it) => (it.id === editingAccountId ? updated : it)));
+      } else {
+        const created = await fetchWithAuth('/api/pool/accounts', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        setAccounts((prev) => [created, ...prev]);
+      }
+
+      setIsFormOpen(false);
+      resetForm();
+    } catch (err: any) {
+      setFormError(err.message || '保存失败');
+    } finally {
+      setSavingForm(false);
+    }
   };
 
   // --- Modal Content ---
@@ -224,6 +471,180 @@ export const Accounts: React.FC = () => {
       );
   };
 
+  const renderFormModal = () => {
+    if (!isFormOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsFormOpen(false)}>
+        <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-800">{editingAccountId ? '编辑号池账号' : '新增号池账号'}</h3>
+            <button onClick={() => setIsFormOpen(false)} className="text-gray-400 hover:text-gray-700">✕</button>
+          </div>
+
+          <form onSubmit={handleSubmitForm} className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">手机号</label>
+                <input
+                  value={form.phone}
+                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="13800000000"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">登录 Token</label>
+                <input
+                  value={form.token}
+                  onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="token_xxx"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">备注</label>
+              <input
+                value={form.remark}
+                onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                placeholder="备注"
+              />
+            </div>
+
+            <div className="grid grid-cols-4 gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_online} onChange={(e) => setForm((prev) => ({ ...prev, is_online: e.target.checked }))} />在线</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_new_user} onChange={(e) => setForm((prev) => ({ ...prev, is_new_user: e.target.checked }))} />新用户</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_platinum} onChange={(e) => setForm((prev) => ({ ...prev, is_platinum: e.target.checked }))} />铂金</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.is_corp_user}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      is_corp_user: e.target.checked,
+                      corporate_agreements: e.target.checked ? prev.corporate_agreements : []
+                    }))
+                  }
+                />
+                企业
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">企业协议</label>
+              <div ref={agreementBoxRef} className="relative">
+                <div className="w-full border border-gray-300 rounded-lg px-2 py-2 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                  <div className="flex flex-wrap gap-1.5 mb-1">
+                    {form.corporate_agreements.map((name) => (
+                      <span key={name} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-100 text-xs">
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => removeCorporateAgreement(name)}
+                          className="text-blue-500 hover:text-blue-700"
+                          aria-label={`移除${name}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  <input
+                    value={agreementQuery}
+                    onFocus={() => setAgreementDropdownOpen(true)}
+                    onChange={(e) => {
+                      setAgreementQuery(e.target.value);
+                      setAgreementDropdownOpen(true);
+                      if (!form.is_corp_user) {
+                        setForm((prev) => ({ ...prev, is_corp_user: true }));
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const firstSuggestion = agreementSuggestions[0];
+                        const target = agreementQuery.trim() || firstSuggestion;
+                        if (target) {
+                          addCorporateAgreement(target);
+                        }
+                      } else if (e.key === 'Backspace' && !agreementQuery && form.corporate_agreements.length > 0) {
+                        e.preventDefault();
+                        removeCorporateAgreement(form.corporate_agreements[form.corporate_agreements.length - 1]);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setAgreementDropdownOpen(false);
+                      }
+                    }}
+                    className="w-full px-1 py-1 text-sm outline-none"
+                    placeholder="搜索并添加企业协议，例如：阿里巴巴"
+                  />
+                </div>
+
+                {agreementDropdownOpen && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto">
+                    {agreementSuggestions.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => addCorporateAgreement(name)}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
+                      >
+                        {name}
+                      </button>
+                    ))}
+
+                    {agreementQuery.trim() && !knownCorporateNames.includes(agreementQuery.trim()) && (
+                      <button
+                        type="button"
+                        onClick={() => addCorporateAgreement(agreementQuery.trim())}
+                        className="w-full text-left px-3 py-2 text-sm border-t border-gray-100 text-emerald-700 hover:bg-emerald-50"
+                      >
+                        + 新增协议：{agreementQuery.trim()}
+                      </button>
+                    )}
+
+                    {!agreementSuggestions.length && !(agreementQuery.trim() && !knownCorporateNames.includes(agreementQuery.trim())) && (
+                      <div className="px-3 py-2 text-xs text-gray-400">没有可选项</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">早餐券</label>
+                <input type="number" min={0} value={form.breakfast_coupons} onChange={(e) => setForm((prev) => ({ ...prev, breakfast_coupons: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">升房券</label>
+                <input type="number" min={0} value={form.room_upgrade_coupons} onChange={(e) => setForm((prev) => ({ ...prev, room_upgrade_coupons: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">延迟退房券</label>
+                <input type="number" min={0} value={form.late_checkout_coupons} onChange={(e) => setForm((prev) => ({ ...prev, late_checkout_coupons: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+            </div>
+
+            {formError && <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">{formError}</div>}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setIsFormOpen(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">取消</button>
+              <button type="submit" disabled={savingForm} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                {savingForm ? '保存中...' : editingAccountId ? '保存修改' : '创建账号'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 h-full flex flex-col">
        {/* Header & Stats */}
@@ -234,6 +655,12 @@ export const Accounts: React.FC = () => {
                 <p className="text-gray-500 text-sm">当前共 {totalAccounts} 个账号，{activeAccounts} 个在线。今日已签到: {todayCheckedIn}</p>
             </div>
             <div className="flex gap-2">
+                <button 
+                  onClick={loadAccounts}
+                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2"
+                >
+                    ↻ 刷新列表
+                </button>
                 <button 
                   onClick={() => handleBulkAction('refresh')}
                   className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2"
@@ -246,11 +673,20 @@ export const Accounts: React.FC = () => {
                 >
                     📅 批量一键签到
                 </button>
-                <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 shadow-sm flex items-center gap-2">
+                <button 
+                  onClick={handleCreate}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 shadow-sm flex items-center gap-2"
+                >
                     + 添加/导入账号
                 </button>
             </div>
         </div>
+
+        {error && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
@@ -304,7 +740,11 @@ export const Accounts: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredAccounts.map(acc => {
+              {loadingList ? (
+                  <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center text-gray-400">加载中...</td>
+                  </tr>
+              ) : filteredAccounts.map(acc => {
                   const statusInfo = STATUS_LABELS[acc.status];
                   const tierInfo = TIER_LABELS[acc.tier];
 
@@ -318,9 +758,13 @@ export const Accounts: React.FC = () => {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${tierInfo.color}`}>
                           {tierInfo.label}
                         </span>
-                        {acc.corporateName && (
-                            <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
-                                🏢 {acc.corporateName}
+                        {(acc.corporate_agreements || []).length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                                {(acc.corporate_agreements || []).map((corp) => (
+                                  <span key={corp.id} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                    🏢 {corp.name}
+                                  </span>
+                                ))}
                             </div>
                         )}
                       </td>
@@ -399,12 +843,26 @@ export const Accounts: React.FC = () => {
                       })}
 
                       <td className="px-6 py-4 text-right">
-                        <button 
-                            onClick={() => setSelectedAccount(acc)}
-                            className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                        >
-                            查看日报
-                        </button>
+                        <div className="flex justify-end gap-3">
+                          <button 
+                              onClick={() => setSelectedAccount(acc)}
+                              className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                          >
+                              查看日报
+                          </button>
+                          <button
+                              onClick={() => handleEdit(acc)}
+                              className="text-emerald-600 hover:text-emerald-800 text-xs font-medium"
+                          >
+                              编辑
+                          </button>
+                          <button
+                              onClick={() => handleDelete(acc)}
+                              className="text-red-600 hover:text-red-800 text-xs font-medium"
+                          >
+                              删除
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -431,6 +889,7 @@ export const Accounts: React.FC = () => {
       
       {/* Detail Modal */}
       {renderReportModal()}
+      {renderFormModal()}
     </div>
   );
 };

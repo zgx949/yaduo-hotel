@@ -1,0 +1,160 @@
+# SkyHotel Agent Pro
+
+React 原型 + Express 后端同仓项目。
+
+当前版本目标是先跑通完整骨架，后续再逐步切换到 PostgreSQL + Redis + BullMQ 的真实生产链路。
+
+## 当前能力
+
+- 前后端同仓，一条命令启动
+- 后端模块化路由骨架（auth/users/pool/orders/tasks）
+- 下单任务模拟异步执行与状态流转
+- 基础权限分层（ADMIN / USER）
+- 前端已配置 `/api` 代理到后端
+
+## 技术栈
+
+- Frontend: React + Vite + TypeScript
+- Backend: Express (ESM)
+- Runtime: Node.js 20+
+- 当前存储: 内存（开发模式）
+- 计划接入: PostgreSQL + Redis + BullMQ
+
+## 项目结构
+
+```text
+skyhotel-agent-pro/
+  App.tsx
+  views/
+  backend/
+    src/
+      app.js
+      server.js
+      config/
+      data/
+      middleware/
+      routes/
+      services/
+  docs/
+    development-plan.md
+```
+
+## 本地运行
+
+### 1) 安装依赖
+
+在项目根目录：
+
+```bash
+npm install
+npm --prefix backend install
+```
+
+### 2) 启动前后端
+
+```bash
+npm run dev
+```
+
+默认地址：
+
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8787`
+- Health: `http://localhost:8787/api/health`
+
+## 环境变量
+
+### Frontend
+
+文件：`.env.local`
+
+```bash
+GEMINI_API_KEY=your_key_here
+```
+
+### Backend
+
+复制 `backend/.env.example` 为 `backend/.env` 后按需修改：
+
+```bash
+NODE_ENV=development
+PORT=8787
+API_PREFIX=/api
+CORS_ORIGIN=http://localhost:3000
+USE_MEMORY_STORE=true
+```
+
+## 后端 API（当前骨架）
+
+- `GET /api/health`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `GET /api/users`（ADMIN）
+- `POST /api/users`（ADMIN）
+- `PATCH /api/users/:id`（ADMIN）
+- `GET /api/pool/accounts`
+- `GET /api/pool/accounts/:id`
+- `GET /api/pool/corporate-agreements`
+- `POST /api/pool/accounts`
+- `PATCH /api/pool/accounts/:id`
+- `DELETE /api/pool/accounts/:id`
+- `GET /api/orders`
+- `POST /api/orders`
+- `GET /api/tasks/:taskId`
+
+## 快速联调示例
+
+### 登录获取 token
+
+```bash
+curl -X POST http://localhost:8787/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin"}'
+```
+
+### 创建订单（带 token）
+
+```bash
+curl -X POST http://localhost:8787/api/orders \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"hotelName":"上海静安瑞吉","customerName":"张三","price":1288}'
+```
+
+### 查询任务状态
+
+```bash
+curl http://localhost:8787/api/tasks/<TASK_ID> \
+  -H "Authorization: Bearer <TOKEN>"
+```
+
+## 号池字段（当前接口）
+
+对齐旧 Django `UserToken` 基础字段：
+
+- `phone`
+- `token`（唯一）
+- `is_online`
+- `remark`
+- `is_platinum`
+- `is_corp_user`
+- `is_new_user`
+- `breakfast_coupons`
+- `room_upgrade_coupons`
+- `late_checkout_coupons`
+- `created_at`
+- `updated_at`
+
+同时保留前端当前视图兼容字段（如 `tier/status/coupons/points`）。
+
+增强设计：一个账号可绑定多个企业协议（`corporate_agreements`），用于后续下单时按协议名选择。
+
+## 下一步
+
+1. 将内存数据层替换为 PostgreSQL + Prisma。
+2. 将内存任务处理替换为 Redis + BullMQ。
+3. 将前端关键页面从 `MOCK_*` 数据切换到真实 API。
+4. 接入操作审计日志和代理池能力。
+
+详细节奏见：`docs/development-plan.md`

@@ -52,6 +52,25 @@ export interface HotelAccount {
   };
 }
 
+export interface PoolAccount extends HotelAccount {
+  token: string;
+  is_online: boolean;
+  remark?: string | null;
+  is_platinum: boolean;
+  is_corp_user: boolean;
+  is_new_user: boolean;
+  corporate_agreements: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+  }>;
+  breakfast_coupons: number;
+  room_upgrade_coupons: number;
+  late_checkout_coupons: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Order {
   id: string;
   hotelName: string;
