@@ -55,7 +55,9 @@ export const Booking: React.FC = () => {
   const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<PlaceSuggestion | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const suggestionSeqRef = useRef(0);
+  const suppressNextSuggestFetchRef = useRef(false);
   const detailReqSeqRef = useRef(0);
 
   // New state for Benefits in Confirm View
@@ -130,26 +132,44 @@ export const Booking: React.FC = () => {
       if (keyword.length < 2) {
           setSuggestions([]);
           setIsSuggestionLoading(false);
+          setShowSuggestions(false);
+          return;
+      }
+
+      if (suppressNextSuggestFetchRef.current) {
+          suppressNextSuggestFetchRef.current = false;
+          setIsSuggestionLoading(false);
           return;
       }
 
       const currentSeq = suggestionSeqRef.current + 1;
       suggestionSeqRef.current = currentSeq;
+      const controller = new AbortController();
       const timer = setTimeout(async () => {
           setIsSuggestionLoading(true);
           try {
-              const data = await fetchWithAuth(`/api/hotels/place-search?keyword=${encodeURIComponent(keyword)}`);
+              const data = await fetchWithAuth(`/api/hotels/place-search?keyword=${encodeURIComponent(keyword)}`, {
+                  signal: controller.signal
+              });
               if (suggestionSeqRef.current !== currentSeq) {
                   return;
               }
               const items = Array.isArray(data.items) ? data.items.filter(isBookablePlace) : [];
               setSuggestions(items);
-              setShowSuggestions(true);
-          } catch {
+              const isSameAsSelected = Boolean(selectedPlace && selectedPlace.title === keyword);
+              const isInputFocused = searchInputRef.current
+                ? document.activeElement === searchInputRef.current
+                : true;
+              setShowSuggestions(items.length > 0 && !isSameAsSelected && isInputFocused);
+          } catch (error) {
+              if (error instanceof DOMException && error.name === 'AbortError') {
+                  return;
+              }
               if (suggestionSeqRef.current !== currentSeq) {
                   return;
               }
               setSuggestions([]);
+              setShowSuggestions(false);
           } finally {
               if (suggestionSeqRef.current === currentSeq) {
                   setIsSuggestionLoading(false);
@@ -157,7 +177,10 @@ export const Booking: React.FC = () => {
           }
       }, 320);
 
-      return () => clearTimeout(timer);
+      return () => {
+          clearTimeout(timer);
+          controller.abort();
+      };
   }, [searchParams.keyword]);
 
   const runSearch = async (placeOverride?: PlaceSuggestion | null) => {
@@ -402,18 +425,23 @@ export const Booking: React.FC = () => {
               {/* Search Keyword */}
               <div className="flex flex-col gap-2" ref={searchBoxRef}>
                   <input 
+                    ref={searchInputRef}
                     type="text" 
                     placeholder="输入酒店或地标，边输入边搜索" 
                     className="w-full text-lg font-medium placeholder-gray-300 outline-none"
                     value={searchParams.keyword}
                     onFocus={() => {
-                        if (suggestions.length > 0) {
+                        const isSameAsSelected = Boolean(
+                          selectedPlace && selectedPlace.title === searchParams.keyword.trim()
+                        );
+                        if (suggestions.length > 0 && !isSameAsSelected) {
                             setShowSuggestions(true);
                         }
                     }}
                     onChange={e => {
                         const value = e.target.value;
-                        setSearchParams({...searchParams, keyword: value});
+                        suppressNextSuggestFetchRef.current = false;
+                        setSearchParams((prev) => ({ ...prev, keyword: value }));
                         setSelectedPlace(null);
                         setShowSuggestions(value.trim().length >= 2);
                     }}
@@ -422,6 +450,8 @@ export const Booking: React.FC = () => {
                             e.preventDefault();
                             const firstBookable = suggestions.find(isBookablePlace);
                             if (!selectedPlace && firstBookable) {
+                                suppressNextSuggestFetchRef.current = true;
+                                suggestionSeqRef.current += 1;
                                 setSelectedPlace(firstBookable);
                                 setSearchParams((prev) => ({ ...prev, keyword: firstBookable.title }));
                                 setShowSuggestions(false);
@@ -451,6 +481,8 @@ export const Booking: React.FC = () => {
                             key={item.id}
                             type="button"
                             onClick={() => {
+                              suppressNextSuggestFetchRef.current = true;
+                              suggestionSeqRef.current += 1;
                               setSelectedPlace(item);
                               setSearchParams((prev) => ({ ...prev, keyword: item.title }));
                               setShowSuggestions(false);

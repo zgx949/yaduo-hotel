@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  username    String    @unique
+  name        String
+  password    String
+  role        String
+  status      String
+  permissions Json
+  createdAt   DateTime  @default(now())
+  approvedAt  DateTime?
+  sessions    Session[]
+}
+
+model Session {
+  token     String   @id
+  userId    String
+  role      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PoolAccount {
+  id                  String   @id @default(cuid())
+  phone               String
+  loginTokenCipher    String?
+  remark              String?
+  isOnline            Boolean  @default(false)
+  isPlatinum          Boolean  @default(false)
+  isNewUser           Boolean  @default(false)
+  corporateAgreements Json
+  points              Int      @default(0)
+  breakfastCoupons    Int      @default(0)
+  roomUpgradeCoupons  Int      @default(0)
+  lateCheckoutCoupons Int      @default(0)
+  slippersCoupons     Int      @default(0)
+  dailyOrdersLeft     Int      @default(0)
+  lastExecution       Json
+  lastResult          Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model BlacklistRecord {
+  id         String   @id @default(cuid())
+  chainId    String
+  hotelName  String
+  severity   String
+  reason     String
+  tags       Json
+  status     String
+  reportedBy String
+  reporterId String?
+  source     String
+  date       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([chainId, hotelName])
+}
+
+model SystemConfig {
+  id                     String      @id @default("default")
+  siteName               String
+  supportContact         String
+  maintenanceMode        Boolean     @default(false)
+  maintenanceMessage     String
+  enableNewUser          Boolean     @default(true)
+  enablePlatinum         Boolean     @default(true)
+  enableCorporate        Boolean     @default(true)
+  disabledCorporateNames Json
+  llmModels              LlmModel[]
+  proxies                ProxyNode[]
+}
+
+model ProxyNode {
+  id          String       @id @default(cuid())
+  configId    String
+  ip          String
+  port        Int
+  type        String
+  status      String
+  lastChecked DateTime     @default(now())
+  location    String
+  failCount   Int          @default(0)
+  config      SystemConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+}
+
+model LlmModel {
+  id           String       @id @default(cuid())
+  configId     String
+  name         String
+  provider     String
+  modelId      String
+  apiKey       String
+  systemPrompt String
+  baseUrl      String
+  temperature  Float        @default(0.2)
+  maxTokens    Int          @default(1024)
+  isActive     Boolean      @default(false)
+  config       SystemConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+}

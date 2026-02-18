@@ -1,8 +1,8 @@
 import { env } from "../config/env.js";
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 
-export const pickPoolTokenForInternal = (options = {}) => {
-  const picked = store.acquirePoolToken({ tier: options.tier });
+export const pickPoolTokenForInternal = async (options = {}) => {
+  const picked = await prismaStore.acquirePoolToken({ tier: options.tier });
   if (!picked) {
     return null;
   }
@@ -14,15 +14,15 @@ export const pickPoolTokenForInternal = (options = {}) => {
   };
 };
 
-export const getInternalRequestContext = (options = {}) => {
-  const tokenContext = pickPoolTokenForInternal(options) || {
+export const getInternalRequestContext = async (options = {}) => {
+  const tokenContext = await pickPoolTokenForInternal(options) || {
     token: env.atourAccessToken,
     source: "env",
     accountId: null,
     accountPhone: null
   };
 
-  const proxy = store.acquireProxyNode({ type: options.proxyType });
+  const proxy = await prismaStore.acquireProxyNode({ type: options.proxyType });
 
   return {
     token: tokenContext.token,

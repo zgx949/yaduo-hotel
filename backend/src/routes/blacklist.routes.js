@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth } from "../middleware/auth.js";
 
 export const blacklistRoutes = Router();
@@ -49,8 +49,8 @@ const validatePatchPayload = (payload) => {
   return null;
 };
 
-blacklistRoutes.get("/records", requireAuth, (req, res) => {
-  const items = store.listBlacklistRecords({
+blacklistRoutes.get("/records", requireAuth, async (req, res) => {
+  const items = await prismaStore.listBlacklistRecords({
     search: req.query.search,
     chainId: req.query.chainId,
     severity: req.query.severity,
@@ -59,26 +59,26 @@ blacklistRoutes.get("/records", requireAuth, (req, res) => {
   return res.json({ items });
 });
 
-blacklistRoutes.get("/records/:id", requireAuth, (req, res) => {
-  const item = store.getBlacklistRecord(req.params.id);
+blacklistRoutes.get("/records/:id", requireAuth, async (req, res) => {
+  const item = await prismaStore.getBlacklistRecord(req.params.id);
   if (!item) {
     return res.status(404).json({ message: "Blacklist record not found" });
   }
   return res.json(item);
 });
 
-blacklistRoutes.post("/records", requireAuth, (req, res) => {
+blacklistRoutes.post("/records", requireAuth, async (req, res) => {
   const payload = { ...req.body, tags: normalizeTags(req.body?.tags) };
   const err = validateCreatePayload(payload);
   if (err) {
     return res.status(400).json({ message: err });
   }
 
-  const item = store.createBlacklistRecord(payload, req.auth.user);
+  const item = await prismaStore.createBlacklistRecord(payload, req.auth.user);
   return res.status(201).json(item);
 });
 
-blacklistRoutes.patch("/records/:id", requireAuth, (req, res) => {
+blacklistRoutes.patch("/records/:id", requireAuth, async (req, res) => {
   const payload = { ...req.body };
   if (payload.tags !== undefined) {
     payload.tags = normalizeTags(payload.tags);
@@ -89,23 +89,23 @@ blacklistRoutes.patch("/records/:id", requireAuth, (req, res) => {
     return res.status(400).json({ message: err });
   }
 
-  const item = store.updateBlacklistRecord(req.params.id, payload);
+  const item = await prismaStore.updateBlacklistRecord(req.params.id, payload);
   if (!item) {
     return res.status(404).json({ message: "Blacklist record not found" });
   }
   return res.json(item);
 });
 
-blacklistRoutes.delete("/records/:id", requireAuth, (req, res) => {
-  const ok = store.deleteBlacklistRecord(req.params.id);
+blacklistRoutes.delete("/records/:id", requireAuth, async (req, res) => {
+  const ok = await prismaStore.deleteBlacklistRecord(req.params.id);
   if (!ok) {
     return res.status(404).json({ message: "Blacklist record not found" });
   }
   return res.status(204).send();
 });
 
-blacklistRoutes.get("/hotels", requireAuth, (req, res) => {
-  const items = store.listBlacklistHotels({
+blacklistRoutes.get("/hotels", requireAuth, async (req, res) => {
+  const items = await prismaStore.listBlacklistHotels({
     search: req.query.search,
     chainId: req.query.chainId,
     severity: req.query.severity,
@@ -114,12 +114,12 @@ blacklistRoutes.get("/hotels", requireAuth, (req, res) => {
   return res.json({ items });
 });
 
-blacklistRoutes.get("/hotel-check", requireAuth, (req, res) => {
+blacklistRoutes.get("/hotel-check", requireAuth, async (req, res) => {
   const { chainId, hotelName } = req.query;
   if (!chainId && !hotelName) {
     return res.status(400).json({ message: "chainId or hotelName is required" });
   }
 
-  const result = store.checkBlacklistedHotel(chainId, hotelName);
+  const result = await prismaStore.checkBlacklistedHotel(chainId, hotelName);
   return res.json(result);
 });

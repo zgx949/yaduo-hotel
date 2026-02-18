@@ -1,4 +1,4 @@
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 
 const parseBearer = (headerValue) => {
   if (!headerValue) {
@@ -11,18 +11,18 @@ const parseBearer = (headerValue) => {
   return token;
 };
 
-export const requireAuth = (req, res, next) => {
+export const requireAuth = async (req, res, next) => {
   const token = parseBearer(req.headers.authorization);
   if (!token) {
     return res.status(401).json({ message: "Missing bearer token" });
   }
 
-  const session = store.getSession(token);
+  const session = await prismaStore.getSession(token);
   if (!session) {
     return res.status(401).json({ message: "Invalid token" });
   }
 
-  const user = store.users.find((it) => it.id === session.userId);
+  const user = await prismaStore.getUserById(session.userId);
   if (!user) {
     return res.status(401).json({ message: "User not found" });
   }

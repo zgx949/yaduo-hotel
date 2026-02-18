@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { env } from "../config/env.js";
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
 
@@ -66,16 +66,16 @@ const buildFallbackRooms = (chainItem) => {
   ];
 };
 
-const normalizeHotels = (raw) => {
+const normalizeHotels = async (raw) => {
   const list = raw?.data?.chainListResponseList;
   if (!Array.isArray(list)) {
     return [];
   }
 
-  return list.map((item) => {
+  const hotels = await Promise.all(list.map(async (item) => {
     const chainId = String(item.chainId || "");
     const hotelName = String(item.name || "未命名酒店");
-    const risk = store.checkBlacklistedHotel(chainId, hotelName);
+    const risk = await prismaStore.checkBlacklistedHotel(chainId, hotelName);
 
     return {
       id: chainId || randomUUID(),
@@ -101,7 +101,9 @@ const normalizeHotels = (raw) => {
       rooms: buildFallbackRooms(item),
       blacklistCount: risk.count || 0
     };
-  });
+  }));
+
+  return hotels;
 };
 
 const normalizePlaces = (raw) => {
@@ -145,13 +147,13 @@ const detectRateType = (rateItem = {}) => {
   return "NORMAL";
 };
 
-const normalizeChainDetail = (raw, fallback = {}) => {
+const normalizeChainDetail = async (raw, fallback = {}) => {
   const result = raw?.result || {};
   const priceResponse = result.priceResponse || {};
   const roomList = Array.isArray(priceResponse.chainRoomList) ? priceResponse.chainRoomList : [];
   const chainId = String(priceResponse.chainId || fallback.chainId || "");
   const name = String(result.chainName || priceResponse.chainName || fallback.name || "未命名酒店");
-  const risk = store.checkBlacklistedHotel(chainId, name);
+  const risk = await prismaStore.checkBlacklistedHotel(chainId, name);
 
   const rooms = roomList.map((roomItem, index) => {
     const roomInfo = roomItem.roomTypeInfoResponse || {};
@@ -237,7 +239,7 @@ const normalizeChainDetail = (raw, fallback = {}) => {
 };
 
 hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
-  const resourceCtx = getInternalRequestContext();
+  const resourceCtx = await getInternalRequestContext();
   if (!resourceCtx.token) {
     return res.status(400).json({ message: "No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN." });
   }
@@ -316,7 +318,7 @@ hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
 
 
 hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
-  const resourceCtx = getInternalRequestContext();
+  const resourceCtx = await getInternalRequestContext();
   if (!resourceCtx.token) {
     return res.status(400).json({ message: "No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN." });
   }
@@ -389,7 +391,7 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
       });
     }
 
-    const hotel = normalizeChainDetail(raw, {
+    const hotel = await normalizeChainDetail(raw, {
       chainId: hotelChainId,
       name,
       address,

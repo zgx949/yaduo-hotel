@@ -12,6 +12,7 @@ import { Blacklist } from './views/Blacklist';
 import { Login } from './views/Login';
 import { UserManagement } from './views/UserManagement';
 import { SystemSettings } from './views/SystemSettings';
+import { CryptoLab } from './views/CryptoLab';
 import { SystemUser, UserPermissions } from './types';
 
 interface Tab {
@@ -21,6 +22,7 @@ interface Tab {
 
 const App: React.FC = () => {
   const TOKEN_KEY = 'skyhotel_auth_token';
+  const isDevMode = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
 
   // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -163,6 +165,10 @@ const App: React.FC = () => {
   const handleMenuClick = (id: string) => {
     // Check permission (client-side simple check)
     // Updated: Added 'settings' to the restricted list for USER
+    if (id === 'crypto-lab' && !isDevMode) {
+      return;
+    }
+
     if (userRole === 'USER' && (id === 'dashboard' || id === 'accounts' || id === 'users' || id === 'settings')) {
         return; // Block access
     }
@@ -211,6 +217,10 @@ const App: React.FC = () => {
         }
     }
 
+    if (id === 'crypto-lab' && !isDevMode) {
+      return <div className="p-10 text-center text-gray-500">该页面仅在开发环境可用</div>;
+    }
+
     switch (id) {
       case 'dashboard': return <Dashboard />;
       case 'booking': return <Booking />;
@@ -222,6 +232,7 @@ const App: React.FC = () => {
       case 'invoices': return <Invoices />;
       case 'blacklist': return <Blacklist />;
       case 'settings': return <SystemSettings />;
+      case 'crypto-lab': return <CryptoLab />;
       default: return <div className="p-10">页面不存在</div>;
     }
   };

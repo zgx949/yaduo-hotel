@@ -17,7 +17,7 @@ React 原型 + Express 后端同仓项目。
 - Frontend: React + Vite + TypeScript
 - Backend: Express (ESM)
 - Runtime: Node.js 20+
-- 当前存储: 内存（开发模式）
+- 当前存储: Prisma + SQLite（users/pool/blacklist/system）
 - 计划接入: PostgreSQL + Redis + BullMQ
 
 ## 项目结构
@@ -82,6 +82,7 @@ PORT=8787
 API_PREFIX=/api
 CORS_ORIGIN=http://localhost:3000
 USE_MEMORY_STORE=true
+DATABASE_URL="file:./prisma/dev.db"
 ATOUR_ACCESS_TOKEN=
 ATOUR_CLIENT_ID=363CB080-412A-4BFB-AF6E-8C3472F93814
 ATOUR_PLATFORM_TYPE=2
@@ -98,6 +99,44 @@ ATOUR_PLACE_SEARCH_BASE_URL=https://api2.yaduo.com/atourlife/placeSearch/searchV
 - 新建预订搜索通过 `/api/hotels/search` 代理亚朵搜索接口。
 - 搜索框联想通过 `/api/hotels/place-search?keyword=` 代理亚朵 `placeSearch/searchV2`。
 - 未配置 `ATOUR_ACCESS_TOKEN` 时，前端会自动回退到本地 `MOCK_HOTELS`。
+
+### Backend 数据库（Prisma）
+
+后端已接入 Prisma，以下模块默认走数据库（SQLite）：
+
+- 用户与权限（users/auth）
+- 号池管理（pool）
+- 酒店黑名单（blacklist）
+- 系统管理（system，包括代理与 LLM 模型配置）
+
+初始化本地数据库（在项目根目录执行）：
+
+```bash
+npm --prefix backend install
+npm --prefix backend run prisma:generate
+npm --prefix backend run prisma:migrate -- --name init_sqlite
+npm --prefix backend run prisma:seed
+```
+
+Prisma Studio（查看表数据）：
+
+```bash
+npm --prefix backend run prisma:studio
+```
+
+如果 Studio 看不到表或提示 `DATABASE_URL` 错误，请确认 `backend/.env` 里有：
+
+```bash
+DATABASE_URL="file:./prisma/dev.db"
+```
+
+并且先执行过 `prisma:migrate` 和 `prisma:seed`。
+
+切换到 PostgreSQL（部署环境）：
+
+1. 将 `backend/prisma/schema.prisma` 的 `datasource db.provider` 从 `sqlite` 改为 `postgresql`
+2. 将 `DATABASE_URL` 改为 PostgreSQL 连接串（如 `postgresql://user:pass@host:5432/dbname`）
+3. 重新执行 `npm --prefix backend run prisma:migrate` 与 `npm --prefix backend run prisma:generate`
 
 ## 后端 API（当前骨架）
 
@@ -127,6 +166,11 @@ ATOUR_PLACE_SEARCH_BASE_URL=https://api2.yaduo.com/atourlife/placeSearch/searchV
 - `DELETE /api/blacklist/records/:id`
 - `GET /api/blacklist/hotels`
 - `GET /api/blacklist/hotel-check?chainId=&hotelName=`
+- `GET /api/health/keys`
+- `GET /api/health/crypto`
+- `POST /api/health/crypto/test`
+
+说明：`/api/health/crypto` 与 `/api/health/crypto/test` 仅在 `NODE_ENV=development` 时注册；生产环境会自动关闭（路由不存在）。
 
 ## 快速联调示例
 
@@ -152,6 +196,48 @@ curl -X POST http://localhost:8787/api/orders \
 ```bash
 curl http://localhost:8787/api/tasks/<TASK_ID> \
   -H "Authorization: Bearer <TOKEN>"
+```
+
+### 查看加解密算法信息
+
+> 仅开发环境可用；生产环境该接口不会注册。
+
+```bash
+curl http://localhost:8787/api/health/crypto
+```
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "encryption": {
+    "algorithm": "RSA-OAEP",
+    "oaepHash": "sha256",
+    "inputEncoding": "utf8",
+    "outputEncoding": "base64",
+    "keyFormat": "PEM",
+    "ready": true
+  }
+}
+```
+
+### 测试加密和解密
+
+> 仅开发环境可用；生产环境该接口不会注册。
+
+```bash
+curl -X POST http://localhost:8787/api/health/crypto/test \
+  -H "Content-Type: application/json" \
+  -d '{"plainText":"hello-atour"}'
+```
+
+解密已有密文：
+
+```bash
+curl -X POST http://localhost:8787/api/health/crypto/test \
+  -H "Content-Type: application/json" \
+  -d '{"cipherText":"<base64密文>"}'
 ```
 
 ## 号池字段（当前接口）

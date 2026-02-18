@@ -1,13 +1,13 @@
 import { Router } from "express";
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
 import { listConfiguredModels, runLlmCompletion } from "../services/langchain-llm.service.js";
 
 export const systemRoutes = Router();
 
-systemRoutes.get("/config", requireAuth, requireRole("ADMIN"), (req, res) => {
-  const config = store.getSystemConfig();
+systemRoutes.get("/config", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const config = await prismaStore.getSystemConfig();
   return res.json({
     ...config,
     proxyStats: {
@@ -18,54 +18,55 @@ systemRoutes.get("/config", requireAuth, requireRole("ADMIN"), (req, res) => {
   });
 });
 
-systemRoutes.put("/config", requireAuth, requireRole("ADMIN"), (req, res) => {
-  const next = store.updateSystemConfig(req.body || {});
+systemRoutes.put("/config", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const next = await prismaStore.updateSystemConfig(req.body || {});
   return res.json(next);
 });
 
-systemRoutes.get("/proxies", requireAuth, requireRole("ADMIN"), (req, res) => {
-  return res.json({ items: store.listProxyNodes() });
+systemRoutes.get("/proxies", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const items = await prismaStore.listProxyNodes();
+  return res.json({ items });
 });
 
-systemRoutes.post("/proxies", requireAuth, requireRole("ADMIN"), (req, res) => {
+systemRoutes.post("/proxies", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const { ip, port } = req.body || {};
   if (!ip || !port) {
     return res.status(400).json({ message: "ip and port are required" });
   }
-  const created = store.createProxyNode(req.body || {});
+  const created = await prismaStore.createProxyNode(req.body || {});
   return res.status(201).json(created);
 });
 
-systemRoutes.patch("/proxies/:id", requireAuth, requireRole("ADMIN"), (req, res) => {
-  const next = store.updateProxyNode(req.params.id, req.body || {});
+systemRoutes.patch("/proxies/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const next = await prismaStore.updateProxyNode(req.params.id, req.body || {});
   if (!next) {
     return res.status(404).json({ message: "proxy node not found" });
   }
   return res.json(next);
 });
 
-systemRoutes.delete("/proxies/:id", requireAuth, requireRole("ADMIN"), (req, res) => {
-  const deleted = store.deleteProxyNode(req.params.id);
+systemRoutes.delete("/proxies/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const deleted = await prismaStore.deleteProxyNode(req.params.id);
   if (!deleted) {
     return res.status(404).json({ message: "proxy node not found" });
   }
   return res.status(204).send();
 });
 
-systemRoutes.post("/proxies/:id/check", requireAuth, requireRole("ADMIN"), (req, res) => {
-  const exists = store.getProxyNode(req.params.id);
+systemRoutes.post("/proxies/:id/check", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const exists = await prismaStore.getProxyNode(req.params.id);
   if (!exists) {
     return res.status(404).json({ message: "proxy node not found" });
   }
 
   const latency = Math.floor(Math.random() * 350) + 40;
   const status = latency > 280 ? "LATENCY" : "ONLINE";
-  const updated = store.markProxyHealth(req.params.id, status);
+  const updated = await prismaStore.markProxyHealth(req.params.id, status);
   return res.json({ ...updated, latencyMs: latency });
 });
 
-systemRoutes.get("/internal-proxy", requireAuth, (req, res) => {
-  const ctx = getInternalRequestContext({
+systemRoutes.get("/internal-proxy", requireAuth, async (req, res) => {
+  const ctx = await getInternalRequestContext({
     tier: req.query.tier,
     proxyType: req.query.type
   });
@@ -84,9 +85,10 @@ systemRoutes.get("/internal-proxy", requireAuth, (req, res) => {
   });
 });
 
-systemRoutes.get("/llm/models", requireAuth, requireRole("ADMIN"), (req, res) => {
+systemRoutes.get("/llm/models", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const models = await listConfiguredModels();
   return res.json({
-    items: listConfiguredModels().map((it) => ({
+    items: models.map((it) => ({
       ...it,
       apiKey: it.apiKey ? `${it.apiKey.slice(0, 6)}***` : ""
     }))

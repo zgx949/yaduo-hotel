@@ -3,7 +3,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatOpenAI } from "@langchain/openai";
 import { env } from "../config/env.js";
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 
 const pickApiKey = (model) => {
   if (model.apiKey) {
@@ -60,11 +60,13 @@ const buildClient = (model) => {
 };
 
 export const listConfiguredModels = () => {
-  return store.listLlmModels();
+  return prismaStore.listLlmModels();
 };
 
 export const runLlmCompletion = async ({ prompt, modelId, systemPrompt }) => {
-  const model = modelId ? store.getLlmModelById(modelId) : store.getActiveLlmModel();
+  const model = modelId
+    ? await prismaStore.getLlmModelById(modelId)
+    : await prismaStore.getActiveLlmModel();
   if (!model) {
     throw new Error("未找到可用模型配置，请先在系统管理中启用模型");
   }

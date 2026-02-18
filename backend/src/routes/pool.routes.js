@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth } from "../middleware/auth.js";
 
 export const poolRoutes = Router();
@@ -40,25 +40,26 @@ const validatePatchPayload = (payload) => {
   return null;
 };
 
-poolRoutes.get("/accounts", requireAuth, (req, res) => {
+poolRoutes.get("/accounts", requireAuth, async (req, res) => {
   const filters = {
     search: req.query.search,
     tier: req.query.tier,
     is_online: toBooleanOrUndefined(req.query.is_online)
   };
-  return res.json({ items: store.listPoolAccounts(filters) });
+  const items = await prismaStore.listPoolAccounts(filters);
+  return res.json({ items });
 });
 
-poolRoutes.get("/accounts/:id", requireAuth, (req, res) => {
-  const item = store.getPoolAccount(req.params.id);
+poolRoutes.get("/accounts/:id", requireAuth, async (req, res) => {
+  const item = await prismaStore.getPoolAccount(req.params.id);
   if (!item) {
     return res.status(404).json({ message: "Pool account not found" });
   }
   return res.json(item);
 });
 
-poolRoutes.get("/corporate-agreements", requireAuth, (req, res) => {
-  const accounts = store.listPoolAccounts();
+poolRoutes.get("/corporate-agreements", requireAuth, async (req, res) => {
+  const accounts = await prismaStore.listPoolAccounts();
   const names = new Set();
   accounts.forEach((account) => {
     (account.corporate_agreements || []).forEach((corp) => {
@@ -73,24 +74,24 @@ poolRoutes.get("/corporate-agreements", requireAuth, (req, res) => {
   });
 });
 
-poolRoutes.post("/accounts", requireAuth, (req, res) => {
+poolRoutes.post("/accounts", requireAuth, async (req, res) => {
   const payload = req.body || {};
   const validationError = validateCreatePayload(payload);
   if (validationError) {
     return res.status(400).json({ message: validationError });
   }
-  if (store.isPoolTokenTaken(payload.token)) {
+  if (await prismaStore.isPoolTokenTaken(payload.token)) {
     return res.status(409).json({ message: "token already exists" });
   }
   try {
-    const item = store.createPoolAccount(payload);
+    const item = await prismaStore.createPoolAccount(payload);
     return res.status(201).json(item);
   } catch (err) {
     return res.status(400).json({ message: err.message || "failed to create pool account" });
   }
 });
 
-poolRoutes.patch("/accounts/:id", requireAuth, (req, res) => {
+poolRoutes.patch("/accounts/:id", requireAuth, async (req, res) => {
   const payload = { ...(req.body || {}) };
   if (Object.prototype.hasOwnProperty.call(payload, "token") && !String(payload.token || "").trim()) {
     delete payload.token;
@@ -99,12 +100,12 @@ poolRoutes.patch("/accounts/:id", requireAuth, (req, res) => {
   if (validationError) {
     return res.status(400).json({ message: validationError });
   }
-  if (payload.token && store.isPoolTokenTaken(payload.token, req.params.id)) {
+  if (payload.token && await prismaStore.isPoolTokenTaken(payload.token, req.params.id)) {
     return res.status(409).json({ message: "token already exists" });
   }
 
   try {
-    const item = store.updatePoolAccount(req.params.id, payload);
+    const item = await prismaStore.updatePoolAccount(req.params.id, payload);
     if (!item) {
       return res.status(404).json({ message: "Pool account not found" });
     }
@@ -114,8 +115,8 @@ poolRoutes.patch("/accounts/:id", requireAuth, (req, res) => {
   }
 });
 
-poolRoutes.delete("/accounts/:id", requireAuth, (req, res) => {
-  const deleted = store.deletePoolAccount(req.params.id);
+poolRoutes.delete("/accounts/:id", requireAuth, async (req, res) => {
+  const deleted = await prismaStore.deletePoolAccount(req.params.id);
   if (!deleted) {
     return res.status(404).json({ message: "Pool account not found" });
   }
