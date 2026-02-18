@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { MOCK_SYSTEM_CONFIG } from '../constants';
-import { LLMConfig, ProxyNode, SystemConfig } from '../types';
+import { LLMConfig, ProxyNode, SystemConfig, TaskModuleConfig, TaskQueueStats, TaskRun } from '../types';
 
-type SettingsTab = 'GENERAL' | 'CHANNELS' | 'PROXIES' | 'AI';
+type SettingsTab = 'GENERAL' | 'CHANNELS' | 'PROXIES' | 'AI' | 'TASKS';
 
 const TOKEN_KEY = 'skyhotel_auth_token';
 
@@ -34,6 +34,10 @@ export const SystemSettings: React.FC = () => {
   const [llmPrompt, setLlmPrompt] = useState('请用一句话给出今天酒店代理下单的风控建议');
   const [llmOutput, setLlmOutput] = useState('');
   const [llmTesting, setLlmTesting] = useState(false);
+  const [taskModules, setTaskModules] = useState<TaskModuleConfig[]>([]);
+  const [taskQueues, setTaskQueues] = useState<TaskQueueStats[]>([]);
+  const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
+  const [taskLoading, setTaskLoading] = useState(false);
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -74,6 +78,31 @@ export const SystemSettings: React.FC = () => {
   useEffect(() => {
     loadConfig();
   }, []);
+
+  const loadTaskPanel = async () => {
+    setTaskLoading(true);
+    try {
+      const [modulesRes, queuesRes, runsRes] = await Promise.all([
+        fetchWithAuth('/api/system/tasks/modules'),
+        fetchWithAuth('/api/system/tasks/queues'),
+        fetchWithAuth('/api/system/tasks/runs?limit=30')
+      ]);
+      setTaskModules(Array.isArray(modulesRes.items) ? modulesRes.items : []);
+      setTaskQueues(Array.isArray(queuesRes.items) ? queuesRes.items : []);
+      setTaskRuns(Array.isArray(runsRes.items) ? runsRes.items : []);
+    } catch (err) {
+      setError(getErrorMessage(err, '加载任务面板失败'));
+    } finally {
+      setTaskLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'TASKS') return;
+    loadTaskPanel();
+    const timer = window.setInterval(loadTaskPanel, 4000);
+    return () => window.clearInterval(timer);
+  }, [activeTab]);
 
   const handleSave = async () => {
     setSaveStatus('SAVING');
@@ -198,6 +227,39 @@ export const SystemSettings: React.FC = () => {
       setLlmOutput(getErrorMessage(err, '模型测试失败'));
     } finally {
       setLlmTesting(false);
+    }
+  };
+
+  const toggleTaskModule = async (moduleId: string, enabled: boolean) => {
+    try {
+      await fetchWithAuth(`/api/system/tasks/modules/${moduleId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled })
+      });
+      await loadTaskPanel();
+    } catch (err) {
+      setError(getErrorMessage(err, '更新任务模块开关失败'));
+    }
+  };
+
+  const runTaskModuleNow = async (moduleId: string) => {
+    try {
+      await fetchWithAuth(`/api/system/tasks/modules/${moduleId}/run-now`, {
+        method: 'POST',
+        body: JSON.stringify({ payload: {} })
+      });
+      await loadTaskPanel();
+    } catch (err) {
+      setError(getErrorMessage(err, '手动触发任务失败'));
+    }
+  };
+
+  const pauseResumeQueue = async (queueName: string, action: 'pause' | 'resume') => {
+    try {
+      await fetchWithAuth(`/api/system/tasks/queues/${encodeURIComponent(queueName)}/${action}`, { method: 'POST' });
+      await loadTaskPanel();
+    } catch (err) {
+      setError(getErrorMessage(err, `${action === 'pause' ? '暂停' : '恢复'}队列失败`));
     }
   };
 
@@ -390,6 +452,98 @@ export const SystemSettings: React.FC = () => {
     </div>
   );
 
+  const renderTasksTab = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-800">BullMQ 任务中心</h3>
+        <button onClick={loadTaskPanel} className="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs">手动刷新</button>
+      </div>
+
+      <Card title="任务模块开关">
+        <div className="space-y-3">
+          {taskModules.map((mod) => (
+            <div key={mod.moduleId} className="border border-gray-100 rounded-lg px-3 py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div>
+                <div className="text-sm font-medium text-gray-900">{mod.name}</div>
+                <div className="text-xs text-gray-500">{mod.moduleId} | {mod.category} | queue={mod.queueName}{mod.schedule ? ` | cron=${mod.schedule}` : ''}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => runTaskModuleNow(mod.moduleId)} className="px-2 py-1 text-xs rounded border border-blue-200 text-blue-700 bg-blue-50">执行一次</button>
+                <label className="text-xs flex items-center gap-2">
+                  <input type="checkbox" checked={mod.enabled} onChange={(e) => toggleTaskModule(mod.moduleId, e.target.checked)} />
+                  启用
+                </label>
+              </div>
+            </div>
+          ))}
+          {taskModules.length === 0 && <div className="text-xs text-gray-400">暂无任务模块</div>}
+        </div>
+      </Card>
+
+      <Card title="队列状态">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="text-left py-2">队列</th>
+                <th className="text-left py-2">waiting</th>
+                <th className="text-left py-2">active</th>
+                <th className="text-left py-2">completed</th>
+                <th className="text-left py-2">failed</th>
+                <th className="text-right py-2">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {taskQueues.map((q) => (
+                <tr key={q.queueName} className="border-t border-gray-100">
+                  <td className="py-2 font-mono text-xs">{q.queueName}</td>
+                  <td className="py-2">{q.waiting || 0}</td>
+                  <td className="py-2">{q.active || 0}</td>
+                  <td className="py-2">{q.completed || 0}</td>
+                  <td className="py-2">{q.failed || 0}</td>
+                  <td className="py-2 text-right space-x-2">
+                    <button onClick={() => pauseResumeQueue(q.queueName, 'pause')} className="text-xs text-amber-700">暂停</button>
+                    <button onClick={() => pauseResumeQueue(q.queueName, 'resume')} className="text-xs text-green-700">恢复</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="最近任务执行">
+        {taskLoading && <div className="text-xs text-gray-500 mb-2">加载中...</div>}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="text-left py-2">时间</th>
+                <th className="text-left py-2">模块</th>
+                <th className="text-left py-2">队列</th>
+                <th className="text-left py-2">状态</th>
+                <th className="text-left py-2">进度</th>
+                <th className="text-left py-2">错误</th>
+              </tr>
+            </thead>
+            <tbody>
+              {taskRuns.map((run) => (
+                <tr key={run.id} className="border-t border-gray-100">
+                  <td className="py-2 text-xs text-gray-500">{new Date(run.createdAt).toLocaleString()}</td>
+                  <td className="py-2 font-mono text-xs">{run.moduleId}</td>
+                  <td className="py-2 font-mono text-xs">{run.queueName}</td>
+                  <td className="py-2">{run.state}</td>
+                  <td className="py-2">{run.progress}%</td>
+                  <td className="py-2 text-xs text-red-600 max-w-[280px] truncate">{run.error || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex justify-between items-center">
@@ -419,7 +573,8 @@ export const SystemSettings: React.FC = () => {
           { id: 'GENERAL', label: '基础设置', icon: '⚙️' },
           { id: 'CHANNELS', label: '渠道控制', icon: '🛡️' },
           { id: 'PROXIES', label: '代理池管理', icon: '🌐' },
-          { id: 'AI', label: '大模型配置', icon: '🧠' }
+          { id: 'AI', label: '大模型配置', icon: '🧠' },
+          { id: 'TASKS', label: '任务中心', icon: '🧰' }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -439,6 +594,7 @@ export const SystemSettings: React.FC = () => {
           {activeTab === 'CHANNELS' && renderChannelsTab()}
           {activeTab === 'PROXIES' && renderProxiesTab()}
           {activeTab === 'AI' && renderAITab()}
+          {activeTab === 'TASKS' && renderTasksTab()}
         </div>
       </div>
     </div>

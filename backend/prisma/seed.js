@@ -197,6 +197,75 @@ const seed = async () => {
     });
   }
 
+  const taskModules = [
+    {
+      moduleId: 'order.submit',
+      name: '订单下单执行',
+      category: 'REALTIME',
+      queueName: 'realtime-orders',
+      enabled: true,
+      schedule: null,
+      concurrency: 4,
+      attempts: 3,
+      backoffMs: 2000,
+      useProxy: true
+    },
+    {
+      moduleId: 'order.cancel',
+      name: '订单取消执行',
+      category: 'REALTIME',
+      queueName: 'realtime-orders',
+      enabled: true,
+      schedule: null,
+      concurrency: 2,
+      attempts: 2,
+      backoffMs: 2000,
+      useProxy: true
+    },
+    {
+      moduleId: 'order.payment-link',
+      name: '支付链接生成',
+      category: 'REALTIME',
+      queueName: 'realtime-payments',
+      enabled: true,
+      schedule: null,
+      concurrency: 3,
+      attempts: 2,
+      backoffMs: 1500,
+      useProxy: false
+    },
+    {
+      moduleId: 'account.daily-checkin',
+      name: '每日签到养号',
+      category: 'SCHEDULED',
+      queueName: 'scheduled-accounts',
+      enabled: true,
+      schedule: '0 3 * * *',
+      concurrency: 1,
+      attempts: 1,
+      backoffMs: 1000,
+      useProxy: true
+    }
+  ];
+
+  for (const module of taskModules) {
+    await prisma.taskModuleConfig.upsert({
+      where: { moduleId: module.moduleId },
+      update: {
+        name: module.name,
+        category: module.category,
+        queueName: module.queueName,
+        enabled: module.enabled,
+        schedule: module.schedule,
+        concurrency: module.concurrency,
+        attempts: module.attempts,
+        backoffMs: module.backoffMs,
+        useProxy: module.useProxy
+      },
+      create: module
+    });
+  }
+
   const orderGroupCount = await prisma.orderGroup.count();
   if (orderGroupCount === 0) {
     const sampleGroup = await prisma.orderGroup.create({

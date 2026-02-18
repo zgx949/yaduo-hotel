@@ -152,6 +152,46 @@ model SystemConfig {
   proxies                ProxyNode[]
 }
 
+model TaskModuleConfig {
+  id           String   @id @default(cuid())
+  moduleId     String   @unique
+  name         String
+  category     String
+  queueName    String
+  enabled      Boolean  @default(true)
+  schedule     String?
+  concurrency  Int      @default(1)
+  attempts     Int      @default(3)
+  backoffMs    Int      @default(3000)
+  useProxy     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model TaskRun {
+  id           String   @id @default(cuid())
+  moduleId     String
+  queueName    String
+  jobId        String
+  state        String
+  attemptsMade Int      @default(0)
+  progress     Int      @default(0)
+  payload      Json
+  result       Json?
+  error        String?
+  orderGroupId String?
+  orderItemId  String?
+  proxyId      String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([moduleId, createdAt])
+  @@index([queueName, state])
+  @@unique([queueName, jobId])
+}
+
 model ProxyNode {
   id          String       @id @default(cuid())
   configId    String

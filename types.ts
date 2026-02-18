@@ -351,3 +351,49 @@ export interface SystemConfig {
   proxies: ProxyNode[];
   llmModels: LLMConfig[];
 }
+
+export interface TaskModuleConfig {
+  id: string;
+  moduleId: string;
+  name: string;
+  category: 'REALTIME' | 'SCHEDULED';
+  queueName: string;
+  enabled: boolean;
+  schedule?: string | null;
+  concurrency: number;
+  attempts: number;
+  backoffMs: number;
+  useProxy: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskQueueStats {
+  queueName: string;
+  waiting?: number;
+  active?: number;
+  completed?: number;
+  failed?: number;
+  delayed?: number;
+  paused?: number;
+}
+
+export interface TaskRun {
+  id: string;
+  moduleId: string;
+  queueName: string;
+  jobId: string;
+  state: string;
+  attemptsMade: number;
+  progress: number;
+  payload: unknown;
+  result?: unknown;
+  error?: string | null;
+  orderGroupId?: string | null;
+  orderItemId?: string | null;
+  proxyId?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

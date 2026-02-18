@@ -1,14 +1,30 @@
 import { Router } from "express";
 import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth } from "../middleware/auth.js";
+import { env } from "../config/env.js";
 import { processOrderTask } from "../services/task-processor.js";
+import { taskPlatform } from "../tasks/task-platform.js";
 
 export const ordersRoutes = Router();
 
 const enqueueOrderItemTask = async (orderItem) => {
-  const task = await prismaStore.createTask(orderItem.id);
-  processOrderTask(task.id).catch(async (err) => {
-    await prismaStore.updateTask(task.id, {
+  if (env.taskSystemEnabled) {
+    try {
+      return await taskPlatform.enqueueModule(
+        "order.submit",
+        { orderItemId: orderItem.id },
+        { orderGroupId: orderItem.groupId, orderItemId: orderItem.id }
+      );
+    } catch (err) {
+      if (env.nodeEnv !== "production") {
+        console.warn("order.submit enqueue failed, fallback to local mode:", err?.message || err);
+      }
+    }
+  }
+
+  const fallbackTask = await prismaStore.createTask(orderItem.id);
+  processOrderTask(fallbackTask.id).catch(async (err) => {
+    await prismaStore.updateTask(fallbackTask.id, {
       state: "failed",
       error: err.message || "Task failed"
     });
@@ -18,7 +34,7 @@ const enqueueOrderItemTask = async (orderItem) => {
     });
     await prismaStore.refreshOrderStatus(orderItem.groupId);
   });
-  return task;
+  return fallbackTask;
 };
 
 ordersRoutes.get("/", requireAuth, async (req, res) => {
@@ -119,6 +135,26 @@ ordersRoutes.post("/:id/cancel", requireAuth, async (req, res) => {
   if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
     return res.status(403).json({ message: "Forbidden" });
   }
+  if (env.taskSystemEnabled) {
+    try {
+      const tasks = [];
+      for (const item of order.items.filter((it) => it.status !== "CANCELLED")) {
+        tasks.push(
+          await taskPlatform.enqueueModule(
+            "order.cancel",
+            { orderItemId: item.id },
+            { orderGroupId: order.id, orderItemId: item.id }
+          )
+        );
+      }
+      return res.json({ queued: true, tasks });
+    } catch (err) {
+      if (env.nodeEnv !== "production") {
+        console.warn("order.cancel enqueue failed, fallback to local mode:", err?.message || err);
+      }
+    }
+  }
+
   const cancelled = await prismaStore.cancelOrder(order.id);
   return res.json(cancelled);
 });
@@ -171,6 +207,10 @@ ordersRoutes.post("/items/:itemId/confirm-submit", requireAuth, async (req, res)
     return res.status(403).json({ message: "Forbidden" });
   }
 
+  if (!["PLAN_PENDING", "FAILED"].includes(item.executionStatus)) {
+    return res.json({ item, task: null });
+  }
+
   const submitted = await prismaStore.submitOrderItem(item.id);
   const existingTask = await prismaStore.findTaskByOrderItem(item.id);
   let task = existingTask;
@@ -192,6 +232,21 @@ ordersRoutes.post("/items/:itemId/cancel", requireAuth, async (req, res) => {
   }
   if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
     return res.status(403).json({ message: "Forbidden" });
+  }
+
+  if (env.taskSystemEnabled) {
+    try {
+      const task = await taskPlatform.enqueueModule(
+        "order.cancel",
+        { orderItemId: item.id },
+        { orderGroupId: item.groupId, orderItemId: item.id }
+      );
+      return res.json({ queued: true, task });
+    } catch (err) {
+      if (env.nodeEnv !== "production") {
+        console.warn("order.cancel(item) enqueue failed, fallback to local mode:", err?.message || err);
+      }
+    }
   }
 
   const cancelled = await prismaStore.cancelOrderItem(item.id);

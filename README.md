@@ -82,7 +82,7 @@ PORT=8787
 API_PREFIX=/api
 CORS_ORIGIN=http://localhost:3000
 USE_MEMORY_STORE=true
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="file:./prisma/dev.db"
 ATOUR_ACCESS_TOKEN=
 ATOUR_CLIENT_ID=363CB080-412A-4BFB-AF6E-8C3472F93814
 ATOUR_PLATFORM_TYPE=2
@@ -127,10 +127,35 @@ npm --prefix backend run prisma:studio
 如果 Studio 看不到表或提示 `DATABASE_URL` 错误，请确认 `backend/.env` 里有：
 
 ```bash
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="file:./prisma/dev.db"
 ```
 
+本地 SQLite 统一使用 `backend/prisma/dev.db`。如果你之前跑过旧路径，可能残留 `backend/dev.db`
+或 `backend/prisma/prisma/dev.db`，建议先备份再删除旧文件，避免 Studio 连接到错误库。
+
 并且先执行过 `prisma:migrate` 和 `prisma:seed`。
+
+### 实时任务与定时任务（BullMQ + Redis）
+
+后端已接入 BullMQ：
+
+- 实时任务：订单下单、订单取消、支付链接生成
+- 定时任务：每日签到（养号）
+- 管理入口：系统管理页新增「任务中心」页签
+
+环境变量（`backend/.env`）：
+
+```bash
+TASK_SYSTEM_ENABLED=true
+REDIS_URL=
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+TASK_POLL_INTERVAL_MS=5000
+```
+
+说明：优先使用 `REDIS_URL`，未配置时使用 host/port 组合。
 
 切换到 PostgreSQL（部署环境）：
 
@@ -156,6 +181,14 @@ DATABASE_URL="file:./dev.db"
 - `DELETE /api/pool/accounts/:id`
 - `GET /api/orders`
 - `POST /api/orders`
+- `POST /api/orders/:id/submit`
+- `POST /api/orders/:id/cancel`
+- `POST /api/orders/:id/refresh-status`
+- `POST /api/orders/items/:itemId/confirm-submit`
+- `POST /api/orders/items/:itemId/cancel`
+- `POST /api/orders/items/:itemId/refresh-status`
+- `GET /api/orders/items/:itemId/payment-link`
+- `GET /api/orders/items/:itemId/detail-link`
 - `GET /api/tasks/:taskId`
 - `GET /api/hotels/place-search?keyword=`
 - `POST /api/hotels/search`
@@ -169,6 +202,14 @@ DATABASE_URL="file:./dev.db"
 - `GET /api/health/keys`
 - `GET /api/health/crypto`
 - `POST /api/health/crypto/test`
+- `GET /api/system/tasks/modules`（ADMIN）
+- `PATCH /api/system/tasks/modules/:moduleId`（ADMIN）
+- `POST /api/system/tasks/modules/:moduleId/run-now`（ADMIN）
+- `GET /api/system/tasks/runs`（ADMIN）
+- `GET /api/system/tasks/queues`（ADMIN）
+- `POST /api/system/tasks/queues/:queueName/pause`（ADMIN）
+- `POST /api/system/tasks/queues/:queueName/resume`（ADMIN）
+- `GET /api/system/tasks/queues/:queueName/jobs`（ADMIN）
 
 说明：`/api/health/crypto` 与 `/api/health/crypto/test` 仅在 `NODE_ENV=development` 时注册；生产环境会自动关闭（路由不存在）。
 

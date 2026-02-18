@@ -869,7 +869,7 @@ export const prismaStore = {
     if (!item) {
       return null;
     }
-    if (["ORDERED", "DONE", "CANCELLED"].includes(item.executionStatus)) {
+    if (["QUEUED", "SUBMITTING", "ORDERED", "DONE", "CANCELLED"].includes(item.executionStatus)) {
       return projectOrderItem(item);
     }
     const updated = await prisma.orderItem.update({
@@ -1383,6 +1383,147 @@ export const prismaStore = {
       }
     });
     return { ...row, lastChecked: row.lastChecked.toISOString() };
+  },
+  async listTaskModules() {
+    const rows = await prisma.taskModuleConfig.findMany({ orderBy: [{ category: "asc" }, { moduleId: "asc" }] });
+    return rows.map((it) => ({
+      ...it,
+      createdAt: it.createdAt.toISOString(),
+      updatedAt: it.updatedAt.toISOString()
+    }));
+  },
+  async getTaskModuleByModuleId(moduleId) {
+    if (!moduleId) {
+      return null;
+    }
+    const row = await prisma.taskModuleConfig.findUnique({ where: { moduleId } });
+    if (!row) {
+      return null;
+    }
+    return {
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  },
+  async updateTaskModule(moduleId, patch = {}) {
+    const existed = await prisma.taskModuleConfig.findUnique({ where: { moduleId } });
+    if (!existed) {
+      return null;
+    }
+    const row = await prisma.taskModuleConfig.update({
+      where: { moduleId },
+      data: {
+        name: hasOwn(patch, "name") ? String(patch.name || "").trim() : undefined,
+        category: hasOwn(patch, "category") ? String(patch.category || "REALTIME").trim().toUpperCase() : undefined,
+        queueName: hasOwn(patch, "queueName") ? String(patch.queueName || "default").trim() : undefined,
+        enabled: hasOwn(patch, "enabled") ? Boolean(patch.enabled) : undefined,
+        schedule: hasOwn(patch, "schedule") ? (patch.schedule ? String(patch.schedule).trim() : null) : undefined,
+        concurrency: hasOwn(patch, "concurrency") ? Math.max(1, Number(patch.concurrency) || 1) : undefined,
+        attempts: hasOwn(patch, "attempts") ? Math.max(1, Number(patch.attempts) || 1) : undefined,
+        backoffMs: hasOwn(patch, "backoffMs") ? Math.max(0, Number(patch.backoffMs) || 0) : undefined,
+        useProxy: hasOwn(patch, "useProxy") ? Boolean(patch.useProxy) : undefined
+      }
+    });
+    return {
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  },
+  async createTaskRun(payload = {}) {
+    const row = await prisma.taskRun.create({
+      data: {
+        moduleId: String(payload.moduleId || ""),
+        queueName: String(payload.queueName || "default"),
+        jobId: String(payload.jobId || ""),
+        state: String(payload.state || "waiting"),
+        attemptsMade: Number(payload.attemptsMade) || 0,
+        progress: Number(payload.progress) || 0,
+        payload: payload.payload || {},
+        result: payload.result || undefined,
+        error: payload.error ? String(payload.error) : null,
+        orderGroupId: payload.orderGroupId ? String(payload.orderGroupId) : null,
+        orderItemId: payload.orderItemId ? String(payload.orderItemId) : null,
+        proxyId: payload.proxyId ? String(payload.proxyId) : null,
+        startedAt: payload.startedAt ? new Date(payload.startedAt) : null,
+        finishedAt: payload.finishedAt ? new Date(payload.finishedAt) : null
+      }
+    });
+    return {
+      ...row,
+      startedAt: row.startedAt ? row.startedAt.toISOString() : null,
+      finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  },
+  async getTaskRunByQueueJob(queueName, jobId) {
+    const row = await prisma.taskRun.findUnique({ where: { queueName_jobId: { queueName, jobId } } });
+    if (!row) {
+      return null;
+    }
+    return {
+      ...row,
+      startedAt: row.startedAt ? row.startedAt.toISOString() : null,
+      finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  },
+  async updateTaskRunByQueueJob(queueName, jobId, patch = {}) {
+    const existed = await prisma.taskRun.findUnique({ where: { queueName_jobId: { queueName, jobId } } });
+    if (!existed) {
+      return null;
+    }
+    const row = await prisma.taskRun.update({
+      where: { queueName_jobId: { queueName, jobId } },
+      data: {
+        state: hasOwn(patch, "state") ? String(patch.state || existed.state) : undefined,
+        attemptsMade: hasOwn(patch, "attemptsMade") ? Number(patch.attemptsMade) || 0 : undefined,
+        progress: hasOwn(patch, "progress") ? Number(patch.progress) || 0 : undefined,
+        result: hasOwn(patch, "result") ? patch.result : undefined,
+        error: hasOwn(patch, "error") ? (patch.error ? String(patch.error) : null) : undefined,
+        proxyId: hasOwn(patch, "proxyId") ? (patch.proxyId ? String(patch.proxyId) : null) : undefined,
+        startedAt: hasOwn(patch, "startedAt") ? (patch.startedAt ? new Date(patch.startedAt) : null) : undefined,
+        finishedAt: hasOwn(patch, "finishedAt") ? (patch.finishedAt ? new Date(patch.finishedAt) : null) : undefined
+      }
+    });
+    return {
+      ...row,
+      startedAt: row.startedAt ? row.startedAt.toISOString() : null,
+      finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  },
+  async listTaskRuns(filters = {}) {
+    const where = {};
+    if (filters.moduleId) {
+      where.moduleId = String(filters.moduleId);
+    }
+    if (filters.state) {
+      where.state = String(filters.state);
+    }
+    if (filters.queueName) {
+      where.queueName = String(filters.queueName);
+    }
+    if (filters.orderGroupId) {
+      where.orderGroupId = String(filters.orderGroupId);
+    }
+    const limit = Math.max(1, Math.min(200, Number(filters.limit) || 50));
+    const rows = await prisma.taskRun.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit
+    });
+    return rows.map((row) => ({
+      ...row,
+      startedAt: row.startedAt ? row.startedAt.toISOString() : null,
+      finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    }));
   },
   async listLlmModels() {
     await ensureSystemConfig();

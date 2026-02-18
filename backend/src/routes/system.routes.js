@@ -3,6 +3,7 @@ import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
 import { listConfiguredModels, runLlmCompletion } from "../services/langchain-llm.service.js";
+import { taskPlatform } from "../tasks/task-platform.js";
 
 export const systemRoutes = Router();
 
@@ -112,4 +113,67 @@ systemRoutes.post("/llm/test", requireAuth, requireRole("ADMIN"), async (req, re
   } catch (err) {
     return res.status(400).json({ message: err.message || "LLM test failed" });
   }
+});
+
+systemRoutes.get("/tasks/modules", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const items = await prismaStore.listTaskModules();
+  return res.json({ items });
+});
+
+systemRoutes.patch("/tasks/modules/:moduleId", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const updated = await prismaStore.updateTaskModule(req.params.moduleId, req.body || {});
+  if (!updated) {
+    return res.status(404).json({ message: "task module not found" });
+  }
+  await taskPlatform.syncModules();
+  return res.json(updated);
+});
+
+systemRoutes.post("/tasks/modules/:moduleId/run-now", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const data = await taskPlatform.enqueueModule(req.params.moduleId, req.body?.payload || {}, { source: "manual" });
+    return res.status(201).json(data);
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "enqueue failed" });
+  }
+});
+
+systemRoutes.get("/tasks/runs", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const items = await prismaStore.listTaskRuns({
+    moduleId: req.query.moduleId,
+    queueName: req.query.queueName,
+    state: req.query.state,
+    limit: req.query.limit
+  });
+  return res.json({ items });
+});
+
+systemRoutes.get("/tasks/queues", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const items = await taskPlatform.listQueues();
+  return res.json({ items });
+});
+
+systemRoutes.post("/tasks/queues/:queueName/pause", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const ok = await taskPlatform.pauseQueue(req.params.queueName);
+  if (!ok) {
+    return res.status(404).json({ message: "queue not found" });
+  }
+  return res.json({ ok: true });
+});
+
+systemRoutes.post("/tasks/queues/:queueName/resume", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const ok = await taskPlatform.resumeQueue(req.params.queueName);
+  if (!ok) {
+    return res.status(404).json({ message: "queue not found" });
+  }
+  return res.json({ ok: true });
+});
+
+systemRoutes.get("/tasks/queues/:queueName/jobs", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const items = await taskPlatform.listJobs(
+    req.params.queueName,
+    req.query.state ? String(req.query.state) : "waiting",
+    req.query.limit ? Number(req.query.limit) : 20
+  );
+  return res.json({ items });
 });

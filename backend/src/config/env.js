@@ -7,6 +7,20 @@ const toNumber = (value, fallback) => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const toBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  const normalized = String(value).toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+};
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: toNumber(process.env.PORT, 8787),
@@ -32,5 +46,12 @@ export const env = {
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   geminiApiKey: process.env.GEMINI_API_KEY || "",
   googleApiKey: process.env.GOOGLE_API_KEY || "",
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY || ""
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  taskSystemEnabled: toBoolean(process.env.TASK_SYSTEM_ENABLED, true),
+  redisUrl: process.env.REDIS_URL || "",
+  redisHost: process.env.REDIS_HOST || "127.0.0.1",
+  redisPort: toNumber(process.env.REDIS_PORT, 6379),
+  redisPassword: process.env.REDIS_PASSWORD || "",
+  redisDb: toNumber(process.env.REDIS_DB, 0),
+  taskPollIntervalMs: toNumber(process.env.TASK_POLL_INTERVAL_MS, 5000)
 };
