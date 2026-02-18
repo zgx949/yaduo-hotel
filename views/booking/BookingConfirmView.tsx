@@ -31,7 +31,8 @@ interface BookingConfirmViewProps {
   invoiceForm: InvoiceFormValue;
   onToggleInvoice: () => void;
   onBack: () => void;
-  onSubmit: () => void;
+  onSubmitNow: () => void;
+  onSaveDraft: () => void;
   isLoading: boolean;
   getDisplayDate: (dateStr: string) => string;
   getNightCount: () => number;
@@ -52,7 +53,8 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
   invoiceForm,
   onToggleInvoice,
   onBack,
-  onSubmit,
+  onSubmitNow,
+  onSaveDraft,
   isLoading,
   getDisplayDate,
   getNightCount
@@ -244,13 +246,22 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
             </div>
             <div className="text-xs text-gray-400">已优惠 ¥{totalDiscount} <span className="underline">账单明细</span></div>
           </div>
-          <button
-            onClick={onSubmit}
-            disabled={isLoading}
-            className="bg-[#1d3c34] text-white px-10 py-3 rounded-lg font-bold text-lg shadow-lg hover:bg-[#152e28] active:scale-95 transition-all flex items-center gap-2"
-          >
-            {isLoading ? '提交中...' : '立即支付'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onSaveDraft}
+              disabled={isLoading}
+              className="bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-gray-50 disabled:opacity-50"
+            >
+              {isLoading ? '处理中...' : '暂存订单'}
+            </button>
+            <button
+              onClick={onSubmitNow}
+              disabled={isLoading}
+              className="bg-[#1d3c34] text-white px-8 py-3 rounded-lg font-bold text-lg shadow-lg hover:bg-[#152e28] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {isLoading ? '提交中...' : '立即支付'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

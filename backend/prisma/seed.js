@@ -196,6 +196,80 @@ const seed = async () => {
       }
     });
   }
+
+  const orderGroupCount = await prisma.orderGroup.count();
+  if (orderGroupCount === 0) {
+    const sampleGroup = await prisma.orderGroup.create({
+      data: {
+        bizOrderNo: `BIZ-${Date.now()}`,
+        chainId: "ATOUR",
+        hotelName: "上海静安亚朵S酒店",
+        customerName: "张三",
+        contactPhone: "13800000000",
+        checkInDate: new Date("2026-02-20"),
+        checkOutDate: new Date("2026-02-22"),
+        totalNights: 2,
+        totalAmount: 1098,
+        status: "PROCESSING",
+        paymentStatus: "PARTIAL",
+        creatorId: "u_admin",
+        creatorName: "系统管理员",
+        remark: "演示拆单"
+      }
+    });
+
+    const itemA = await prisma.orderItem.create({
+      data: {
+        groupId: sampleGroup.id,
+        atourOrderId: `AT-${Date.now()}-1`,
+        roomType: "高级大床房",
+        roomCount: 1,
+        accountId: "pool_001",
+        accountPhone: "13800000001",
+        checkInDate: new Date("2026-02-20"),
+        checkOutDate: new Date("2026-02-22"),
+        amount: 549,
+        status: "CONFIRMED",
+        paymentStatus: "PAID",
+        executionStatus: "DONE",
+        splitIndex: 1,
+        splitTotal: 2
+      }
+    });
+
+    const itemB = await prisma.orderItem.create({
+      data: {
+        groupId: sampleGroup.id,
+        atourOrderId: `AT-${Date.now()}-2`,
+        roomType: "高级大床房",
+        roomCount: 1,
+        checkInDate: new Date("2026-02-20"),
+        checkOutDate: new Date("2026-02-22"),
+        amount: 549,
+        status: "PROCESSING",
+        paymentStatus: "UNPAID",
+        executionStatus: "QUEUED",
+        splitIndex: 2,
+        splitTotal: 2
+      }
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          orderItemId: itemA.id,
+          state: "completed",
+          progress: 100,
+          result: { ok: true, message: "sample completed" }
+        },
+        {
+          orderItemId: itemB.id,
+          state: "waiting",
+          progress: 0
+        }
+      ]
+    });
+  }
 };
 
 seed()

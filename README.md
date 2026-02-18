@@ -82,7 +82,7 @@ PORT=8787
 API_PREFIX=/api
 CORS_ORIGIN=http://localhost:3000
 USE_MEMORY_STORE=true
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="file:./dev.db"
 ATOUR_ACCESS_TOKEN=
 ATOUR_CLIENT_ID=363CB080-412A-4BFB-AF6E-8C3472F93814
 ATOUR_PLATFORM_TYPE=2
@@ -127,7 +127,7 @@ npm --prefix backend run prisma:studio
 如果 Studio 看不到表或提示 `DATABASE_URL` 错误，请确认 `backend/.env` 里有：
 
 ```bash
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="file:./dev.db"
 ```
 
 并且先执行过 `prisma:migrate` 和 `prisma:seed`。

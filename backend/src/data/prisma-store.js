@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { decryptPoolToken, encryptPoolToken } from "../services/token-crypto.service.js";
+import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
 
 const now = () => new Date().toISOString();
@@ -113,6 +114,106 @@ const canUseTier = (account, tier) => {
     return account.corporateAgreements.length > 0;
   }
   return true;
+};
+
+const taskStateToExecution = (taskState) => {
+  const normalized = String(taskState || "").toLowerCase();
+  if (normalized === "waiting") {
+    return "QUEUED";
+  }
+  if (normalized === "active") {
+    return "SUBMITTING";
+  }
+  if (normalized === "completed") {
+    return "ORDERED";
+  }
+  if (normalized === "failed") {
+    return "FAILED";
+  }
+  return "QUEUED";
+};
+
+const buildOrderDetailUrl = (item) => {
+  if (!item.atourOrderId) {
+    return null;
+  }
+  const base = String(process.env.ATOUR_ORDER_DETAIL_URL || env.atourPlaceSearchBaseUrl || "").trim();
+  if (!base) {
+    return null;
+  }
+  try {
+    const url = new URL(base.startsWith("http") ? base : `https://${base}`);
+    url.searchParams.set("orderId", String(item.atourOrderId));
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
+const buildPaymentLink = (item) => {
+  if (item.executionStatus !== "ORDERED" && item.executionStatus !== "DONE") {
+    return null;
+  }
+  if (item.paymentStatus === "PAID") {
+    return null;
+  }
+  const orderId = item.atourOrderId || item.id;
+  return `atour://payment/checkout?orderId=${encodeURIComponent(orderId)}`;
+};
+
+const projectOrderItem = (item) => ({
+  id: item.id,
+  groupId: item.groupId,
+  atourOrderId: item.atourOrderId,
+  roomType: item.roomType,
+  roomCount: item.roomCount,
+  accountId: item.accountId,
+  accountPhone: item.accountPhone,
+  checkInDate: item.checkInDate.toISOString().slice(0, 10),
+  checkOutDate: item.checkOutDate.toISOString().slice(0, 10),
+  amount: item.amount,
+  status: item.status,
+  paymentStatus: item.paymentStatus,
+  executionStatus: item.executionStatus,
+  splitIndex: item.splitIndex,
+  splitTotal: item.splitTotal,
+  paymentLink: buildPaymentLink(item),
+  detailUrl: buildOrderDetailUrl(item),
+  createdAt: item.createdAt.toISOString(),
+  updatedAt: item.updatedAt.toISOString()
+});
+
+const aggregateOrderStatuses = (items) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { status: "PROCESSING", paymentStatus: "UNPAID" };
+  }
+
+  const hasFailed = items.some((it) => it.status === "FAILED");
+  const hasPlanPending = items.some((it) => it.executionStatus === "PLAN_PENDING");
+  const hasProcessing = items.some((it) => ["PROCESSING", "WAITING", "PENDING"].includes(String(it.status || "").toUpperCase()));
+  const allConfirmed = items.every((it) => it.status === "CONFIRMED");
+  const allCancelled = items.every((it) => it.status === "CANCELLED");
+
+  let status = hasPlanPending ? "WAIT_CONFIRM" : "PROCESSING";
+  if (hasFailed) {
+    status = "FAILED";
+  } else if (allCancelled) {
+    status = "CANCELLED";
+  } else if (allConfirmed) {
+    status = "CONFIRMED";
+  } else if (hasProcessing) {
+    status = "PROCESSING";
+  }
+
+  const paidCount = items.filter((it) => it.paymentStatus === "PAID").length;
+  let paymentStatus = "UNPAID";
+  if (paidCount === items.length) {
+    paymentStatus = "PAID";
+  } else if (paidCount > 0) {
+    paymentStatus = "PARTIAL";
+  }
+
+  return { status, paymentStatus };
 };
 
 const projectPoolAccount = (entity) => {
@@ -552,6 +653,415 @@ export const prismaStore = {
       }
     }
     return null;
+  },
+  async createOrder(payload, creator) {
+    const nowDate = new Date();
+    const checkInDate = payload.checkInDate ? new Date(payload.checkInDate) : nowDate;
+    const checkOutDate = payload.checkOutDate
+      ? new Date(payload.checkOutDate)
+      : new Date(nowDate.getTime() + 24 * 60 * 60 * 1000);
+    const nights = Math.max(1, Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (24 * 60 * 60 * 1000)));
+
+    const submitNow = payload.submitNow !== false;
+
+    const splitItems = Array.isArray(payload.splits) && payload.splits.length > 0
+      ? payload.splits
+      : [{
+        roomType: payload.roomType || "标准房型",
+        roomCount: Number(payload.roomCount) || 1,
+        accountId: payload.accountId || null,
+        accountPhone: payload.accountPhone || null,
+        amount: Number(payload.price) || 0,
+        atourOrderId: payload.atourOrderId || null,
+        status: payload.status || (submitNow ? "PROCESSING" : "WAIT_CONFIRM"),
+        paymentStatus: payload.paymentStatus || "UNPAID",
+        executionStatus: submitNow ? "QUEUED" : "PLAN_PENDING"
+      }];
+
+    const totalAmount = splitItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0);
+
+    const group = await prisma.orderGroup.create({
+      data: {
+        bizOrderNo: payload.bizOrderNo || `BIZ-${Date.now()}`,
+        chainId: String(payload.chainId || "UNKNOWN"),
+        hotelName: String(payload.hotelName || ""),
+        customerName: String(payload.customerName || ""),
+        contactPhone: payload.contactPhone ? String(payload.contactPhone) : null,
+        checkInDate,
+        checkOutDate,
+        totalNights: nights,
+        totalAmount,
+        currency: payload.currency || "CNY",
+        status: payload.status || (submitNow ? "PROCESSING" : "WAIT_CONFIRM"),
+        paymentStatus: payload.paymentStatus || "UNPAID",
+        creatorId: creator.id,
+        creatorName: creator.name,
+        remark: payload.remark ? String(payload.remark) : null,
+        items: {
+          create: splitItems.map((it, idx) => ({
+            checkInDate: it.checkInDate ? new Date(it.checkInDate) : checkInDate,
+            checkOutDate: it.checkOutDate ? new Date(it.checkOutDate) : checkOutDate,
+            atourOrderId: it.atourOrderId ? String(it.atourOrderId) : null,
+            roomType: String(it.roomType || payload.roomType || "标准房型"),
+            roomCount: Math.max(1, Number(it.roomCount) || 1),
+            accountId: it.accountId || null,
+            accountPhone: it.accountPhone ? String(it.accountPhone) : null,
+            amount: Number(it.amount) || 0,
+            status: String(it.status || (submitNow ? "PROCESSING" : "WAIT_CONFIRM")),
+            paymentStatus: String(it.paymentStatus || "UNPAID"),
+            executionStatus: String(it.executionStatus || (submitNow ? "QUEUED" : "PLAN_PENDING")),
+            splitIndex: idx + 1,
+            splitTotal: splitItems.length
+          }))
+        }
+      },
+      include: {
+        items: true
+      }
+    });
+
+    return {
+      id: group.id,
+      bizOrderNo: group.bizOrderNo,
+      chainId: group.chainId,
+      hotelName: group.hotelName,
+      customerName: group.customerName,
+      contactPhone: group.contactPhone,
+      checkInDate: group.checkInDate.toISOString().slice(0, 10),
+      checkOutDate: group.checkOutDate.toISOString().slice(0, 10),
+      totalNights: group.totalNights,
+      totalAmount: group.totalAmount,
+      currency: group.currency,
+      status: group.status,
+      paymentStatus: group.paymentStatus,
+      creatorId: group.creatorId,
+      creatorName: group.creatorName,
+      remark: group.remark,
+      createdAt: group.createdAt.toISOString(),
+      updatedAt: group.updatedAt.toISOString(),
+      items: group.items.map(projectOrderItem)
+    };
+  },
+  async listOrders(filters = {}) {
+    const where = {};
+    if (filters.creatorId) {
+      where.creatorId = filters.creatorId;
+    }
+    if (filters.status) {
+      where.status = String(filters.status);
+    }
+    if (filters.search) {
+      const keyword = String(filters.search);
+      where.OR = [
+        { bizOrderNo: { contains: keyword } },
+        { hotelName: { contains: keyword } },
+        { customerName: { contains: keyword } }
+      ];
+    }
+
+    const groups = await prisma.orderGroup.findMany({
+      where,
+      include: {
+        items: {
+          orderBy: { splitIndex: "asc" }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return groups.map((group) => ({
+      id: group.id,
+      bizOrderNo: group.bizOrderNo,
+      chainId: group.chainId,
+      hotelName: group.hotelName,
+      customerName: group.customerName,
+      contactPhone: group.contactPhone,
+      checkInDate: group.checkInDate.toISOString().slice(0, 10),
+      checkOutDate: group.checkOutDate.toISOString().slice(0, 10),
+      totalNights: group.totalNights,
+      totalAmount: group.totalAmount,
+      currency: group.currency,
+      status: group.status,
+      paymentStatus: group.paymentStatus,
+      creatorId: group.creatorId,
+      creatorName: group.creatorName,
+      remark: group.remark,
+      createdAt: group.createdAt.toISOString(),
+      updatedAt: group.updatedAt.toISOString(),
+      splitCount: group.items.length,
+      items: group.items.map(projectOrderItem)
+    }));
+  },
+  async getOrder(orderGroupId) {
+    const group = await prisma.orderGroup.findUnique({
+      where: { id: orderGroupId },
+      include: {
+        items: {
+          orderBy: { splitIndex: "asc" }
+        }
+      }
+    });
+    if (!group) {
+      return null;
+    }
+    return {
+      id: group.id,
+      bizOrderNo: group.bizOrderNo,
+      chainId: group.chainId,
+      hotelName: group.hotelName,
+      customerName: group.customerName,
+      contactPhone: group.contactPhone,
+      checkInDate: group.checkInDate.toISOString().slice(0, 10),
+      checkOutDate: group.checkOutDate.toISOString().slice(0, 10),
+      totalNights: group.totalNights,
+      totalAmount: group.totalAmount,
+      currency: group.currency,
+      status: group.status,
+      paymentStatus: group.paymentStatus,
+      creatorId: group.creatorId,
+      creatorName: group.creatorName,
+      remark: group.remark,
+      createdAt: group.createdAt.toISOString(),
+      updatedAt: group.updatedAt.toISOString(),
+      splitCount: group.items.length,
+      items: group.items.map(projectOrderItem)
+    };
+  },
+  async updateOrder(id, patch = {}) {
+    const existed = await prisma.orderGroup.findUnique({ where: { id } });
+    if (!existed) {
+      return null;
+    }
+    await prisma.orderGroup.update({
+      where: { id },
+      data: {
+        status: patch.status ? String(patch.status) : undefined,
+        paymentStatus: patch.paymentStatus ? String(patch.paymentStatus) : undefined,
+        remark: hasOwn(patch, "remark") ? (patch.remark ? String(patch.remark) : null) : undefined,
+        totalAmount: hasOwn(patch, "totalAmount") ? Number(patch.totalAmount) || 0 : undefined
+      }
+    });
+    return this.getOrder(id);
+  },
+  async updateOrderItem(id, patch = {}) {
+    const existed = await prisma.orderItem.findUnique({ where: { id } });
+    if (!existed) {
+      return null;
+    }
+    const item = await prisma.orderItem.update({
+      where: { id },
+      data: {
+        atourOrderId: hasOwn(patch, "atourOrderId") ? (patch.atourOrderId ? String(patch.atourOrderId) : null) : undefined,
+        accountId: hasOwn(patch, "accountId") ? patch.accountId || null : undefined,
+        accountPhone: hasOwn(patch, "accountPhone") ? (patch.accountPhone ? String(patch.accountPhone) : null) : undefined,
+        status: patch.status ? String(patch.status) : undefined,
+        paymentStatus: patch.paymentStatus ? String(patch.paymentStatus) : undefined,
+        executionStatus: patch.executionStatus ? String(patch.executionStatus) : undefined,
+        amount: hasOwn(patch, "amount") ? Number(patch.amount) || 0 : undefined
+      }
+    });
+    return {
+      ...projectOrderItem(item)
+    };
+  },
+  async submitOrderItem(itemId) {
+    const item = await prisma.orderItem.findUnique({ where: { id: itemId } });
+    if (!item) {
+      return null;
+    }
+    if (["ORDERED", "DONE", "CANCELLED"].includes(item.executionStatus)) {
+      return projectOrderItem(item);
+    }
+    const updated = await prisma.orderItem.update({
+      where: { id: itemId },
+      data: {
+        executionStatus: "QUEUED",
+        status: item.status === "CANCELLED" ? "CANCELLED" : "PROCESSING"
+      }
+    });
+    return projectOrderItem(updated);
+  },
+  async cancelOrderItem(itemId) {
+    const item = await prisma.orderItem.findUnique({ where: { id: itemId } });
+    if (!item) {
+      return null;
+    }
+    const updated = await prisma.orderItem.update({
+      where: { id: itemId },
+      data: {
+        status: "CANCELLED",
+        executionStatus: "CANCELLED"
+      }
+    });
+    await prisma.task.updateMany({
+      where: { orderItemId: itemId, state: { in: ["waiting", "active"] } },
+      data: { state: "cancelled", error: "cancelled by user" }
+    });
+    return projectOrderItem(updated);
+  },
+  async submitOrder(orderGroupId) {
+    const group = await prisma.orderGroup.findUnique({
+      where: { id: orderGroupId },
+      include: { items: true }
+    });
+    if (!group) {
+      return null;
+    }
+    const queued = [];
+    for (const item of group.items) {
+      if (item.status === "CANCELLED" || !["PLAN_PENDING", "FAILED"].includes(item.executionStatus)) {
+        continue;
+      }
+      const next = await this.submitOrderItem(item.id);
+      queued.push(next);
+    }
+    const refreshed = await this.refreshOrderStatus(orderGroupId);
+    return { order: refreshed, items: queued };
+  },
+  async cancelOrder(orderGroupId) {
+    const group = await prisma.orderGroup.findUnique({
+      where: { id: orderGroupId },
+      include: { items: true }
+    });
+    if (!group) {
+      return null;
+    }
+    for (const item of group.items) {
+      await this.cancelOrderItem(item.id);
+    }
+    const refreshed = await this.refreshOrderStatus(orderGroupId);
+    return refreshed;
+  },
+  async getOrderItemById(id) {
+    const item = await prisma.orderItem.findUnique({ where: { id } });
+    return item ? projectOrderItem(item) : null;
+  },
+  async refreshOrderItemStatus(itemId) {
+    const item = await prisma.orderItem.findUnique({ where: { id: itemId } });
+    if (!item) {
+      return null;
+    }
+    if (item.executionStatus === "PLAN_PENDING" || item.executionStatus === "CANCELLED") {
+      return projectOrderItem(item);
+    }
+    const latestTask = await prisma.task.findFirst({
+      where: { orderItemId: itemId },
+      orderBy: { updatedAt: "desc" }
+    });
+
+    const patch = {};
+    if (latestTask) {
+      patch.executionStatus = taskStateToExecution(latestTask.state);
+      if (latestTask.state === "completed" && item.status !== "CANCELLED") {
+        patch.status = "CONFIRMED";
+        if (!item.atourOrderId) {
+          patch.atourOrderId = `AT-${Date.now()}-${itemId.slice(-4)}`;
+        }
+      }
+      if (latestTask.state === "failed") {
+        patch.status = "FAILED";
+      }
+    }
+
+    const updated = Object.keys(patch).length > 0
+      ? await prisma.orderItem.update({ where: { id: itemId }, data: patch })
+      : item;
+
+    await this.refreshOrderStatus(updated.groupId);
+    return projectOrderItem(updated);
+  },
+  async refreshOrderStatus(orderGroupId) {
+    if (!orderGroupId) {
+      return null;
+    }
+    const group = await prisma.orderGroup.findUnique({
+      where: { id: orderGroupId },
+      include: { items: true }
+    });
+    if (!group) {
+      return null;
+    }
+    const next = aggregateOrderStatuses(group.items);
+    await prisma.orderGroup.update({
+      where: { id: orderGroupId },
+      data: {
+        status: next.status,
+        paymentStatus: next.paymentStatus,
+        totalAmount: group.items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0)
+      }
+    });
+    return this.getOrder(orderGroupId);
+  },
+  async getOrderItemLinks(itemId) {
+    const item = await prisma.orderItem.findUnique({ where: { id: itemId } });
+    if (!item) {
+      return null;
+    }
+    return {
+      paymentLink: buildPaymentLink(item),
+      detailUrl: buildOrderDetailUrl(item)
+    };
+  },
+  async createTask(orderItemId) {
+    const task = await prisma.task.create({
+      data: {
+        orderItemId,
+        state: "waiting",
+        progress: 0,
+        error: null,
+        result: null
+      }
+    });
+    return {
+      ...task,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString()
+    };
+  },
+  async findTaskByOrderItem(orderItemId) {
+    const task = await prisma.task.findFirst({
+      where: { orderItemId },
+      orderBy: { createdAt: "desc" }
+    });
+    if (!task) {
+      return null;
+    }
+    return {
+      ...task,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString()
+    };
+  },
+  async getTask(id) {
+    const task = await prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      return null;
+    }
+    return {
+      ...task,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString()
+    };
+  },
+  async updateTask(id, patch = {}) {
+    const existed = await prisma.task.findUnique({ where: { id } });
+    if (!existed) {
+      return null;
+    }
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        state: patch.state ? String(patch.state) : undefined,
+        progress: hasOwn(patch, "progress") ? Number(patch.progress) || 0 : undefined,
+        error: hasOwn(patch, "error") ? (patch.error ? String(patch.error) : null) : undefined,
+        result: hasOwn(patch, "result") ? patch.result : undefined
+      }
+    });
+    return {
+      ...task,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString()
+    };
   },
   async listBlacklistRecords(filters = {}) {
     const where = {};

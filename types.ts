@@ -94,6 +94,51 @@ export interface Order {
   creatorName: string; // Name of the system user
 }
 
+export interface OrderSplitItem {
+  id: string;
+  groupId: string;
+  atourOrderId?: string | null;
+  roomType: string;
+  roomCount: number;
+  accountId?: string | null;
+  accountPhone?: string | null;
+  checkInDate: string;
+  checkOutDate: string;
+  amount: number;
+  status: string;
+  paymentStatus: string;
+  executionStatus: string;
+  paymentLink?: string | null;
+  detailUrl?: string | null;
+  splitIndex: number;
+  splitTotal: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrderGroup {
+  id: string;
+  bizOrderNo: string;
+  chainId: string;
+  hotelName: string;
+  customerName: string;
+  contactPhone?: string | null;
+  checkInDate: string;
+  checkOutDate: string;
+  totalNights: number;
+  totalAmount: number;
+  currency: string;
+  status: string;
+  paymentStatus: string;
+  creatorId: string;
+  creatorName: string;
+  remark?: string | null;
+  splitCount: number;
+  createdAt: string;
+  updatedAt: string;
+  items: OrderSplitItem[];
+}
+
 export interface PriceAlert {
   id: string;
   hotelName: string;

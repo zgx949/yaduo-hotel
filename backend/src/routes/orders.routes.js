@@ -1,34 +1,234 @@
 import { Router } from "express";
-import { store } from "../data/store.js";
+import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth } from "../middleware/auth.js";
 import { processOrderTask } from "../services/task-processor.js";
 
 export const ordersRoutes = Router();
 
-ordersRoutes.get("/", requireAuth, (req, res) => {
-  const items = store.listOrders();
-  if (req.auth.user.role === "ADMIN") {
-    return res.json({ items });
-  }
-  return res.json({ items: items.filter((it) => it.creatorId === req.auth.user.id) });
-});
-
-ordersRoutes.post("/", requireAuth, async (req, res) => {
-  const { hotelName, customerName, price } = req.body || {};
-  if (!hotelName || !customerName || !price) {
-    return res.status(400).json({ message: "hotelName, customerName, price are required" });
-  }
-
-  const order = store.createOrder({ hotelName, customerName, price }, req.auth.user);
-  const task = store.createTask(order.id);
-
-  processOrderTask(task.id).catch((err) => {
-    store.updateTask(task.id, {
+const enqueueOrderItemTask = async (orderItem) => {
+  const task = await prismaStore.createTask(orderItem.id);
+  processOrderTask(task.id).catch(async (err) => {
+    await prismaStore.updateTask(task.id, {
       state: "failed",
       error: err.message || "Task failed"
     });
-    store.updateOrder(order.id, { status: "FAILED" });
+    await prismaStore.updateOrderItem(orderItem.id, {
+      status: "FAILED",
+      executionStatus: "FAILED"
+    });
+    await prismaStore.refreshOrderStatus(orderItem.groupId);
   });
+  return task;
+};
 
-  return res.status(201).json({ order, task });
+ordersRoutes.get("/", requireAuth, async (req, res) => {
+  const filters = {
+    search: req.query.search,
+    status: req.query.status,
+    creatorId: req.auth.user.role === "ADMIN" ? undefined : req.auth.user.id
+  };
+  const items = await prismaStore.listOrders(filters);
+  return res.json({ items });
+});
+
+ordersRoutes.post("/", requireAuth, async (req, res) => {
+  const {
+    hotelName,
+    customerName,
+    chainId,
+    checkInDate,
+    checkOutDate,
+    splits
+  } = req.body || {};
+
+  if (!hotelName || !customerName || !chainId || !checkInDate || !checkOutDate) {
+    return res.status(400).json({ message: "hotelName, customerName, chainId, checkInDate, checkOutDate are required" });
+  }
+
+  if (Array.isArray(splits) && splits.length === 0) {
+    return res.status(400).json({ message: "splits should not be empty when provided" });
+  }
+
+  const order = await prismaStore.createOrder(req.body || {}, req.auth.user);
+  const tasks = [];
+
+  for (const item of order.items.filter((it) => it.executionStatus === "QUEUED")) {
+    const task = await enqueueOrderItemTask(item);
+    tasks.push(task);
+  }
+
+  return res.status(201).json({ order, tasks });
+});
+
+ordersRoutes.patch("/:id", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const updated = await prismaStore.updateOrder(req.params.id, req.body || {});
+  return res.json(updated);
+});
+
+ordersRoutes.post("/:id/refresh-status", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  for (const item of order.items) {
+    await prismaStore.refreshOrderItemStatus(item.id);
+  }
+
+  const refreshed = await prismaStore.refreshOrderStatus(order.id);
+  return res.json(refreshed);
+});
+
+ordersRoutes.post("/:id/submit", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const result = await prismaStore.submitOrder(order.id);
+  const tasks = [];
+  for (const item of result.items.filter((it) => it.executionStatus === "QUEUED")) {
+    const existingTask = await prismaStore.findTaskByOrderItem(item.id);
+    if (existingTask && ["waiting", "active"].includes(existingTask.state)) {
+      continue;
+    }
+    tasks.push(await enqueueOrderItemTask(item));
+  }
+  return res.json({ order: result.order, tasks });
+});
+
+ordersRoutes.post("/:id/cancel", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  const cancelled = await prismaStore.cancelOrder(order.id);
+  return res.json(cancelled);
+});
+
+ordersRoutes.patch("/items/:itemId", requireAuth, async (req, res) => {
+  const item = await prismaStore.getOrderItemById(req.params.itemId);
+  if (!item) {
+    return res.status(404).json({ message: "Order item not found" });
+  }
+  const order = await prismaStore.getOrder(item.groupId);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const updated = await prismaStore.updateOrderItem(req.params.itemId, req.body || {});
+  await prismaStore.refreshOrderStatus(updated.groupId);
+  return res.json(updated);
+});
+
+ordersRoutes.post("/items/:itemId/refresh-status", requireAuth, async (req, res) => {
+  const item = await prismaStore.getOrderItemById(req.params.itemId);
+  if (!item) {
+    return res.status(404).json({ message: "Order item not found" });
+  }
+  const order = await prismaStore.getOrder(item.groupId);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const updated = await prismaStore.refreshOrderItemStatus(req.params.itemId);
+  return res.json(updated);
+});
+
+ordersRoutes.post("/items/:itemId/confirm-submit", requireAuth, async (req, res) => {
+  const item = await prismaStore.getOrderItemById(req.params.itemId);
+  if (!item) {
+    return res.status(404).json({ message: "Order item not found" });
+  }
+  const order = await prismaStore.getOrder(item.groupId);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const submitted = await prismaStore.submitOrderItem(item.id);
+  const existingTask = await prismaStore.findTaskByOrderItem(item.id);
+  let task = existingTask;
+  if (!existingTask || !["waiting", "active"].includes(existingTask.state)) {
+    task = await enqueueOrderItemTask(submitted);
+  }
+  await prismaStore.refreshOrderStatus(item.groupId);
+  return res.json({ item: submitted, task });
+});
+
+ordersRoutes.post("/items/:itemId/cancel", requireAuth, async (req, res) => {
+  const item = await prismaStore.getOrderItemById(req.params.itemId);
+  if (!item) {
+    return res.status(404).json({ message: "Order item not found" });
+  }
+  const order = await prismaStore.getOrder(item.groupId);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const cancelled = await prismaStore.cancelOrderItem(item.id);
+  await prismaStore.refreshOrderStatus(item.groupId);
+  return res.json(cancelled);
+});
+
+ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) => {
+  const item = await prismaStore.getOrderItemById(req.params.itemId);
+  if (!item) {
+    return res.status(404).json({ message: "Order item not found" });
+  }
+  const order = await prismaStore.getOrder(item.groupId);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const links = await prismaStore.getOrderItemLinks(req.params.itemId);
+  return res.json({ paymentLink: links.paymentLink });
+});
+
+ordersRoutes.get("/items/:itemId/detail-link", requireAuth, async (req, res) => {
+  const item = await prismaStore.getOrderItemById(req.params.itemId);
+  if (!item) {
+    return res.status(404).json({ message: "Order item not found" });
+  }
+  const order = await prismaStore.getOrder(item.groupId);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const links = await prismaStore.getOrderItemLinks(req.params.itemId);
+  return res.json({ detailUrl: links.detailUrl });
 });

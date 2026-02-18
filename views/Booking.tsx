@@ -48,6 +48,7 @@ export const Booking: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -352,17 +353,54 @@ export const Booking: React.FC = () => {
       return `【特价推荐】${hotel.name}\n📍地址：${hotel.location}\n📅日期：${getDisplayDate(searchParams.checkIn)} - ${getDisplayDate(searchParams.checkOut)} (${nights}晚)\n\n${roomList}\n🔥独家优势：${hotel.tags.slice(0, 3).join(' | ')}\n------------------------------\n更多房型及精准报价请私聊！`;
   };
 
-  const submitBooking = () => {
+  const submitBooking = async (submitNow: boolean) => {
+      if (!selectedHotel || !selectedRoom || !selectedRate) {
+        return;
+      }
       setIsLoading(true);
-      setTimeout(() => {
-          setIsLoading(false);
-          setSuccess(true);
-          setTimeout(() => {
-              setSuccess(false);
-              setStep('SEARCH');
-              setExpandedRoomIds(new Set());
-          }, 2000);
-      }, 1500);
+      setSearchError('');
+      try {
+        const totalAmount = selectedRate.price * getNightCount();
+        await fetchWithAuth('/api/orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            submitNow,
+            chainId: selectedHotel.chainId || selectedHotel.id,
+            hotelName: selectedHotel.name,
+            customerName: bookingForm.guestName,
+            contactPhone: bookingForm.guestPhone,
+            checkInDate: searchParams.checkIn,
+            checkOutDate: searchParams.checkOut,
+            status: submitNow ? 'PROCESSING' : 'WAIT_CONFIRM',
+            paymentStatus: submitNow ? 'UNPAID' : 'UNPAID',
+            remark: bookingForm.note,
+            splits: [
+              {
+                roomType: selectedRoom.name,
+                roomCount: 1,
+                amount: totalAmount,
+                paymentStatus: 'UNPAID',
+                status: submitNow ? 'PROCESSING' : 'WAIT_CONFIRM',
+                executionStatus: submitNow ? 'QUEUED' : 'PLAN_PENDING',
+                checkInDate: searchParams.checkIn,
+                checkOutDate: searchParams.checkOut
+              }
+            ]
+          })
+        });
+
+        setSuccessMessage(submitNow ? '订单已提交，进入待下单队列' : '订单已暂存为虚拟下单计划（待确认）');
+        setSuccess(true);
+        setTimeout(() => {
+          setSuccess(false);
+          setStep('SEARCH');
+          setExpandedRoomIds(new Set());
+        }, 1800);
+      } catch (err) {
+        setSearchError(err instanceof Error ? err.message : '提交订单失败');
+      } finally {
+        setIsLoading(false);
+      }
   };
 
   const updateBenefit = (type: keyof typeof selectedBenefits, delta: number) => {
@@ -597,7 +635,8 @@ export const Booking: React.FC = () => {
             setShowInvoiceSheet(true);
           }}
           onBack={() => setStep('DETAIL')}
-          onSubmit={submitBooking}
+          onSubmitNow={() => submitBooking(true)}
+          onSaveDraft={() => submitBooking(false)}
           isLoading={isLoading}
           getDisplayDate={getDisplayDate}
           getNightCount={getNightCount}
@@ -625,7 +664,7 @@ export const Booking: React.FC = () => {
                       ✓
                   </div>
                   <h2 className="text-xl font-bold text-gray-900 mb-2">预订成功</h2>
-                  <p className="text-gray-500 mb-6">订单已发送至酒店，稍后请留意短信通知。</p>
+                  <p className="text-gray-500 mb-6">{successMessage || '订单处理成功'}</p>
               </div>
           </div>
       )
