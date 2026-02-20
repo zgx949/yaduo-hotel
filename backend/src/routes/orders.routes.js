@@ -4,8 +4,24 @@ import { requireAuth } from "../middleware/auth.js";
 import { env } from "../config/env.js";
 import { processOrderTask } from "../services/task-processor.js";
 import { taskPlatform } from "../tasks/task-platform.js";
+import {
+  addAppOrder,
+  calculateOrderV2,
+  createPayOrder,
+  getCashierInformation,
+  runAtourOrderWorkflow
+} from "../services/atour-order.service.js";
+import { getInternalRequestContext } from "../services/internal-resource.service.js";
 
 export const ordersRoutes = Router();
+
+const pickTokenContext = async (tier) => {
+  const ctx = await getInternalRequestContext({ tier: tier || undefined });
+  if (!ctx.token) {
+    throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+  }
+  return ctx;
+};
 
 const enqueueOrderItemTask = async (orderItem) => {
   if (env.taskSystemEnabled) {
@@ -65,6 +81,13 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
     return res.status(400).json({ message: "splits should not be empty when provided" });
   }
 
+  if (Array.isArray(splits) && splits.length > 0) {
+    const missingRateIdentity = splits.find((it) => !it?.rpActivityId && !it?.rateCodeId);
+    if (missingRateIdentity) {
+      return res.status(400).json({ message: "Each split must include rpActivityId or rateCodeId" });
+    }
+  }
+
   const order = await prismaStore.createOrder(req.body || {}, req.auth.user);
   const tasks = [];
 
@@ -74,6 +97,96 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
   }
 
   return res.status(201).json({ order, tasks });
+});
+
+ordersRoutes.post("/atour/calculate", requireAuth, async (req, res) => {
+  try {
+    const tokenCtx = await pickTokenContext(req.body?.tier);
+    const result = await calculateOrderV2({
+      token: tokenCtx.token,
+      payload: req.body?.payload || {}
+    });
+    return res.json({
+      result,
+      tokenSource: tokenCtx.tokenSource,
+      tokenAccountId: tokenCtx.tokenAccountId,
+      proxyId: tokenCtx.proxy?.id || null
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "calculate order failed" });
+  }
+});
+
+ordersRoutes.post("/atour/create", requireAuth, async (req, res) => {
+  try {
+    const tokenCtx = await pickTokenContext(req.body?.tier);
+    const result = await addAppOrder({
+      token: tokenCtx.token,
+      payload: req.body?.payload || {}
+    });
+    return res.json({
+      result,
+      tokenSource: tokenCtx.tokenSource,
+      tokenAccountId: tokenCtx.tokenAccountId,
+      proxyId: tokenCtx.proxy?.id || null
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "create order failed" });
+  }
+});
+
+ordersRoutes.post("/atour/pay-order", requireAuth, async (req, res) => {
+  try {
+    const tokenCtx = await pickTokenContext(req.body?.tier);
+    const result = await createPayOrder({
+      token: tokenCtx.token,
+      payload: req.body?.payload || {}
+    });
+    return res.json({
+      result,
+      tokenSource: tokenCtx.tokenSource,
+      tokenAccountId: tokenCtx.tokenAccountId,
+      proxyId: tokenCtx.proxy?.id || null
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "create pay order failed" });
+  }
+});
+
+ordersRoutes.post("/atour/pay-methods", requireAuth, async (req, res) => {
+  try {
+    const tokenCtx = await pickTokenContext(req.body?.tier);
+    const result = await getCashierInformation({
+      token: tokenCtx.token,
+      payload: req.body?.payload || {}
+    });
+    return res.json({
+      result,
+      tokenSource: tokenCtx.tokenSource,
+      tokenAccountId: tokenCtx.tokenAccountId,
+      proxyId: tokenCtx.proxy?.id || null
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "get pay methods failed" });
+  }
+});
+
+ordersRoutes.post("/atour/workflow", requireAuth, async (req, res) => {
+  try {
+    const tokenCtx = await pickTokenContext(req.body?.tier);
+    const result = await runAtourOrderWorkflow({
+      token: tokenCtx.token,
+      calculatePayload: req.body?.calculatePayload || {}
+    });
+    return res.json({
+      result,
+      tokenSource: tokenCtx.tokenSource,
+      tokenAccountId: tokenCtx.tokenAccountId,
+      proxyId: tokenCtx.proxy?.id || null
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "run order workflow failed" });
+  }
 });
 
 ordersRoutes.patch("/:id", requireAuth, async (req, res) => {

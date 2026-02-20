@@ -165,6 +165,12 @@ const projectOrderItem = (item) => ({
   id: item.id,
   groupId: item.groupId,
   atourOrderId: item.atourOrderId,
+  bookingTier: item.bookingTier || null,
+  roomTypeId: item.roomTypeId || null,
+  rateCode: item.rateCode || null,
+  rateCodeId: item.rateCodeId || null,
+  rpActivityId: item.rpActivityId || null,
+  rateCodeActivities: item.rateCodeActivities || null,
   roomType: item.roomType,
   roomCount: item.roomCount,
   accountId: item.accountId,
@@ -708,6 +714,12 @@ export const prismaStore = {
     const splitItems = Array.isArray(payload.splits) && payload.splits.length > 0
       ? payload.splits
       : [{
+        bookingTier: payload.bookingTier || null,
+        roomTypeId: payload.roomTypeId || null,
+        rateCode: payload.rateCode || null,
+        rateCodeId: payload.rateCodeId || payload.rpActivityId || null,
+        rpActivityId: payload.rpActivityId || payload.rateCodeId || null,
+        rateCodeActivities: payload.rateCodeActivities || null,
         roomType: payload.roomType || "标准房型",
         roomCount: Number(payload.roomCount) || 1,
         accountId: payload.accountId || null,
@@ -743,6 +755,12 @@ export const prismaStore = {
             checkInDate: it.checkInDate ? new Date(it.checkInDate) : checkInDate,
             checkOutDate: it.checkOutDate ? new Date(it.checkOutDate) : checkOutDate,
             atourOrderId: it.atourOrderId ? String(it.atourOrderId) : null,
+            bookingTier: it.bookingTier ? String(it.bookingTier) : null,
+            roomTypeId: it.roomTypeId ? String(it.roomTypeId) : null,
+            rateCode: it.rateCode ? String(it.rateCode) : null,
+            rateCodeId: it.rateCodeId ? String(it.rateCodeId) : (it.rpActivityId ? String(it.rpActivityId) : null),
+            rpActivityId: it.rpActivityId ? String(it.rpActivityId) : (it.rateCodeId ? String(it.rateCodeId) : null),
+            rateCodeActivities: it.rateCodeActivities ? String(it.rateCodeActivities) : null,
             roomType: String(it.roomType || payload.roomType || "标准房型"),
             roomCount: Math.max(1, Number(it.roomCount) || 1),
             accountId: it.accountId || null,
@@ -889,10 +907,26 @@ export const prismaStore = {
     if (!existed) {
       return null;
     }
+    const nextRateCodeId = hasOwn(patch, "rateCodeId")
+      ? (patch.rateCodeId ? String(patch.rateCodeId) : null)
+      : hasOwn(patch, "rpActivityId")
+        ? (patch.rpActivityId ? String(patch.rpActivityId) : null)
+        : undefined;
+    const nextRpActivityId = hasOwn(patch, "rpActivityId")
+      ? (patch.rpActivityId ? String(patch.rpActivityId) : null)
+      : hasOwn(patch, "rateCodeId")
+        ? (patch.rateCodeId ? String(patch.rateCodeId) : null)
+        : undefined;
     const item = await prisma.orderItem.update({
       where: { id },
       data: {
         atourOrderId: hasOwn(patch, "atourOrderId") ? (patch.atourOrderId ? String(patch.atourOrderId) : null) : undefined,
+        bookingTier: hasOwn(patch, "bookingTier") ? (patch.bookingTier ? String(patch.bookingTier) : null) : undefined,
+        roomTypeId: hasOwn(patch, "roomTypeId") ? (patch.roomTypeId ? String(patch.roomTypeId) : null) : undefined,
+        rateCode: hasOwn(patch, "rateCode") ? (patch.rateCode ? String(patch.rateCode) : null) : undefined,
+        rateCodeId: nextRateCodeId,
+        rpActivityId: nextRpActivityId,
+        rateCodeActivities: hasOwn(patch, "rateCodeActivities") ? (patch.rateCodeActivities ? String(patch.rateCodeActivities) : null) : undefined,
         accountId: hasOwn(patch, "accountId") ? patch.accountId || null : undefined,
         accountPhone: hasOwn(patch, "accountPhone") ? (patch.accountPhone ? String(patch.accountPhone) : null) : undefined,
         status: patch.status ? String(patch.status) : undefined,

@@ -83,6 +83,12 @@ model OrderItem {
   id              String       @id @default(cuid())
   groupId         String
   atourOrderId    String?      @unique
+  bookingTier     String?
+  roomTypeId      String?
+  rateCode        String?
+  rateCodeId      String?
+  rpActivityId    String?
+  rateCodeActivities String?
   roomType        String
   roomCount       Int          @default(1)
   accountId       String?

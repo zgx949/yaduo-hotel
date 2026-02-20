@@ -98,6 +98,12 @@ export interface OrderSplitItem {
   id: string;
   groupId: string;
   atourOrderId?: string | null;
+  bookingTier?: string | null;
+  roomTypeId?: string | null;
+  rateCode?: string | null;
+  rateCodeId?: string | null;
+  rpActivityId?: string | null;
+  rateCodeActivities?: string | null;
   roomType: string;
   roomCount: number;
   accountId?: string | null;
@@ -182,6 +188,11 @@ export interface RatePlan {
   id: string;
   name: string; // e.g. "白金会员专享价", "企业协议价"
   price: number;
+  rateCode?: string;
+  rateCodeId?: string;
+  rpActivityId?: string;
+  rateCodeActivities?: string;
+  roomTypeId?: string;
   originalPrice?: number;
   type: BookingType;
   tags: string[]; // e.g. ["含双早", "免费取消"]

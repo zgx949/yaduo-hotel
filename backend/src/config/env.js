@@ -38,6 +38,10 @@ export const env = {
     process.env.ATOUR_PLACE_SEARCH_CLIENT_ID || "0354EF67-0288-4C6A-89B3-A5009DD8926E",
   atourPlaceSearchBaseUrl:
     process.env.ATOUR_PLACE_SEARCH_BASE_URL || "https://api2.yaduo.com/atourlife/placeSearch/searchV2",
+  atourOrderApiBaseUrl:
+    process.env.ATOUR_ORDER_API_BASE_URL || "https://api2.yaduo.com/atourlife",
+  atourUserGatewayBaseUrl:
+    process.env.ATOUR_USER_GATEWAY_BASE_URL || "https://user-gateway.yaduo.com",
   atourUserAgent:
     process.env.ATOUR_USER_AGENT ||
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AtourBrowser-AtourLife/4.1.0/iOS",

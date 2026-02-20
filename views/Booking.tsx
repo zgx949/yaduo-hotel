@@ -376,6 +376,12 @@ export const Booking: React.FC = () => {
             remark: bookingForm.note,
             splits: [
               {
+                bookingTier: selectedRate.type,
+                roomTypeId: selectedRate.roomTypeId || selectedRoom.id,
+                rateCode: selectedRate.rateCode,
+                rateCodeId: selectedRate.rateCodeId,
+                rpActivityId: selectedRate.rpActivityId,
+                rateCodeActivities: selectedRate.rateCodeActivities,
                 roomType: selectedRoom.name,
                 roomCount: 1,
                 amount: totalAmount,
