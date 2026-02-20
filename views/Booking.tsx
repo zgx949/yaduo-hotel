@@ -381,6 +381,7 @@ export const Booking: React.FC = () => {
                 rateCode: selectedRate.rateCode,
                 rateCodeId: selectedRate.rateCodeId,
                 rpActivityId: selectedRate.rpActivityId,
+                rateCodePriceType: selectedRate.rateCodePriceType,
                 rateCodeActivities: selectedRate.rateCodeActivities,
                 roomType: selectedRoom.name,
                 roomCount: 1,

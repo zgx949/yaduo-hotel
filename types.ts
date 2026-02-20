@@ -103,6 +103,7 @@ export interface OrderSplitItem {
   rateCode?: string | null;
   rateCodeId?: string | null;
   rpActivityId?: string | null;
+  rateCodePriceType?: string | null;
   rateCodeActivities?: string | null;
   roomType: string;
   roomCount: number;
@@ -191,6 +192,7 @@ export interface RatePlan {
   rateCode?: string;
   rateCodeId?: string;
   rpActivityId?: string;
+  rateCodePriceType?: string;
   rateCodeActivities?: string;
   roomTypeId?: string;
   originalPrice?: number;

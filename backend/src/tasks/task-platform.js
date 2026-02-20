@@ -165,6 +165,16 @@ class TaskPlatform {
           finishedAt: new Date(),
           attemptsMade: job.attemptsMade
         });
+        const orderGroupId = job?.data?.meta?.orderGroupId;
+        const orderItemId = job?.data?.meta?.orderItemId;
+        if (orderGroupId) {
+          await prismaStore.refreshOrderStatus(orderGroupId);
+        } else if (orderItemId) {
+          const orderItem = await prismaStore.getOrderItemById(orderItemId);
+          if (orderItem?.groupId) {
+            await prismaStore.refreshOrderStatus(orderItem.groupId);
+          }
+        }
       });
 
       worker.on("failed", async (job, err) => {
@@ -177,6 +187,18 @@ class TaskPlatform {
           finishedAt: new Date(),
           attemptsMade: job.attemptsMade
         });
+
+        const orderItemId = job?.data?.meta?.orderItemId;
+        if (orderItemId) {
+          const orderItem = await prismaStore.getOrderItemById(orderItemId);
+          if (orderItem && orderItem.status !== "CANCELLED") {
+            await prismaStore.updateOrderItem(orderItemId, {
+              executionStatus: "FAILED",
+              status: "FAILED"
+            });
+            await prismaStore.refreshOrderStatus(orderItem.groupId);
+          }
+        }
       });
 
       this.workers.set(queueName, worker);

@@ -88,6 +88,7 @@ model OrderItem {
   rateCode        String?
   rateCodeId      String?
   rpActivityId    String?
+  rateCodePriceType String?
   rateCodeActivities String?
   roomType        String
   roomCount       Int          @default(1)

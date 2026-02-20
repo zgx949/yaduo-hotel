@@ -28,9 +28,30 @@ const buildAtourHeaders = (token) => ({
 });
 
 const parseAtourResponse = async (response, fallbackMessage) => {
-  const data = await response.json().catch(() => ({}));
+  const rawText = await response.text();
+  let data = {};
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    data = {};
+  }
+
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    data = {};
+  }
+
+  if (Object.keys(data).length === 0) {
+    const preview = String(rawText || "").slice(0, 120);
+    throw new Error(`${fallbackMessage} (status=${response.status} non-json/encoded response preview=${preview})`);
+  }
+
   if (!response.ok || data?.retcode !== 0) {
-    throw new Error(data?.retmsg || fallbackMessage);
+    const details = [
+      `status=${response.status}`,
+      `retcode=${data?.retcode ?? "unknown"}`,
+      `retmsg=${data?.retmsg || ""}`
+    ].join(" ").trim();
+    throw new Error(`${fallbackMessage} (${details})`);
   }
   return data;
 };
@@ -43,6 +64,9 @@ export const calculateOrderV2 = async ({ token, payload }) => {
     body: JSON.stringify(payload || {})
   });
   const data = await parseAtourResponse(response, "calculateOrderV2 failed");
+  if (!data?.result || (typeof data.result === "object" && Object.keys(data.result).length === 0)) {
+    throw new Error(`calculateOrderV2 returned empty result (retcode=${data?.retcode ?? "unknown"} retmsg=${data?.retmsg || ""})`);
+  }
   return data.result || {};
 };
 
@@ -96,16 +120,25 @@ const buildCalculatePayloadFromItem = ({ order, item, customerName, customerPhon
   const start = toAtourDate(item.checkInDate);
   const end = toAtourDate(item.checkOutDate);
   return {
+    accommodationType: "",
+    accommodationCount: "",
     chainId: String(order.chainId),
     roomTypeId: String(item.roomTypeId),
+    marketCode: "ABR",
+    isPointPayAppChannel: "1",
+    needSelfCheckIn: 0,
+    firstRequest: "1",
+    selfCheckIn: 1,
     roomCount: Number(item.roomCount) || 1,
     start,
     end,
     rateCode: String(item.rateCode),
     rpActivityId: String(resolvedRpActivityId),
-    rateCodePriceType: "2",
+    rateCodePriceType: String(item.rateCodePriceType || "1"),
     rateCodeActivities: item.rateCodeActivities || "",
     mobile: customerPhone || "",
+    delegatorId: "",
+    coupons: "",
     checkInPersons: customerName || "",
     couponCodes: []
   };

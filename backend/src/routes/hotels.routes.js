@@ -186,6 +186,7 @@ const normalizeChainDetail = async (raw, fallback = {}) => {
           rateCode: String(rateItem.rateCode || "").trim() || undefined,
           rateCodeId: String(rateItem.rateCodeId || rateItem.rpActivityId || "").trim() || undefined,
           rpActivityId: String(rateItem.rpActivityId || rateItem.rateCodeId || "").trim() || undefined,
+          rateCodePriceType: String(rateItem.rateCodePriceType || "").trim() || undefined,
           rateCodeActivities: String(rateItem.rateCodeActivities || "").trim() || undefined,
           roomTypeId: String(roomInfo.roomTypeId || "").trim() || undefined,
           originalPrice: toNumber(rateItem.marketPrice, undefined),
