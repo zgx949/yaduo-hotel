@@ -469,9 +469,9 @@ export const MOCK_SYSTEM_CONFIG: SystemConfig = {
     disabledCorporateNames: ['某某科技 (风控中)', '旧协议单位']
   },
   proxies: [
-    { id: 'p1', ip: '192.168.1.101', port: 8080, type: 'DYNAMIC', status: 'ONLINE', lastChecked: '1分钟前', location: '上海', failCount: 0 },
-    { id: 'p2', ip: '10.0.0.55', port: 3128, type: 'STATIC', status: 'ONLINE', lastChecked: '5分钟前', location: '北京', failCount: 0 },
-    { id: 'p3', ip: '47.100.22.33', port: 8888, type: 'DYNAMIC', status: 'OFFLINE', lastChecked: '1小时前', location: '广州', failCount: 2 }
+    { id: 'p1', host: '192.168.1.101', port: 8080, type: 'DYNAMIC', status: 'ONLINE', authEnabled: false, authUsername: '', lastChecked: '1分钟前', location: '上海', failCount: 0 },
+    { id: 'p2', host: '10.0.0.55', port: 3128, type: 'STATIC', status: 'ONLINE', authEnabled: false, authUsername: '', lastChecked: '5分钟前', location: '北京', failCount: 0 },
+    { id: 'p3', host: '47.100.22.33', port: 8888, type: 'DYNAMIC', status: 'OFFLINE', authEnabled: false, authUsername: '', lastChecked: '1小时前', location: '广州', failCount: 2 }
   ],
   llmModels: [
     { id: 'm1', name: 'Gemini Pro', provider: 'GEMINI', modelId: 'gemini-2.5-flash', apiKey: '', systemPrompt: '你是一个专业的酒店预订助手，负责解析用户需求。', baseUrl: '', temperature: 0.2, maxTokens: 1024, isActive: true },
