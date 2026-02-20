@@ -164,7 +164,8 @@ const normalizeChainDetail = async (raw, fallback = {}) => {
 
     const rates = rateSource
       .map((rateItem, rateIdx) => {
-        const price = toNumber(rateItem.priceOfDiscount, NaN) || toNumber(rateItem.showPriceV2, NaN) || toNumber(rateItem.showPrice, NaN) || toNumber(rateItem.price, NaN);
+        // const price = toNumber(rateItem.priceOfDiscount, NaN) || toNumber(rateItem.showPriceV2, NaN) || toNumber(rateItem.showPrice, NaN) || toNumber(rateItem.price, NaN);
+        const price = toNumber(rateItem.showPriceV2, NaN) || toNumber(rateItem.showPrice, NaN) || toNumber(rateItem.price, NaN);
         if (!price) {
           return null;
         }

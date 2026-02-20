@@ -176,6 +176,11 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
                         {isLowStock ? `余${roomStock}间` : `可订${roomStock}间`}
                       </div>
                     )}
+                    {roomStock === 0 && (
+                      <div className="absolute top-0 left-0 text-[10px] px-1 py-0.5 rounded-tl-lg rounded-br-lg bg-gray-700/90 text-white">
+                        满房
+                      </div>
+                    )}
                     <div className="absolute bottom-1 right-1 bg-black/50 text-white text-[10px] px-1 rounded">{room.rates.length}</div>
                   </div>
                   <div className="flex-1 py-1 flex flex-col justify-between">
@@ -209,16 +214,24 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
 
                 {isExpanded && (
                   <div className="bg-gray-50/50 border-t border-gray-100 animate-fadeIn">
-                    {room.rates.sort((a, b) => a.price - b.price).map(rate => (
-                      <div key={rate.id} className="p-3 border-b border-gray-100 last:border-0 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                    {room.rates.sort((a, b) => a.price - b.price).map(rate => {
+                      const effectiveStock = rate.stock ?? room.stock;
+                      const isSoldOut = !effectiveStock;
+                      return (
+                        <div key={rate.id} className="p-3 border-b border-gray-100 last:border-0 flex justify-between items-center hover:bg-gray-50 transition-colors">
                         <div className="flex-1 pr-2">
                           <div className="flex items-center gap-2">
                             <h4 className="font-bold text-sm text-gray-800">{rate.name}</h4>
                             {rate.type === BookingType.PLATINUM && <span className="text-[10px] bg-slate-800 text-amber-200 px-1 rounded">白金卡</span>}
                             {rate.type === BookingType.CORPORATE && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded">企</span>}
-                            {rate.stock !== undefined && rate.stock > 0 && (
-                              <span className={`text-[10px] px-1 rounded ${rate.stock <= 3 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                余{rate.stock}间
+                            {effectiveStock !== undefined && effectiveStock > 0 && (
+                              <span className={`text-[10px] px-1 rounded ${effectiveStock <= 3 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                余{effectiveStock}间
+                              </span>
+                            )}
+                            {isSoldOut && (
+                              <span className="text-[10px] px-1 rounded bg-gray-200 text-gray-700">
+                                满房
                               </span>
                             )}
                           </div>
@@ -255,9 +268,14 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
 
                             <button
                               onClick={() => onSelectRate(room, rate)}
-                              className="px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-transform active:scale-95 bg-amber-500 text-white"
+                              disabled={isSoldOut}
+                              className={`px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-transform ${
+                                isSoldOut
+                                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                  : 'active:scale-95 bg-amber-500 text-white'
+                              }`}
                             >
-                              订
+                              {isSoldOut ? '满房' : '订'}
                             </button>
                           </div>
 
@@ -265,8 +283,9 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
                             <span className="text-[10px] text-red-500">{rate.discountTexts?.[0]}</span>
                           )}
                         </div>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
