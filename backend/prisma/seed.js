@@ -138,7 +138,7 @@ const seed = async () => {
           create: [
             {
               id: "proxy-001",
-              ip: "192.168.1.101",
+              host: "192.168.1.101",
               port: 8080,
               type: "DYNAMIC",
               status: "ONLINE",
@@ -147,7 +147,7 @@ const seed = async () => {
             },
             {
               id: "proxy-002",
-              ip: "10.0.0.55",
+              host: "10.0.0.55",
               port: 3128,
               type: "STATIC",
               status: "ONLINE",
@@ -156,7 +156,7 @@ const seed = async () => {
             },
             {
               id: "proxy-003",
-              ip: "47.100.22.33",
+              host: "47.100.22.33",
               port: 8888,
               type: "DYNAMIC",
               status: "OFFLINE",

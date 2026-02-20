@@ -1,4 +1,7 @@
 import { Router } from "express";
+import http from "node:http";
+import https from "node:https";
+import tls from "node:tls";
 import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
@@ -6,6 +9,68 @@ import { listConfiguredModels, runLlmCompletion } from "../services/langchain-ll
 import { taskPlatform } from "../tasks/task-platform.js";
 
 export const systemRoutes = Router();
+
+const checkProxyByStatusCode = async (proxyNode) => {
+  const targetUrl = new URL("https://api2.yaduo.com/");
+  const startedAt = Date.now();
+
+  return new Promise((resolve) => {
+    const connectHeaders = {};
+    if (proxyNode.authEnabled && proxyNode.authUsername) {
+      const credentials = `${String(proxyNode.authUsername)}:${String(proxyNode.authPassword || "")}`;
+      connectHeaders["Proxy-Authorization"] = `Basic ${Buffer.from(credentials).toString("base64")}`;
+    }
+
+    const connectReq = http.request({
+      host: String(proxyNode.host || "").trim(),
+      port: Number(proxyNode.port),
+      method: "CONNECT",
+      path: `${targetUrl.hostname}:${targetUrl.port || 443}`,
+      headers: connectHeaders
+    });
+
+    const finalize = (statusCode = 0) => {
+      resolve({
+        statusCode,
+        latencyMs: Date.now() - startedAt
+      });
+    };
+
+    connectReq.setTimeout(10_000, () => {
+      connectReq.destroy(new Error("proxy connect timeout"));
+    });
+
+    connectReq.on("error", () => finalize(0));
+    connectReq.on("connect", (connectRes, socket) => {
+      if (connectRes.statusCode !== 200) {
+        socket.destroy();
+        finalize(connectRes.statusCode || 0);
+        return;
+      }
+
+      const req = https.request({
+        host: targetUrl.hostname,
+        port: targetUrl.port || 443,
+        method: "GET",
+        path: `${targetUrl.pathname}${targetUrl.search}`,
+        headers: { Host: targetUrl.host },
+        agent: false,
+        createConnection: () => tls.connect({ socket, servername: targetUrl.hostname })
+      }, (response) => {
+        response.resume();
+        finalize(response.statusCode || 0);
+      });
+
+      req.setTimeout(10_000, () => {
+        req.destroy(new Error("target request timeout"));
+      });
+      req.on("error", () => finalize(0));
+      req.end();
+    });
+
+    connectReq.end();
+  });
+};
 
 systemRoutes.get("/config", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const config = await prismaStore.getSystemConfig();
@@ -30,11 +95,15 @@ systemRoutes.get("/proxies", requireAuth, requireRole("ADMIN"), async (req, res)
 });
 
 systemRoutes.post("/proxies", requireAuth, requireRole("ADMIN"), async (req, res) => {
-  const { ip, port } = req.body || {};
-  if (!ip || !port) {
-    return res.status(400).json({ message: "ip and port are required" });
+  const { host, ip, port } = req.body || {};
+  const normalizedHost = String(host || ip || "").trim();
+  if (!normalizedHost || !port) {
+    return res.status(400).json({ message: "host and port are required" });
   }
-  const created = await prismaStore.createProxyNode(req.body || {});
+  const created = await prismaStore.createProxyNode({
+    ...(req.body || {}),
+    host: normalizedHost
+  });
   return res.status(201).json(created);
 });
 
@@ -55,15 +124,15 @@ systemRoutes.delete("/proxies/:id", requireAuth, requireRole("ADMIN"), async (re
 });
 
 systemRoutes.post("/proxies/:id/check", requireAuth, requireRole("ADMIN"), async (req, res) => {
-  const exists = await prismaStore.getProxyNode(req.params.id);
+  const exists = await prismaStore.getProxyNode(req.params.id, { withSecret: true });
   if (!exists) {
     return res.status(404).json({ message: "proxy node not found" });
   }
 
-  const latency = Math.floor(Math.random() * 350) + 40;
-  const status = latency > 280 ? "LATENCY" : "ONLINE";
+  const { statusCode, latencyMs } = await checkProxyByStatusCode(exists);
+  const status = statusCode === 200 ? "ONLINE" : "OFFLINE";
   const updated = await prismaStore.markProxyHealth(req.params.id, status);
-  return res.json({ ...updated, latencyMs: latency });
+  return res.json({ ...updated, latencyMs, statusCode });
 });
 
 systemRoutes.get("/internal-proxy", requireAuth, async (req, res) => {
@@ -78,9 +147,13 @@ systemRoutes.get("/internal-proxy", requireAuth, async (req, res) => {
     proxy: ctx.proxy
       ? {
         id: ctx.proxy.id,
-        endpoint: `${ctx.proxy.ip}:${ctx.proxy.port}`,
+        endpoint: `${ctx.proxy.host || ctx.proxy.ip}:${ctx.proxy.port}`,
+        host: ctx.proxy.host || ctx.proxy.ip,
+        port: ctx.proxy.port,
         type: ctx.proxy.type,
-        status: ctx.proxy.status
+        status: ctx.proxy.status,
+        authEnabled: Boolean(ctx.proxy.authEnabled),
+        authUsername: ctx.proxy.authUsername || ""
       }
       : null
   });

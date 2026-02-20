@@ -173,30 +173,39 @@ const createDefaultSystemConfig = () => ({
   proxies: [
     {
       id: "proxy-001",
-      ip: "192.168.1.101",
+      host: "192.168.1.101",
       port: 8080,
       type: "DYNAMIC",
       status: "ONLINE",
+      authEnabled: false,
+      authUsername: "",
+      authPassword: "",
       lastChecked: now(),
       location: "上海",
       failCount: 0
     },
     {
       id: "proxy-002",
-      ip: "10.0.0.55",
+      host: "10.0.0.55",
       port: 3128,
       type: "STATIC",
       status: "ONLINE",
+      authEnabled: false,
+      authUsername: "",
+      authPassword: "",
       lastChecked: now(),
       location: "北京",
       failCount: 0
     },
     {
       id: "proxy-003",
-      ip: "47.100.22.33",
+      host: "47.100.22.33",
       port: 8888,
       type: "DYNAMIC",
       status: "OFFLINE",
+      authEnabled: false,
+      authUsername: "",
+      authPassword: "",
       lastChecked: now(),
       location: "广州",
       failCount: 3
@@ -412,17 +421,22 @@ const normalizeProxyPayload = (payload = {}, existing = null) => {
     ? clone(existing)
     : {
       id: `proxy-${randomUUID().slice(0, 8)}`,
-      ip: "",
+      host: "",
       port: 0,
       type: "DYNAMIC",
       status: "OFFLINE",
+      authEnabled: false,
+      authUsername: "",
+      authPassword: "",
       lastChecked: now(),
       location: "",
       failCount: 0
     };
 
-  if (hasOwn(payload, "ip")) {
-    base.ip = String(payload.ip || "").trim();
+  if (hasOwn(payload, "host")) {
+    base.host = String(payload.host || "").trim();
+  } else if (hasOwn(payload, "ip")) {
+    base.host = String(payload.ip || "").trim();
   }
   if (hasOwn(payload, "port")) {
     base.port = Math.max(0, asNumber(payload.port, 0));
@@ -440,8 +454,40 @@ const normalizeProxyPayload = (payload = {}, existing = null) => {
   if (hasOwn(payload, "failCount")) {
     base.failCount = Math.max(0, asNumber(payload.failCount, 0));
   }
+  if (hasOwn(payload, "authEnabled")) {
+    base.authEnabled = Boolean(payload.authEnabled);
+    if (!base.authEnabled) {
+      base.authUsername = "";
+      base.authPassword = "";
+    }
+  }
+  if (hasOwn(payload, "authUsername")) {
+    base.authUsername = String(payload.authUsername || "").trim();
+  }
+  if (hasOwn(payload, "authPassword")) {
+    base.authPassword = String(payload.authPassword || "").trim();
+  }
+  if (!base.authEnabled) {
+    base.authUsername = "";
+    base.authPassword = "";
+  }
   base.lastChecked = now();
   return base;
+};
+
+const projectProxyNode = (node, { withSecret = false } = {}) => {
+  if (!node) {
+    return null;
+  }
+  const data = {
+    ...clone(node),
+    ip: node.host,
+    authConfigured: Boolean(node.authEnabled && node.authUsername)
+  };
+  if (!withSecret) {
+    delete data.authPassword;
+  }
+  return data;
 };
 
 const normalizeLlmModel = (item = {}, existing = null) => {
@@ -894,16 +940,16 @@ export const store = {
     return this.getSystemConfig();
   },
   listProxyNodes() {
-    return clone(systemConfig.proxies);
+    return systemConfig.proxies.map((it) => projectProxyNode(it));
   },
   getProxyNode(id) {
     const item = systemConfig.proxies.find((it) => it.id === id);
-    return item ? clone(item) : null;
+    return item ? projectProxyNode(item) : null;
   },
   createProxyNode(payload = {}) {
     const node = normalizeProxyPayload(payload, null);
     systemConfig.proxies.unshift(node);
-    return clone(node);
+    return projectProxyNode(node);
   },
   updateProxyNode(id, patch = {}) {
     const idx = systemConfig.proxies.findIndex((it) => it.id === id);
@@ -912,7 +958,7 @@ export const store = {
     }
     const next = normalizeProxyPayload(patch, systemConfig.proxies[idx]);
     systemConfig.proxies[idx] = next;
-    return clone(next);
+    return projectProxyNode(next);
   },
   deleteProxyNode(id) {
     const idx = systemConfig.proxies.findIndex((it) => it.id === id);
@@ -936,7 +982,7 @@ export const store = {
     const cursor = proxyCursorByType.get(cursorKey) || 0;
     const picked = list[cursor % list.length];
     proxyCursorByType.set(cursorKey, cursor + 1);
-    return clone(picked);
+    return projectProxyNode(picked, { withSecret: true });
   },
   markProxyHealth(id, status, extra = {}) {
     const idx = systemConfig.proxies.findIndex((it) => it.id === id);
@@ -957,7 +1003,7 @@ export const store = {
       systemConfig.proxies[idx].location = String(extra.location || "").trim();
     }
     systemConfig.proxies[idx].lastChecked = now();
-    return clone(systemConfig.proxies[idx]);
+    return projectProxyNode(systemConfig.proxies[idx]);
   },
   listLlmModels() {
     return clone(systemConfig.llmModels);

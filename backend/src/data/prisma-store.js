@@ -258,17 +258,22 @@ const normalizeProxyPayload = (payload = {}, existing = null) => {
     ? clone(existing)
     : {
       id: `proxy-${randomUUID().slice(0, 8)}`,
-      ip: "",
+      host: "",
       port: 0,
       type: "DYNAMIC",
       status: "OFFLINE",
+      authEnabled: false,
+      authUsername: "",
+      authPassword: "",
       lastChecked: now(),
       location: "",
       failCount: 0
     };
 
-  if (hasOwn(payload, "ip")) {
-    base.ip = String(payload.ip || "").trim();
+  if (hasOwn(payload, "host")) {
+    base.host = String(payload.host || "").trim();
+  } else if (hasOwn(payload, "ip")) {
+    base.host = String(payload.ip || "").trim();
   }
   if (hasOwn(payload, "port")) {
     base.port = Math.max(0, asNumber(payload.port, 0));
@@ -286,8 +291,44 @@ const normalizeProxyPayload = (payload = {}, existing = null) => {
   if (hasOwn(payload, "failCount")) {
     base.failCount = Math.max(0, asNumber(payload.failCount, 0));
   }
+  if (hasOwn(payload, "authEnabled")) {
+    base.authEnabled = Boolean(payload.authEnabled);
+    if (!base.authEnabled) {
+      base.authUsername = "";
+      base.authPassword = "";
+    }
+  }
+  if (hasOwn(payload, "authUsername")) {
+    base.authUsername = String(payload.authUsername || "").trim();
+  }
+  if (hasOwn(payload, "authPassword")) {
+    base.authPassword = String(payload.authPassword || "").trim();
+  }
+
+  if (!base.authEnabled) {
+    base.authUsername = "";
+    base.authPassword = "";
+  }
   base.lastChecked = now();
   return base;
+};
+
+const projectProxyNode = (row, { withSecret = false } = {}) => {
+  if (!row) {
+    return null;
+  }
+  const data = {
+    ...row,
+    ip: row.host,
+    lastChecked: row.lastChecked instanceof Date ? row.lastChecked.toISOString() : row.lastChecked,
+    authConfigured: Boolean(row.authEnabled && row.authUsername)
+  };
+
+  if (!withSecret) {
+    delete data.authPassword;
+  }
+
+  return data;
 };
 
 const normalizeLlmModel = (item = {}, existing = null) => {
@@ -1240,7 +1281,7 @@ export const prismaStore = {
         enableCorporate: config.enableCorporate,
         disabledCorporateNames: config.disabledCorporateNames
       },
-      proxies: config.proxies.map((it) => ({ ...it, lastChecked: it.lastChecked.toISOString() })),
+      proxies: config.proxies.map((it) => projectProxyNode(it)),
       llmModels: config.llmModels
     };
   },
@@ -1296,17 +1337,17 @@ export const prismaStore = {
   async listProxyNodes() {
     await ensureSystemConfig();
     const rows = await prisma.proxyNode.findMany({ where: { configId: "default" } });
-    return rows.map((it) => ({ ...it, lastChecked: it.lastChecked.toISOString() }));
+    return rows.map((it) => projectProxyNode(it));
   },
-  async getProxyNode(id) {
+  async getProxyNode(id, options = {}) {
     const row = await prisma.proxyNode.findUnique({ where: { id } });
-    return row ? { ...row, lastChecked: row.lastChecked.toISOString() } : null;
+    return projectProxyNode(row, { withSecret: Boolean(options.withSecret) });
   },
   async createProxyNode(payload = {}) {
     await ensureSystemConfig();
     const node = normalizeProxyPayload(payload, null);
     const row = await prisma.proxyNode.create({ data: { ...node, configId: "default", lastChecked: new Date() } });
-    return { ...row, lastChecked: row.lastChecked.toISOString() };
+    return projectProxyNode(row);
   },
   async updateProxyNode(id, patch = {}) {
     const existed = await prisma.proxyNode.findUnique({ where: { id } });
@@ -1320,16 +1361,19 @@ export const prismaStore = {
     const row = await prisma.proxyNode.update({
       where: { id },
       data: {
-        ip: next.ip,
+        host: next.host,
         port: next.port,
         type: next.type,
         status: next.status,
+        authEnabled: next.authEnabled,
+        authUsername: next.authUsername,
+        authPassword: next.authPassword,
         location: next.location,
         failCount: next.failCount,
         lastChecked: new Date(next.lastChecked)
       }
     });
-    return { ...row, lastChecked: row.lastChecked.toISOString() };
+    return projectProxyNode(row);
   },
   async deleteProxyNode(id) {
     try {
@@ -1355,6 +1399,7 @@ export const prismaStore = {
     proxyCursorByType.set(cursorKey, cursor + 1);
     return {
       ...picked,
+      ip: picked.host,
       lastChecked: picked.lastChecked.toISOString()
     };
   },
@@ -1382,7 +1427,7 @@ export const prismaStore = {
         lastChecked: new Date()
       }
     });
-    return { ...row, lastChecked: row.lastChecked.toISOString() };
+    return projectProxyNode(row);
   },
   async listTaskModules() {
     const rows = await prisma.taskModuleConfig.findMany({ orderBy: [{ category: "asc" }, { moduleId: "asc" }] });
