@@ -30,7 +30,14 @@ export const SystemSettings: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newCorporateBan, setNewCorporateBan] = useState('');
-  const [newProxy, setNewProxy] = useState({ ip: '', port: '', type: 'DYNAMIC' as 'DYNAMIC' | 'STATIC' });
+  const [newProxy, setNewProxy] = useState({
+    host: '',
+    port: '',
+    type: 'DYNAMIC' as 'DYNAMIC' | 'STATIC',
+    authEnabled: false,
+    authUsername: '',
+    authPassword: ''
+  });
   const [llmPrompt, setLlmPrompt] = useState('请用一句话给出今天酒店代理下单的风控建议');
   const [llmOutput, setLlmOutput] = useState('');
   const [llmTesting, setLlmTesting] = useState(false);
@@ -155,19 +162,26 @@ export const SystemSettings: React.FC = () => {
   };
 
   const addProxy = async () => {
-    if (!newProxy.ip || !newProxy.port) return;
+    if (!newProxy.host || !newProxy.port) return;
+    if (newProxy.authEnabled && (!newProxy.authUsername || !newProxy.authPassword)) {
+      setError('启用认证时必须填写用户名和密码');
+      return;
+    }
     try {
       const created = await fetchWithAuth('/api/system/proxies', {
         method: 'POST',
         body: JSON.stringify({
-          ip: newProxy.ip,
+          host: newProxy.host,
           port: Number(newProxy.port),
           type: newProxy.type,
+          authEnabled: newProxy.authEnabled,
+          authUsername: newProxy.authEnabled ? newProxy.authUsername : '',
+          authPassword: newProxy.authEnabled ? newProxy.authPassword : '',
           status: 'ONLINE'
         })
       });
       setConfig((prev) => ({ ...prev, proxies: [created, ...prev.proxies] }));
-      setNewProxy({ ip: '', port: '', type: 'DYNAMIC' });
+      setNewProxy({ host: '', port: '', type: 'DYNAMIC', authEnabled: false, authUsername: '', authPassword: '' });
     } catch (err) {
       setError(getErrorMessage(err, '新增代理失败'));
     }
@@ -360,12 +374,31 @@ export const SystemSettings: React.FC = () => {
 
       <Card title="新增代理节点">
         <div className="flex flex-wrap gap-2">
-          <input placeholder="IP" value={newProxy.ip} onChange={(e) => setNewProxy((prev) => ({ ...prev, ip: e.target.value }))} className="w-40 border border-gray-200 rounded px-2 py-2 text-sm" />
+          <input placeholder="主机(IP或域名)" value={newProxy.host} onChange={(e) => setNewProxy((prev) => ({ ...prev, host: e.target.value }))} className="w-52 border border-gray-200 rounded px-2 py-2 text-sm" />
           <input placeholder="端口" value={newProxy.port} onChange={(e) => setNewProxy((prev) => ({ ...prev, port: e.target.value }))} className="w-28 border border-gray-200 rounded px-2 py-2 text-sm" />
           <select value={newProxy.type} onChange={(e) => setNewProxy((prev) => ({ ...prev, type: e.target.value as 'DYNAMIC' | 'STATIC' }))} className="border border-gray-200 rounded px-2 py-2 text-sm bg-white">
             <option value="DYNAMIC">动态</option>
             <option value="STATIC">静态</option>
           </select>
+          <label className="flex items-center gap-2 text-sm text-gray-600 px-2">
+            <input
+              type="checkbox"
+              checked={newProxy.authEnabled}
+              onChange={(e) => setNewProxy((prev) => ({
+                ...prev,
+                authEnabled: e.target.checked,
+                authUsername: e.target.checked ? prev.authUsername : '',
+                authPassword: e.target.checked ? prev.authPassword : ''
+              }))}
+            />
+            账号密码认证
+          </label>
+          {newProxy.authEnabled && (
+            <>
+              <input placeholder="用户名" value={newProxy.authUsername} onChange={(e) => setNewProxy((prev) => ({ ...prev, authUsername: e.target.value }))} className="w-32 border border-gray-200 rounded px-2 py-2 text-sm" />
+              <input placeholder="密码" type="password" value={newProxy.authPassword} onChange={(e) => setNewProxy((prev) => ({ ...prev, authPassword: e.target.value }))} className="w-36 border border-gray-200 rounded px-2 py-2 text-sm" />
+            </>
+          )}
           <button onClick={addProxy} className="px-3 py-2 bg-green-600 text-white rounded text-sm">+ 添加</button>
         </div>
       </Card>
@@ -378,6 +411,7 @@ export const SystemSettings: React.FC = () => {
                 <th className="text-left py-2">状态</th>
                 <th className="text-left py-2">地址</th>
                 <th className="text-left py-2">类型</th>
+                <th className="text-left py-2">认证</th>
                 <th className="text-left py-2">失败数</th>
                 <th className="text-left py-2">最后检测</th>
                 <th className="text-right py-2">操作</th>
@@ -387,8 +421,9 @@ export const SystemSettings: React.FC = () => {
               {config.proxies.map((proxy: ProxyNode) => (
                 <tr key={proxy.id} className="border-t border-gray-100">
                   <td className="py-2">{proxy.status === 'ONLINE' ? '在线' : proxy.status === 'OFFLINE' ? '离线' : '高延迟'}</td>
-                  <td className="py-2 font-mono">{proxy.ip}:{proxy.port}</td>
+                  <td className="py-2 font-mono">{proxy.host || proxy.ip}:{proxy.port}</td>
                   <td className="py-2">{proxy.type}</td>
+                  <td className="py-2">{proxy.authEnabled ? (proxy.authUsername || '已启用') : '无'}</td>
                   <td className="py-2">{proxy.failCount || 0}</td>
                   <td className="py-2 text-xs text-gray-500">{proxy.lastChecked}</td>
                   <td className="py-2 text-right space-x-2">

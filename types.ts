@@ -312,10 +312,14 @@ export interface SystemUser {
 
 export interface ProxyNode {
   id: string;
-  ip: string;
+  host: string;
+  ip?: string;
   port: number;
   type: 'DYNAMIC' | 'STATIC';
   status: 'ONLINE' | 'OFFLINE' | 'LATENCY';
+  authEnabled?: boolean;
+  authUsername?: string;
+  authConfigured?: boolean;
   lastChecked: string;
   location?: string;
   failCount?: number;

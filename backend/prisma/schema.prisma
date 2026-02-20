@@ -195,10 +195,13 @@ model TaskRun {
 model ProxyNode {
   id          String       @id @default(cuid())
   configId    String
-  ip          String
+  host        String
   port        Int
   type        String
   status      String
+  authEnabled Boolean      @default(false)
+  authUsername String      @default("")
+  authPassword String      @default("")
   lastChecked DateTime     @default(now())
   location    String
   failCount   Int          @default(0)
