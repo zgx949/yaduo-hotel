@@ -8,6 +8,7 @@ import {
   addAppOrder,
   calculateOrderV2,
   createPayOrder,
+  generateOrderItemPaymentLink,
   getCashierInformation,
   runAtourOrderWorkflow
 } from "../services/atour-order.service.js";
@@ -381,7 +382,32 @@ ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) =>
   }
 
   const links = await prismaStore.getOrderItemLinks(req.params.itemId);
-  return res.json({ paymentLink: links.paymentLink });
+  if (item.executionStatus !== "ORDERED" && item.executionStatus !== "DONE") {
+    return res.json({ paymentLink: links.paymentLink });
+  }
+
+  try {
+    const payment = await generateOrderItemPaymentLink({ orderItemId: req.params.itemId });
+    return res.json({
+      paymentLink: payment.paymentLink,
+      paymentOrderNo: payment.paymentOrderNo,
+      payOrgMerId: payment.payOrgMerId,
+      channelType: payment.channelType,
+      payInfo: payment.payInfo
+    });
+  } catch (err) {
+    if (env.nodeEnv !== "production") {
+      console.warn("generate payment link failed, fallback to stored link:", err?.message || err);
+    }
+    const paymentOrderNo = item.atourOrderId || item.id;
+    const page = `pages/cashier/cashier?p=${paymentOrderNo}&s=app`;
+    const fallbackLink = `alipays://platformapi/startapp?appId=2021003121605466&thirdPartSchema=${encodeURIComponent("atourlifeALiPay://")}&page=${encodeURIComponent(page)}&bank_switch=Y`;
+    return res.json({
+      paymentLink: fallbackLink,
+      paymentOrderNo,
+      payOrgMerId: ""
+    });
+  }
 });
 
 ordersRoutes.get("/items/:itemId/detail-link", requireAuth, async (req, res) => {

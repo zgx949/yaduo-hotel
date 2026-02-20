@@ -13,6 +13,7 @@ import { Login } from './views/Login';
 import { UserManagement } from './views/UserManagement';
 import { SystemSettings } from './views/SystemSettings';
 import { CryptoLab } from './views/CryptoLab';
+import { PaymentBridge } from './views/PaymentBridge';
 import { SystemUser, UserPermissions } from './types';
 
 interface Tab {
@@ -21,6 +22,10 @@ interface Tab {
 }
 
 const App: React.FC = () => {
+  if (window.location.pathname === '/payment-bridge') {
+    return <PaymentBridge />;
+  }
+
   const TOKEN_KEY = 'skyhotel_auth_token';
   const isDevMode = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
 

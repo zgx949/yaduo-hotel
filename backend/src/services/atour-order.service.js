@@ -2,6 +2,9 @@ import { env } from "../config/env.js";
 import { prismaStore } from "../data/prisma-store.js";
 import { getInternalRequestContext } from "./internal-resource.service.js";
 
+const ALIPAY_APP_ID = "2021003121605466";
+const ALIPAY_APP_BRIDGE_ID = "20000067";
+
 const buildAtourQuery = (token) => {
   const params = new URLSearchParams({
     platType: env.atourPlatformType,
@@ -101,6 +104,19 @@ export const getCashierInformation = async ({ token, payload }) => {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.respCode !== "SUCCESS") {
     throw new Error(data?.respDesc || "cashier information failed");
+  }
+  return data.data || {};
+};
+
+export const payByCashier = async ({ token, payload }) => {
+  const response = await fetch(`${env.atourUserGatewayBaseUrl}/api/cash/atour-cash-ser/cashier/pay`, {
+    method: "POST",
+    headers: buildAtourHeaders(token),
+    body: JSON.stringify(payload || {})
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.respCode !== "SUCCESS") {
+    throw new Error(data?.respDesc || "cashier pay failed");
   }
   return data.data || {};
 };
@@ -267,5 +283,117 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     tokenAccountId: resourceCtx.tokenAccountId,
     proxyId: resourceCtx.proxy?.id || null,
     ...workflow
+  };
+};
+
+const buildAlipayDeepLink = ({ paymentOrderNo, payOrgMerId }) => {
+  const page = encodeURIComponent(`pages/cashier/cashier?p=${paymentOrderNo}&s=app`);
+  const params = new URLSearchParams({
+    appId: ALIPAY_APP_ID,
+    thirdPartSchema: "atourlifeALiPay://",
+    page,
+    bank_switch: "Y"
+  });
+  if (payOrgMerId) {
+    params.set("payOrgMerId", String(payOrgMerId));
+  }
+  return `alipays://platformapi/startapp?${params.toString()}`;
+};
+
+const buildAlipayPayInfoLink = (payInfo) => {
+  return payInfo;
+};
+
+export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
+  const item = await prismaStore.getOrderItemById(orderItemId);
+  if (!item) {
+    throw new Error("order item not found");
+  }
+  if (!item.atourOrderId) {
+    throw new Error("order item has no atour order id");
+  }
+
+  const order = await prismaStore.getOrder(item.groupId);
+  if (!order) {
+    throw new Error("order not found");
+  }
+
+  const resourceCtx = await getInternalRequestContext({ tier: item.bookingTier || undefined });
+  if (!resourceCtx.token) {
+    throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+  }
+
+  const payOrderResult = await createPayOrder({
+    token: resourceCtx.token,
+    payload: {
+      chainId: String(order.chainId),
+      source: "order",
+      orderNo: item.atourOrderId,
+      busType: "room_order"
+    }
+  });
+
+  const cashierInformation = await getCashierInformation({
+    token: resourceCtx.token,
+    payload: {
+      appFlag: "1",
+      reqSeqId: String(Date.now()),
+      appVersion: "1.0.3",
+      token: String(payOrderResult.token || ""),
+      payTermType: "APP"
+    }
+  });
+
+  const merConfigList = Array.isArray(cashierInformation.merConfigInfoList)
+    ? cashierInformation.merConfigInfoList
+    : [];
+  const alipayConfig = merConfigList.find((it) => String(it?.payType || "") === "A") || merConfigList[0] || null;
+
+  const paymentOrderNo = String(
+    cashierInformation.paymentOrderNo ||
+    cashierInformation.payOrderNo ||
+    payOrderResult.token ||
+    cashierInformation.busiOrderId ||
+    item.atourOrderId
+  );
+  const payOrgMerId = alipayConfig?.payOrgMerId ? String(alipayConfig.payOrgMerId) : "";
+  const channelType = alipayConfig?.channelType ? String(alipayConfig.channelType) : "I004";
+
+  let payData = null;
+  if (payOrgMerId && payOrderResult.token) {
+    payData = await payByCashier({
+      token: resourceCtx.token,
+      payload: {
+        channelType,
+        payType: "A",
+        isPreAtourAsset: String(cashierInformation.isPreAtourAsset || "N"),
+        partner: payOrgMerId,
+        reqSeqId: String(Date.now()),
+        appId: "",
+        token: String(payOrderResult.token),
+        termType: "APP"
+      }
+    });
+  }
+
+  const payInfo = payData?.payInfo ? String(payData.payInfo) : "";
+  const paymentLink = payInfo
+    ? buildAlipayPayInfoLink(payInfo)
+    : buildAlipayDeepLink({ paymentOrderNo, payOrgMerId });
+
+  return {
+    paymentLink,
+    paymentOrderNo,
+    payOrgMerId,
+    channelType,
+    payInfo,
+    tokenSource: resourceCtx.tokenSource,
+    tokenAccountId: resourceCtx.tokenAccountId,
+    proxyId: resourceCtx.proxy?.id || null,
+    raw: {
+      payOrderResult,
+      cashierInformation,
+      payData
+    }
   };
 };

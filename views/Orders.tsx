@@ -164,7 +164,8 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
         setError('该拆单当前无可用支付链接');
         return;
       }
-      window.open(link, '_blank', 'noopener,noreferrer');
+      const bridgeUrl = `/payment-bridge?payUrl=${encodeURIComponent(link)}`;
+      window.open(bridgeUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取支付链接失败');
     }
