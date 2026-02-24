@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { DateRangePicker } from '../components/DateRangePicker';
-import { Hotel, RatePlan, Room } from '../types';
+import { Hotel, RatePlan, Room, OrderPaymentDecision, OrderPaymentPrepareSplit } from '../types';
 import { BookingDetailView } from './booking/BookingDetailView';
 import { BookingConfirmView } from './booking/BookingConfirmView';
 import { InvoiceFormSheet, InvoiceFormValue } from '../components/InvoiceFormSheet';
 
 type BookingStep = 'SEARCH' | 'DETAIL' | 'CONFIRM';
+type PaymentFlowStage = 'IDLE' | 'DECISION' | 'PREPARING' | 'LIST';
 
 interface PlaceSuggestion {
   id: string;
@@ -49,6 +50,13 @@ export const Booking: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [paymentFlowStage, setPaymentFlowStage] = useState<PaymentFlowStage>('IDLE');
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [paymentDecision, setPaymentDecision] = useState<OrderPaymentDecision | null>(null);
+  const [paymentSplits, setPaymentSplits] = useState<OrderPaymentPrepareSplit[]>([]);
+  const [paymentFlowMessage, setPaymentFlowMessage] = useState('');
+  const [payingItemId, setPayingItemId] = useState('');
+  const [isPaymentSyncing, setIsPaymentSyncing] = useState(false);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -60,6 +68,7 @@ export const Booking: React.FC = () => {
   const suggestionSeqRef = useRef(0);
   const suppressNextSuggestFetchRef = useRef(false);
   const detailReqSeqRef = useRef(0);
+  const paymentPollTimerRef = useRef<number | null>(null);
 
   // New state for Benefits in Confirm View
   const [selectedBenefits, setSelectedBenefits] = useState({
@@ -109,6 +118,180 @@ export const Booking: React.FC = () => {
 
       return response.json();
   };
+
+  const clearPaymentPoll = () => {
+    if (paymentPollTimerRef.current) {
+      window.clearTimeout(paymentPollTimerRef.current);
+      paymentPollTimerRef.current = null;
+    }
+  };
+
+  const resetPaymentFlow = () => {
+    clearPaymentPoll();
+    setPaymentFlowStage('IDLE');
+    setPaymentDecision(null);
+    setPaymentSplits([]);
+    setActiveOrderId(null);
+    setPaymentFlowMessage('');
+    setPayingItemId('');
+    setIsPaymentSyncing(false);
+  };
+
+  const finishBookingFlow = (message: string) => {
+    resetPaymentFlow();
+    setSuccessMessage(message);
+    setSuccess(true);
+    setTimeout(() => {
+      setSuccess(false);
+      setStep('SEARCH');
+      setExpandedRoomIds(new Set());
+    }, 1800);
+  };
+
+  const fetchPaymentPrepare = async (orderId: string, waitForReady: boolean) => {
+    return fetchWithAuth(`/api/orders/${orderId}/payment/prepare`, {
+      method: 'POST',
+      body: JSON.stringify({ waitForReady, timeoutMs: 20000 })
+    });
+  };
+
+  const hasPendingSplit = (splits: OrderPaymentPrepareSplit[]) =>
+    splits.some((it) => it.linkState === 'PENDING_ORDER_SUBMIT');
+
+  const applyPreparedPaymentData = (data: any) => {
+    const nextDecision = data?.paymentDecision as OrderPaymentDecision | undefined;
+    const nextSplits = Array.isArray(data?.paymentSplits)
+      ? (data.paymentSplits as OrderPaymentPrepareSplit[])
+      : [];
+    if (nextDecision) {
+      setPaymentDecision(nextDecision);
+    }
+    setPaymentSplits(nextSplits);
+    return { nextDecision, nextSplits };
+  };
+
+  const schedulePaymentPoll = (orderId: string, attempt = 1) => {
+    clearPaymentPoll();
+    if (attempt > 10 || paymentFlowStage === 'IDLE') {
+      setPaymentFlowMessage('仍有拆单未准备完成，可点击“刷新支付状态”继续获取。');
+      return;
+    }
+    paymentPollTimerRef.current = window.setTimeout(async () => {
+      try {
+        const data = await fetchPaymentPrepare(orderId, false);
+        const { nextDecision, nextSplits } = applyPreparedPaymentData(data);
+        if (nextDecision && !nextDecision.required) {
+          finishBookingFlow('支付状态已同步，订单处理完成');
+          return;
+        }
+        if (nextSplits.length === 0) {
+          finishBookingFlow('支付状态已同步，订单处理完成');
+          return;
+        }
+        if (hasPendingSplit(nextSplits)) {
+          setPaymentFlowMessage(`部分拆单仍在准备支付链接，自动刷新中（${attempt}/10）...`);
+          schedulePaymentPoll(orderId, attempt + 1);
+        } else {
+          setPaymentFlowMessage('');
+        }
+      } catch (err) {
+        setPaymentFlowMessage(err instanceof Error ? err.message : '自动刷新支付状态失败');
+      }
+    }, 3000);
+  };
+
+  const preparePayments = async (orderId: string, waitForReady: boolean) => {
+    setPaymentFlowStage('PREPARING');
+    setPaymentFlowMessage('正在准备拆单支付信息...');
+    try {
+      const data = await fetchPaymentPrepare(orderId, waitForReady);
+      const { nextDecision, nextSplits } = applyPreparedPaymentData(data);
+      setPaymentFlowStage('LIST');
+      if (nextDecision && !nextDecision.required) {
+        finishBookingFlow('订单已全部支付完成');
+        return;
+      }
+      if (nextSplits.length === 0) {
+        finishBookingFlow('订单已全部支付完成');
+        return;
+      }
+      if (hasPendingSplit(nextSplits)) {
+        setPaymentFlowMessage('部分拆单仍在下单处理中，系统会自动刷新支付状态。');
+        schedulePaymentPoll(orderId, 1);
+      } else {
+        setPaymentFlowMessage('');
+      }
+    } catch (err) {
+      setPaymentFlowStage('LIST');
+      setPaymentFlowMessage(err instanceof Error ? err.message : '准备支付信息失败');
+    }
+  };
+
+  const syncPayments = async (paidItemIds: string[] = []) => {
+    if (!activeOrderId) {
+      return;
+    }
+    setIsPaymentSyncing(true);
+    setPaymentFlowMessage('正在同步支付状态...');
+    try {
+      const syncResult = await fetchWithAuth(`/api/orders/${activeOrderId}/payment/sync`, {
+        method: 'POST',
+        body: JSON.stringify({ paidItemIds, refreshExecutionStatus: true })
+      });
+      if (syncResult?.paymentDecision) {
+        setPaymentDecision(syncResult.paymentDecision as OrderPaymentDecision);
+      }
+      const prepareResult = await fetchPaymentPrepare(activeOrderId, false);
+      const { nextDecision, nextSplits } = applyPreparedPaymentData(prepareResult);
+      if ((nextDecision && !nextDecision.required) || nextSplits.length === 0) {
+        finishBookingFlow('支付状态已同步，订单处理完成');
+        return;
+      }
+      if (hasPendingSplit(nextSplits)) {
+        setPaymentFlowMessage('仍有拆单处理中，正在自动刷新支付状态。');
+        schedulePaymentPoll(activeOrderId, 1);
+      } else {
+        setPaymentFlowMessage('支付状态已更新，请继续完成剩余拆单支付。');
+      }
+    } catch (err) {
+      setPaymentFlowMessage(err instanceof Error ? err.message : '同步支付状态失败');
+    } finally {
+      setIsPaymentSyncing(false);
+      setPayingItemId('');
+    }
+  };
+
+  const paySplitItem = async (item: OrderPaymentPrepareSplit) => {
+    if (!activeOrderId) {
+      return;
+    }
+    if (!item.paymentLink) {
+      setPaymentFlowMessage('当前拆单暂无支付链接，请先刷新。');
+      return;
+    }
+
+    setPayingItemId(item.itemId);
+    const bridgeUrl = `/payment-bridge?payUrl=${encodeURIComponent(item.paymentLink)}`;
+    const newWindow = window.open(bridgeUrl, '_blank', 'noopener,noreferrer');
+    if (!newWindow) {
+      setPayingItemId('');
+      setPaymentFlowMessage('支付窗口被浏览器拦截，请允许弹窗后重试。');
+      return;
+    }
+
+    const paid = window.confirm('新窗口已打开。若你已完成该笔支付，请点击“确定”同步状态；未完成请点“取消”。');
+    if (!paid) {
+      setPayingItemId('');
+      return;
+    }
+    await syncPayments([item.itemId]);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearPaymentPoll();
+    };
+  }, []);
 
   const isBookablePlace = (item: PlaceSuggestion) => item.type === 0 && Boolean(item.chainId);
 
@@ -361,7 +544,7 @@ export const Booking: React.FC = () => {
       setSearchError('');
       try {
         const totalAmount = selectedRate.price * getNightCount();
-        await fetchWithAuth('/api/orders', {
+        const data = await fetchWithAuth('/api/orders', {
           method: 'POST',
           body: JSON.stringify({
             submitNow,
@@ -396,13 +579,23 @@ export const Booking: React.FC = () => {
           })
         });
 
-        setSuccessMessage(submitNow ? '订单已提交，进入待下单队列' : '订单已暂存为虚拟下单计划（待确认）');
-        setSuccess(true);
-        setTimeout(() => {
-          setSuccess(false);
-          setStep('SEARCH');
-          setExpandedRoomIds(new Set());
-        }, 1800);
+        if (!submitNow) {
+          finishBookingFlow('订单已暂存为虚拟下单计划（待确认）');
+          return;
+        }
+
+        const decision = data?.paymentDecision as OrderPaymentDecision | undefined;
+        const orderId = data?.order?.id ? String(data.order.id) : '';
+
+        if (decision?.required && orderId) {
+          setActiveOrderId(orderId);
+          setPaymentDecision(decision);
+          setPaymentFlowStage('DECISION');
+          setPaymentFlowMessage('');
+          return;
+        }
+
+        finishBookingFlow('订单已提交，进入待下单队列');
       } catch (err) {
         setSearchError(err instanceof Error ? err.message : '提交订单失败');
       } finally {
@@ -662,6 +855,168 @@ export const Booking: React.FC = () => {
     );
   }
 
+  const renderPaymentDecisionModal = () => {
+    if (paymentFlowStage !== 'DECISION' || !paymentDecision) {
+      return null;
+    }
+    return (
+      <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+          <h3 className="text-xl font-bold text-gray-900">订单已提交，是否立即支付？</h3>
+          <p className="text-sm text-gray-600">
+            当前未支付拆单 {paymentDecision.unpaidCount} 个，已可支付 {paymentDecision.readyCount} 个。
+          </p>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => finishBookingFlow('订单已创建，可稍后在订单中心继续支付')}
+              className="px-4 py-3 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
+            >
+              稍后支付
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!activeOrderId) {
+                  setPaymentFlowMessage('订单号缺失，无法准备支付信息');
+                  return;
+                }
+                preparePayments(activeOrderId, true);
+              }}
+              className="px-4 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
+            >
+              立即支付
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPaymentListModal = () => {
+    if (paymentFlowStage !== 'PREPARING' && paymentFlowStage !== 'LIST') {
+      return null;
+    }
+    return (
+      <div className="fixed inset-0 bg-black/55 z-40 flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden bg-white rounded-2xl shadow-2xl flex flex-col">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">拆单支付</h3>
+            <button
+              type="button"
+              onClick={() => finishBookingFlow('订单已创建，可稍后在订单中心继续支付')}
+              className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+            >
+              稍后支付
+            </button>
+          </div>
+
+          <div className="p-5 overflow-y-auto space-y-3">
+            {paymentFlowStage === 'PREPARING' && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 flex items-center gap-2">
+                <span className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin" />
+                正在准备支付信息，请稍候...
+              </div>
+            )}
+
+            {paymentFlowMessage && (
+              <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {paymentFlowMessage}
+              </div>
+            )}
+
+            {paymentSplits.map((item) => {
+              const actionDisabled = isPaymentSyncing || payingItemId === item.itemId;
+              return (
+                <div key={item.itemId} className="rounded-xl border border-gray-200 p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">拆单 #{item.splitIndex}/{item.splitTotal} · {item.roomType}</div>
+                      <div className="text-xs text-gray-500">金额: {item.amount} · 状态: {item.paymentStatus} · 执行: {item.executionStatus}</div>
+                    </div>
+                    <div className="text-xs px-2 py-1 rounded border bg-gray-50 text-gray-700 border-gray-200">
+                      {item.linkState}
+                    </div>
+                  </div>
+
+                  {item.error && (
+                    <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-2 py-1">
+                      {item.error}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {item.linkState === 'READY' && item.paymentLink && (
+                      <button
+                        type="button"
+                        disabled={actionDisabled}
+                        onClick={() => paySplitItem(item)}
+                        className="px-3 py-1.5 rounded bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {payingItemId === item.itemId ? '处理中...' : '去支付'}
+                      </button>
+                    )}
+
+                    {item.linkState === 'LINK_FAILED' && (
+                      <button
+                        type="button"
+                        disabled={actionDisabled || !activeOrderId}
+                        onClick={() => {
+                          if (activeOrderId) {
+                            preparePayments(activeOrderId, false);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded border border-orange-300 text-orange-700 text-xs bg-orange-50 disabled:opacity-50"
+                      >
+                        重试链接
+                      </button>
+                    )}
+
+                    {item.linkState === 'PENDING_ORDER_SUBMIT' && (
+                      <span className="text-xs text-gray-500 inline-flex items-center gap-1">
+                        <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                        等待拆单下单完成
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {paymentFlowStage === 'LIST' && paymentSplits.length === 0 && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                当前暂无待支付拆单。
+              </div>
+            )}
+          </div>
+
+          <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              disabled={isPaymentSyncing || !activeOrderId}
+              onClick={() => {
+                if (activeOrderId) {
+                  preparePayments(activeOrderId, false);
+                }
+              }}
+              className="px-3 py-2 rounded border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 disabled:opacity-50"
+            >
+              刷新支付状态
+            </button>
+            <button
+              type="button"
+              disabled={isPaymentSyncing || !activeOrderId}
+              onClick={() => syncPayments([])}
+              className="px-4 py-2 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPaymentSyncing ? '同步中...' : '我已完成支付，立即同步'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Success Overlay
   if (success) {
       return (
@@ -678,10 +1033,20 @@ export const Booking: React.FC = () => {
   }
 
   // Router Logic
-  switch(step) {
+  const pageContent = (() => {
+    switch(step) {
       case 'SEARCH': return renderSearch();
       case 'DETAIL': return renderHotelDetail();
       case 'CONFIRM': return renderBookingForm();
       default: return renderSearch();
-  }
+    }
+  })();
+
+  return (
+    <>
+      {pageContent}
+      {renderPaymentDecisionModal()}
+      {renderPaymentListModal()}
+    </>
+  );
 };

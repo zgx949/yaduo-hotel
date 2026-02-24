@@ -146,6 +146,38 @@ export interface OrderGroup {
   items: OrderSplitItem[];
 }
 
+export interface OrderPaymentDecisionSplit {
+  itemId: string;
+  splitIndex: number;
+  splitTotal: number;
+  roomType: string;
+  roomCount: number;
+  amount: number;
+  status: string;
+  paymentStatus: string;
+  executionStatus: string;
+  atourOrderId?: string | null;
+}
+
+export interface OrderPaymentDecision {
+  required: boolean;
+  modeOptions: Array<'PAY_NOW' | 'PAY_LATER'>;
+  unpaidCount: number;
+  readyCount: number;
+  pendingCount: number;
+  splits: OrderPaymentDecisionSplit[];
+}
+
+export interface OrderPaymentPrepareSplit extends OrderPaymentDecisionSplit {
+  paymentLink?: string | null;
+  paymentOrderNo?: string;
+  payOrgMerId?: string;
+  channelType?: string;
+  payInfo?: string;
+  linkState: 'READY' | 'PENDING_ORDER_SUBMIT' | 'LINK_FAILED';
+  error?: string;
+}
+
 export interface PriceAlert {
   id: string;
   hotelName: string;

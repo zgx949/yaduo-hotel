@@ -168,6 +168,7 @@ ordersRoutes.get("/:id/payment-options", requireAuth, async (req, res) => {
 });
 
 ordersRoutes.post("/:id/payment/prepare", requireAuth, async (req, res) => {
+  // TODO: 发起更新请求
   const order = await prismaStore.getOrder(req.params.id);
   if (!order) {
     return res.status(404).json({ message: "Order not found" });

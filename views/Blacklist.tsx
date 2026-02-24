@@ -96,7 +96,7 @@ export const Blacklist: React.FC = () => {
           maxSeverity: 'LOW',
           lastDate: '',
           records: [],
-          tags: new Set()
+          tags: new Set<string>()
         };
       }
 
@@ -129,7 +129,7 @@ export const Blacklist: React.FC = () => {
     return (
       hotel.hotelName.toLowerCase().includes(keyword) ||
       hotel.chainId.toLowerCase().includes(keyword) ||
-      Array.from(hotel.tags).some((tag) => tag.toLowerCase().includes(keyword))
+      Array.from(hotel.tags).some((tag: string) => tag.toLowerCase().includes(keyword))
     );
   });
 
