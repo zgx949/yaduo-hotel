@@ -16,6 +16,54 @@ import { getInternalRequestContext } from "../services/internal-resource.service
 
 export const ordersRoutes = Router();
 
+const PAYMENT_READY_STATES = new Set(["ORDERED", "DONE"]);
+
+const toPaymentSplitView = (item) => ({
+  itemId: item.id,
+  splitIndex: item.splitIndex,
+  splitTotal: item.splitTotal,
+  roomType: item.roomType,
+  roomCount: item.roomCount,
+  amount: item.amount,
+  status: item.status,
+  paymentStatus: item.paymentStatus,
+  executionStatus: item.executionStatus,
+  atourOrderId: item.atourOrderId || null
+});
+
+const buildPaymentDecision = (order) => {
+  const activeItems = (order.items || []).filter((it) => it.status !== "CANCELLED");
+  const unpaidItems = activeItems.filter((it) => it.paymentStatus !== "PAID");
+  const readyItems = unpaidItems.filter((it) => PAYMENT_READY_STATES.has(it.executionStatus));
+  return {
+    required: unpaidItems.length > 0,
+    modeOptions: ["PAY_NOW", "PAY_LATER"],
+    unpaidCount: unpaidItems.length,
+    readyCount: readyItems.length,
+    pendingCount: unpaidItems.length - readyItems.length,
+    splits: activeItems.map(toPaymentSplitView)
+  };
+};
+
+const waitForPaymentReady = async (orderId, timeoutMs = 20000, intervalMs = 600) => {
+  const startedAt = Date.now();
+  let latest = await prismaStore.getOrder(orderId);
+  while (latest) {
+    const activeItems = latest.items.filter((it) => it.status !== "CANCELLED");
+    const unpaidItems = activeItems.filter((it) => it.paymentStatus !== "PAID");
+    const allReady = unpaidItems.every((it) => PAYMENT_READY_STATES.has(it.executionStatus));
+    if (allReady) {
+      return { order: latest, ready: true, timeout: false };
+    }
+    if (Date.now() - startedAt >= timeoutMs) {
+      return { order: latest, ready: false, timeout: true };
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    latest = await prismaStore.getOrder(orderId);
+  }
+  return { order: null, ready: false, timeout: true };
+};
+
 const pickTokenContext = async (tier) => {
   const ctx = await getInternalRequestContext({ tier: tier || undefined });
   if (!ctx.token) {
@@ -97,7 +145,117 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
     tasks.push(task);
   }
 
-  return res.status(201).json({ order, tasks });
+  return res.status(201).json({
+    order,
+    tasks,
+    paymentDecision: buildPaymentDecision(order)
+  });
+});
+
+ordersRoutes.get("/:id/payment-options", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  return res.json({
+    orderId: order.id,
+    paymentDecision: buildPaymentDecision(order)
+  });
+});
+
+ordersRoutes.post("/:id/payment/prepare", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const waitForReady = req.body?.waitForReady !== false;
+  const timeoutMs = Math.max(2000, Number(req.body?.timeoutMs) || 20000);
+  const readyState = waitForReady
+    ? await waitForPaymentReady(order.id, timeoutMs)
+    : { order, ready: false, timeout: false };
+  const targetOrder = readyState.order || order;
+
+  const payableItems = targetOrder.items
+    .filter((it) => it.status !== "CANCELLED" && it.paymentStatus !== "PAID")
+    .sort((a, b) => a.splitIndex - b.splitIndex);
+
+  const paymentSplits = [];
+  for (const item of payableItems) {
+    if (!PAYMENT_READY_STATES.has(item.executionStatus)) {
+      paymentSplits.push({
+        ...toPaymentSplitView(item),
+        paymentLink: null,
+        linkState: "PENDING_ORDER_SUBMIT"
+      });
+      continue;
+    }
+
+    try {
+      const payment = await generateOrderItemPaymentLink({ orderItemId: item.id });
+      paymentSplits.push({
+        ...toPaymentSplitView(item),
+        paymentLink: payment.paymentLink,
+        paymentOrderNo: payment.paymentOrderNo,
+        payOrgMerId: payment.payOrgMerId,
+        channelType: payment.channelType,
+        payInfo: payment.payInfo,
+        linkState: "READY"
+      });
+    } catch (err) {
+      paymentSplits.push({
+        ...toPaymentSplitView(item),
+        paymentLink: null,
+        linkState: "LINK_FAILED",
+        error: err?.message || "generate payment link failed"
+      });
+    }
+  }
+
+  return res.json({
+    orderId: targetOrder.id,
+    ready: readyState.ready,
+    timeout: readyState.timeout,
+    paymentDecision: buildPaymentDecision(targetOrder),
+    paymentSplits
+  });
+});
+
+ordersRoutes.post("/:id/payment/sync", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const paidItemIds = Array.isArray(req.body?.paidItemIds)
+    ? req.body.paidItemIds.map((it) => String(it))
+    : [];
+  const shouldRefreshExecution = req.body?.refreshExecutionStatus !== false;
+
+  for (const item of order.items) {
+    if (shouldRefreshExecution) {
+      await prismaStore.refreshOrderItemStatus(item.id);
+    }
+    if (paidItemIds.includes(item.id)) {
+      await prismaStore.updateOrderItem(item.id, { paymentStatus: "PAID" });
+    }
+  }
+
+  const refreshed = await prismaStore.refreshOrderStatus(order.id);
+  return res.json({
+    order: refreshed,
+    paymentDecision: buildPaymentDecision(refreshed)
+  });
 });
 
 ordersRoutes.post("/atour/calculate", requireAuth, async (req, res) => {
@@ -175,6 +333,7 @@ ordersRoutes.post("/atour/pay-methods", requireAuth, async (req, res) => {
 ordersRoutes.post("/atour/workflow", requireAuth, async (req, res) => {
   try {
     const tokenCtx = await pickTokenContext(req.body?.tier);
+    // TODO: 自动领门店优惠券，并选择优惠券
     const result = await runAtourOrderWorkflow({
       token: tokenCtx.token,
       calculatePayload: req.body?.calculatePayload || {}
@@ -238,7 +397,11 @@ ordersRoutes.post("/:id/submit", requireAuth, async (req, res) => {
     }
     tasks.push(await enqueueOrderItemTask(item));
   }
-  return res.json({ order: result.order, tasks });
+  return res.json({
+    order: result.order,
+    tasks,
+    paymentDecision: buildPaymentDecision(result.order)
+  });
 });
 
 ordersRoutes.post("/:id/cancel", requireAuth, async (req, res) => {

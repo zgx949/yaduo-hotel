@@ -51,6 +51,33 @@ class TaskPlatform {
     this.workers = new Map();
     this.moduleConfigs = new Map();
     this.started = false;
+    this.maintenanceTimer = null;
+    this.syncing = null;
+  }
+
+  async syncModulesSafe() {
+    if (this.syncing) {
+      return this.syncing;
+    }
+    this.syncing = this.syncModules().finally(() => {
+      this.syncing = null;
+    });
+    return this.syncing;
+  }
+
+  startMaintenanceLoop() {
+    if (this.maintenanceTimer || !this.started) {
+      return;
+    }
+    const intervalMs = Math.max(1000, Number(env.taskPollIntervalMs) || 5000);
+    this.maintenanceTimer = setInterval(() => {
+      this.syncModulesSafe().catch((err) => {
+        if (env.nodeEnv !== "production") {
+          console.warn("[task-platform] periodic sync failed:", err?.message || err);
+        }
+      });
+    }, intervalMs);
+    this.maintenanceTimer.unref?.();
   }
 
   async start() {
@@ -61,8 +88,9 @@ class TaskPlatform {
       this.connection = buildRedisConnection();
       await this.connection.connect();
       await this.connection.ping();
-      await this.syncModules();
+      await this.syncModulesSafe();
       this.started = true;
+      this.startMaintenanceLoop();
     } catch (err) {
       this.enabled = false;
       if (this.connection) {
@@ -74,6 +102,10 @@ class TaskPlatform {
   }
 
   async stop() {
+    if (this.maintenanceTimer) {
+      clearInterval(this.maintenanceTimer);
+      this.maintenanceTimer = null;
+    }
     const closing = [];
     for (const worker of this.workers.values()) {
       closing.push(worker.close());
@@ -236,6 +268,9 @@ class TaskPlatform {
       throw new Error(`module disabled: ${moduleId}`);
     }
     const queueName = normalizeQueueName(moduleConfig.queueName);
+    if (!this.queues.has(queueName) || !this.workers.has(queueName)) {
+      await this.syncModulesSafe();
+    }
     const queue = this.queues.get(queueName);
     if (!queue) {
       throw new Error(`queue not found: ${queueName}`);
