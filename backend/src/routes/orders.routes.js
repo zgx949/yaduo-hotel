@@ -7,6 +7,7 @@ import { taskPlatform } from "../tasks/task-platform.js";
 import {
   addAppOrder,
   calculateOrderV2,
+  cancelAtourOrder,
   createPayOrder,
   generateOrderItemPaymentLink,
   getCashierInformation,
@@ -100,6 +101,74 @@ const enqueueOrderItemTask = async (orderItem) => {
     await prismaStore.refreshOrderStatus(orderItem.groupId);
   });
   return fallbackTask;
+};
+
+const cancelSingleOrderItem = async (orderItem, options = {}) => {
+  if (!orderItem || orderItem.status === "CANCELLED") {
+    return {
+      itemId: orderItem?.id || "",
+      splitIndex: orderItem?.splitIndex || 0,
+      state: "SKIPPED",
+      message: "already cancelled"
+    };
+  }
+
+  if (env.taskSystemEnabled) {
+    try {
+      const task = await taskPlatform.enqueueModule(
+        "order.cancel",
+        {
+          orderItemId: orderItem.id,
+          reason: options.reason || "OTHER",
+          reasonBody: options.reasonBody || ""
+        },
+        { orderGroupId: orderItem.groupId, orderItemId: orderItem.id }
+      );
+      return {
+        itemId: orderItem.id,
+        splitIndex: orderItem.splitIndex,
+        state: "QUEUED",
+        taskId: task.id
+      };
+    } catch (err) {
+      if (env.nodeEnv !== "production") {
+        console.warn("order.cancel enqueue failed, fallback to local mode:", err?.message || err);
+      }
+    }
+  }
+
+  try {
+    if (orderItem.atourOrderId) {
+      const order = await prismaStore.getOrder(orderItem.groupId);
+      if (!order) {
+        throw new Error("order not found");
+      }
+
+      const tokenCtx = await pickTokenContext(orderItem.bookingTier || undefined);
+      await cancelAtourOrder({
+        token: tokenCtx.token,
+        chainId: order.chainId,
+        folioId: orderItem.atourOrderId,
+        reason: options.reason || "OTHER",
+        reasonBody: options.reasonBody || ""
+      });
+    }
+
+    const cancelledItem = await prismaStore.cancelOrderItem(orderItem.id);
+    return {
+      itemId: orderItem.id,
+      splitIndex: orderItem.splitIndex,
+      state: "CANCELLED",
+      item: cancelledItem
+    };
+  } catch (err) {
+    return {
+      itemId: orderItem.id,
+      splitIndex: orderItem.splitIndex,
+      state: "FAILED",
+      message: err?.message || "cancel failed"
+    };
+  }
 };
 
 ordersRoutes.get("/", requireAuth, async (req, res) => {
@@ -413,28 +482,27 @@ ordersRoutes.post("/:id/cancel", requireAuth, async (req, res) => {
   if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
     return res.status(403).json({ message: "Forbidden" });
   }
-  if (env.taskSystemEnabled) {
-    try {
-      const tasks = [];
-      for (const item of order.items.filter((it) => it.status !== "CANCELLED")) {
-        tasks.push(
-          await taskPlatform.enqueueModule(
-            "order.cancel",
-            { orderItemId: item.id },
-            { orderGroupId: order.id, orderItemId: item.id }
-          )
-        );
-      }
-      return res.json({ queued: true, tasks });
-    } catch (err) {
-      if (env.nodeEnv !== "production") {
-        console.warn("order.cancel enqueue failed, fallback to local mode:", err?.message || err);
-      }
-    }
-  }
+  const targets = order.items.filter((it) => it.status !== "CANCELLED");
+  const reason = req.body?.reason || "OTHER";
+  const reasonBody = req.body?.reasonBody || "";
+  const results = await Promise.all(
+    targets.map((item) => cancelSingleOrderItem(item, { reason, reasonBody }))
+  );
 
-  const cancelled = await prismaStore.cancelOrder(order.id);
-  return res.json(cancelled);
+  const refreshedOrder = await prismaStore.refreshOrderStatus(order.id);
+  const summary = {
+    total: targets.length,
+    queued: results.filter((it) => it.state === "QUEUED").length,
+    cancelled: results.filter((it) => it.state === "CANCELLED").length,
+    skipped: results.filter((it) => it.state === "SKIPPED").length,
+    failed: results.filter((it) => it.state === "FAILED").length
+  };
+
+  return res.json({
+    order: refreshedOrder,
+    summary,
+    results
+  });
 });
 
 ordersRoutes.patch("/items/:itemId", requireAuth, async (req, res) => {
@@ -512,24 +580,21 @@ ordersRoutes.post("/items/:itemId/cancel", requireAuth, async (req, res) => {
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  if (env.taskSystemEnabled) {
-    try {
-      const task = await taskPlatform.enqueueModule(
-        "order.cancel",
-        { orderItemId: item.id },
-        { orderGroupId: item.groupId, orderItemId: item.id }
-      );
-      return res.json({ queued: true, task });
-    } catch (err) {
-      if (env.nodeEnv !== "production") {
-        console.warn("order.cancel(item) enqueue failed, fallback to local mode:", err?.message || err);
-      }
-    }
+  const result = await cancelSingleOrderItem(item, {
+    reason: req.body?.reason || "OTHER",
+    reasonBody: req.body?.reasonBody || ""
+  });
+  await prismaStore.refreshOrderStatus(item.groupId);
+
+  if (result.state === "FAILED") {
+    return res.status(400).json({ message: result.message || "cancel item failed" });
   }
 
-  const cancelled = await prismaStore.cancelOrderItem(item.id);
-  await prismaStore.refreshOrderStatus(item.groupId);
-  return res.json(cancelled);
+  if (result.state === "QUEUED") {
+    return res.json({ queued: true, taskId: result.taskId, result });
+  }
+
+  return res.json({ queued: false, result });
 });
 
 ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) => {

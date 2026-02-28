@@ -6,6 +6,12 @@ interface OrdersProps {
   currentUser?: SystemUser | null;
 }
 
+interface CancelConfirmState {
+  mode: 'order' | 'item';
+  orderId: string;
+  item?: OrderSplitItem;
+}
+
 const TOKEN_KEY = 'skyhotel_auth_token';
 
 const statusText = (status: string) => {
@@ -57,6 +63,9 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const [submittingOrderId, setSubmittingOrderId] = useState('');
   const [cancellingOrderId, setCancellingOrderId] = useState('');
   const [iframeUrl, setIframeUrl] = useState('');
+  const [notice, setNotice] = useState('');
+  const [cancelConfirm, setCancelConfirm] = useState<CancelConfirmState | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -81,6 +90,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const loadOrders = async () => {
     setLoading(true);
     setError('');
+    setNotice('');
     try {
       const data = await fetchWithAuth('/api/orders');
       setOrders(Array.isArray(data.items) ? data.items : []);
@@ -201,13 +211,66 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const cancelItem = async (item: OrderSplitItem) => {
     setUpdatingItemId(item.id);
     setError('');
+    setNotice('');
     try {
-      await fetchWithAuth(`/api/orders/items/${item.id}/cancel`, { method: 'POST' });
+      const data = await fetchWithAuth(`/api/orders/items/${item.id}/cancel`, { method: 'POST' });
+      if (data?.queued) {
+        setNotice(`拆单 #${item.splitIndex}/${item.splitTotal} 已进入取消队列`);
+      } else {
+        setNotice(`拆单 #${item.splitIndex}/${item.splitTotal} 已取消`);
+      }
       await loadOrders();
     } catch (err) {
       setError(err instanceof Error ? err.message : '取消拆单失败');
     } finally {
       setUpdatingItemId('');
+    }
+  };
+
+  const requestCancelItem = (orderId: string, item: OrderSplitItem) => {
+    setCancelConfirm({ mode: 'item', orderId, item });
+  };
+
+  const cancelOrder = async (orderId: string) => {
+    setCancellingOrderId(orderId);
+    setError('');
+    setNotice('');
+    try {
+      const data = await fetchWithAuth(`/api/orders/${orderId}/cancel`, { method: 'POST' });
+      const summary = data?.summary;
+      if (summary) {
+        setNotice(
+          `一键取消完成：总计 ${summary.total} 条，已取消 ${summary.cancelled} 条，排队 ${summary.queued} 条，失败 ${summary.failed} 条`
+        );
+      } else {
+        setNotice('一键取消完成');
+      }
+      await loadOrders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '一键取消失败');
+    } finally {
+      setCancellingOrderId('');
+    }
+  };
+
+  const requestCancelOrder = (orderId: string) => {
+    setCancelConfirm({ mode: 'order', orderId });
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelConfirm) {
+      return;
+    }
+    setConfirmingCancel(true);
+    try {
+      if (cancelConfirm.mode === 'order') {
+        await cancelOrder(cancelConfirm.orderId);
+      } else if (cancelConfirm.item) {
+        await cancelItem(cancelConfirm.item);
+      }
+      setCancelConfirm(null);
+    } finally {
+      setConfirmingCancel(false);
     }
   };
 
@@ -221,19 +284,6 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
       setError(err instanceof Error ? err.message : '一键下单失败');
     } finally {
       setSubmittingOrderId('');
-    }
-  };
-
-  const cancelOrder = async (orderId: string) => {
-    setCancellingOrderId(orderId);
-    setError('');
-    try {
-      await fetchWithAuth(`/api/orders/${orderId}/cancel`, { method: 'POST' });
-      await loadOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '一键取消失败');
-    } finally {
-      setCancellingOrderId('');
     }
   };
 
@@ -282,6 +332,9 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
 
       {error && (
         <div className="px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">{error}</div>
+      )}
+      {notice && (
+        <div className="px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-sm text-emerald-700">{notice}</div>
       )}
 
       <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pb-3">
@@ -338,7 +391,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          cancelOrder(order.id);
+                          requestCancelOrder(order.id);
                         }}
                         disabled={cancellingOrderId === order.id}
                         className="px-2 py-1 rounded border border-red-200 text-xs bg-red-50 text-red-700 disabled:opacity-50"
@@ -418,7 +471,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                                   </button>
                                   <button
                                     disabled={updatingItemId === item.id}
-                                    onClick={() => cancelItem(item)}
+                                    onClick={() => requestCancelItem(order.id, item)}
                                     className="px-2 py-1 text-xs rounded border border-red-200 text-red-700 bg-red-50 disabled:opacity-50"
                                   >
                                     取消
@@ -451,6 +504,39 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
               </button>
             </div>
             <iframe title="官方订单详情" src={iframeUrl} className="w-full flex-1" />
+          </div>
+        </div>
+      )}
+
+      {cancelConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white border border-gray-200 shadow-xl p-4 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold text-gray-900">确认取消</h3>
+              <p className="text-sm text-gray-600">
+                {cancelConfirm.mode === 'order'
+                  ? '确定要执行一键取消吗？系统会并发取消该主订单下的所有未取消拆单，并汇总返回结果。'
+                  : `确定要取消拆单 #${cancelConfirm.item?.splitIndex}/${cancelConfirm.item?.splitTotal} 吗？`}
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelConfirm(null)}
+                disabled={confirmingCancel}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancel}
+                disabled={confirmingCancel}
+                className="px-3 py-1.5 text-sm rounded-lg border border-red-200 bg-red-50 text-red-700 disabled:opacity-50"
+              >
+                {confirmingCancel ? '处理中...' : '确认取消'}
+              </button>
+            </div>
           </div>
         </div>
       )}

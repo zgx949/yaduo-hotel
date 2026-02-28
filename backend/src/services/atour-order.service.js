@@ -84,6 +84,47 @@ export const addAppOrder = async ({ token, payload }) => {
   return data.result || {};
 };
 
+export const cancelAtourOrder = async ({
+  token,
+  chainId,
+  folioId,
+  reason = "OTHER",
+  reasonBody = ""
+}) => {
+  if (!token) {
+    throw new Error("cancelOrder failed (missing token)");
+  }
+  if (!chainId || !folioId) {
+    throw new Error("cancelOrder failed (missing chainId or folioId)");
+  }
+
+  const payload = new URLSearchParams({
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activeId: "",
+    platType: String(env.atourPlatformType),
+    r: String(Math.random()),
+    token: String(token),
+    chainId: String(chainId),
+    folioId: String(folioId),
+    reason: String(reason || "OTHER"),
+    reasonBody: String(reasonBody || ""),
+    appVer: String(env.atourAppVersion)
+  });
+
+  const response = await fetch(`${env.atourOrderApiBaseUrl}/order/cancelOrder`, {
+    method: "POST",
+    headers: {
+      ...buildAtourHeaders(token),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: payload.toString()
+  });
+
+  const data = await parseAtourResponse(response, "cancelOrder failed");
+  return data.result || {};
+};
+
 export const createPayOrder = async ({ token, payload }) => {
   const query = buildAtourQuery(token);
   const response = await fetch(`${env.atourOrderApiBaseUrl}/pay/createPayOrder?${query}`, {
