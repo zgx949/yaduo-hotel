@@ -1,9 +1,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIQuoteResponse } from "../types";
 
-// Initialize Gemini client
-const apiKey = process.env.API_KEY || ''; 
-const ai = new GoogleGenAI({ apiKey });
+const resolveApiKey = (): string => {
+  const env = (import.meta as ImportMeta & { env?: { VITE_GEMINI_API_KEY?: string } }).env;
+  return env?.VITE_GEMINI_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+};
+
+let aiClient: GoogleGenAI | null = null;
+
+const getAiClient = (): GoogleGenAI | null => {
+  const apiKey = resolveApiKey().trim();
+  if (!apiKey) {
+    return null;
+  }
+  if (!aiClient) {
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+};
 
 export const generateQuoteFromInput = async (input: { 
   text?: string, 
@@ -11,7 +25,8 @@ export const generateQuoteFromInput = async (input: {
   mimeType?: string,
   customInstructions?: string
 }): Promise<AIQuoteResponse | null> => {
-  if (!apiKey) {
+  const ai = getAiClient();
+  if (!ai) {
     console.error("API Key is missing");
     return null;
   }
@@ -89,7 +104,8 @@ export const generateQuoteFromInput = async (input: {
 };
 
 export const analyzePriceTrend = async (hotelName: string, history: {date: string, price: number}[]): Promise<string> => {
-    if (!apiKey) return "API Key missing. Cannot analyze trends.";
+    const ai = getAiClient();
+    if (!ai) return "API Key missing. Cannot analyze trends.";
 
     try {
         const historyStr = history.map(h => `${h.date}: $${h.price}`).join('\n');
