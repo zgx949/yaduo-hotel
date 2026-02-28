@@ -1,0 +1,7 @@
+node_modules
+backend/node_modules
+backend/prisma/dev.db
+npm-debug.log
+.git
+.DS_Store
+dist

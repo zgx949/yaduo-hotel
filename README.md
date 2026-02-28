@@ -62,6 +62,30 @@ npm run dev
 - Backend: `http://localhost:8787`
 - Health: `http://localhost:8787/api/health`
 
+## Docker 一键启动
+
+在项目根目录执行：
+
+```bash
+docker compose up -d --build
+```
+
+默认地址：
+
+- Web (Nginx + 前端静态资源): `http://localhost`
+- Backend API (经 Nginx 反向代理): `http://localhost/api/*`
+
+说明：
+
+- 前端会在镜像构建阶段自动执行 `npm run build`，并将 `dist` 发布到 Nginx。
+- 后端容器会读取 `backend/.env`，并通过 Compose 自动连接 `redis` 服务。
+
+停止并清理容器：
+
+```bash
+docker compose down
+```
+
 ## 环境变量
 
 ### Frontend

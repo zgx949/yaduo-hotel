@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skyhotel-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      CORS_ORIGIN: http://localhost
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - ./backend/prisma:/app/prisma
+    expose:
+      - "8787"
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: skyhotel-web
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: skyhotel-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
