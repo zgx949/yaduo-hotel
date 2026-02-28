@@ -3,4 +3,3 @@ npm-debug.log
 .git
 .DS_Store
 .env
-prisma/dev.db

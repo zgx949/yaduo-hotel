@@ -17,8 +17,8 @@ React 原型 + Express 后端同仓项目。
 - Frontend: React + Vite + TypeScript
 - Backend: Express (ESM)
 - Runtime: Node.js 20+
-- 当前存储: Prisma + SQLite（users/pool/blacklist/system）
-- 计划接入: PostgreSQL + Redis + BullMQ
+- 当前存储: Prisma + PostgreSQL（users/pool/blacklist/system）
+- 任务系统: Redis + BullMQ
 
 ## 项目结构
 
@@ -78,7 +78,7 @@ docker compose up -d --build
 说明：
 
 - 前端会在镜像构建阶段自动执行 `npm run build`，并将 `dist` 发布到 Nginx。
-- 后端容器启动时会自动执行 `prisma migrate deploy` 与 `prisma db seed`，确保首次部署自动建表并初始化演示账号。
+- 后端容器启动时会自动执行 `prisma db push` 与 `prisma db seed`，确保首次部署自动建表并初始化演示账号。
 - 后端容器会读取 `backend/.env`，并通过 Compose 自动连接 `redis` 服务。
 
 停止并清理容器：
@@ -107,7 +107,7 @@ PORT=8787
 API_PREFIX=/api
 CORS_ORIGIN=http://localhost:3000
 USE_MEMORY_STORE=true
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="postgresql://username:password@pgm-bp1irw4n13d8h1hc8o.pg.rds.aliyuncs.com:5432/skyhotel?schema=public"
 ATOUR_ACCESS_TOKEN=
 ATOUR_CLIENT_ID=363CB080-412A-4BFB-AF6E-8C3472F93814
 ATOUR_PLATFORM_TYPE=2
@@ -125,9 +125,9 @@ ATOUR_PLACE_SEARCH_BASE_URL=https://api2.yaduo.com/atourlife/placeSearch/searchV
 - 搜索框联想通过 `/api/hotels/place-search?keyword=` 代理亚朵 `placeSearch/searchV2`。
 - 未配置 `ATOUR_ACCESS_TOKEN` 时，前端会自动回退到本地 `MOCK_HOTELS`。
 
-### Backend 数据库（Prisma）
+### Backend 数据库（Prisma + PostgreSQL）
 
-后端已接入 Prisma，以下模块默认走数据库（SQLite）：
+后端已接入 Prisma，以下模块默认走 PostgreSQL 数据库：
 
 - 用户与权限（users/auth）
 - 号池管理（pool）
@@ -139,7 +139,7 @@ ATOUR_PLACE_SEARCH_BASE_URL=https://api2.yaduo.com/atourlife/placeSearch/searchV
 ```bash
 npm --prefix backend install
 npm --prefix backend run prisma:generate
-npm --prefix backend run prisma:migrate -- --name init_sqlite
+npx --prefix backend prisma db push
 npm --prefix backend run prisma:seed
 ```
 
@@ -152,13 +152,10 @@ npm --prefix backend run prisma:studio
 如果 Studio 看不到表或提示 `DATABASE_URL` 错误，请确认 `backend/.env` 里有：
 
 ```bash
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="postgresql://username:password@pgm-bp1irw4n13d8h1hc8o.pg.rds.aliyuncs.com:5432/skyhotel?schema=public"
 ```
 
-本地 SQLite 统一使用 `backend/prisma/dev.db`。如果你之前跑过旧路径，可能残留 `backend/dev.db`
-或 `backend/prisma/prisma/dev.db`，建议先备份再删除旧文件，避免 Studio 连接到错误库。
-
-并且先执行过 `prisma:migrate` 和 `prisma:seed`。
+并且先执行过 `prisma db push` 和 `prisma:seed`。
 
 ### 实时任务与定时任务（BullMQ + Redis）
 
@@ -182,11 +179,11 @@ TASK_POLL_INTERVAL_MS=5000
 
 说明：优先使用 `REDIS_URL`，未配置时使用 host/port 组合。
 
-切换到 PostgreSQL（部署环境）：
+当前版本已默认使用 PostgreSQL。部署时只需要正确配置 `DATABASE_URL`，然后执行：
 
-1. 将 `backend/prisma/schema.prisma` 的 `datasource db.provider` 从 `sqlite` 改为 `postgresql`
-2. 将 `DATABASE_URL` 改为 PostgreSQL 连接串（如 `postgresql://user:pass@host:5432/dbname`）
-3. 重新执行 `npm --prefix backend run prisma:migrate` 与 `npm --prefix backend run prisma:generate`
+1. `npm --prefix backend run prisma:generate`
+2. `npx --prefix backend prisma db push`
+3. `npm --prefix backend run prisma:seed`
 
 ## 后端 API（当前骨架）
 
