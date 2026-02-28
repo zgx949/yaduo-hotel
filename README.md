@@ -78,6 +78,7 @@ docker compose up -d --build
 说明：
 
 - 前端会在镜像构建阶段自动执行 `npm run build`，并将 `dist` 发布到 Nginx。
+- 后端容器启动时会自动执行 `prisma migrate deploy` 与 `prisma db seed`，确保首次部署自动建表并初始化演示账号。
 - 后端容器会读取 `backend/.env`，并通过 Compose 自动连接 `redis` 服务。
 
 停止并清理容器：
