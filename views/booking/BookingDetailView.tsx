@@ -76,6 +76,26 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
         </div>
       )}
 
+      {selectedHotel.newUserPopupStatus === 'ALERT' && (
+        <div className="bg-red-600 p-3 flex items-center gap-3 border-b border-red-700">
+          <div className="w-8 h-8 rounded-full bg-white text-red-600 flex items-center justify-center flex-shrink-0 text-lg">!</div>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-white">新客弹窗告警</p>
+            <p className="text-[11px] text-red-100">{selectedHotel.newUserPopupMessage || '该酒店新用户下单可能触发弹窗，请谨慎下单。'}</p>
+          </div>
+        </div>
+      )}
+
+      {selectedHotel.newUserPopupStatus === 'UNKNOWN' && (
+        <div className="bg-amber-50 p-3 flex items-center gap-3 border-b border-amber-200">
+          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0 text-lg">!</div>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-amber-900">新客弹窗检测未完成</p>
+            <p className="text-[11px] text-amber-700">{selectedHotel.newUserPopupMessage || '新客弹窗检测失败，建议谨慎选择新客渠道。'}</p>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white p-4 pb-6 relative">
         <div className="flex justify-between items-start mb-4">
           <div className="flex-1 pr-2">
@@ -224,6 +244,9 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
                             <h4 className="font-bold text-sm text-gray-800">{rate.name}</h4>
                             {rate.type === BookingType.PLATINUM && <span className="text-[10px] bg-slate-800 text-amber-200 px-1 rounded">铂金卡</span>}
                             {rate.type === BookingType.CORPORATE && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded">企</span>}
+                            {rate.type === BookingType.NEW_USER && rate.newUserPopupStatus === 'ALERT' && (
+                              <span className="text-[10px] bg-red-100 text-red-700 px-1 rounded">新客弹窗</span>
+                            )}
                             {effectiveStock !== undefined && effectiveStock > 0 && (
                               <span className={`text-[10px] px-1 rounded ${effectiveStock <= 3 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                 余{effectiveStock}间

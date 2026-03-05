@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hotel, RatePlan, Room } from '../../types';
+import { BookingType, Hotel, RatePlan, Room } from '../../types';
 import { VALUE_ADDED_SERVICES } from '../../constants';
 import { InvoiceFormValue } from '../../components/InvoiceFormSheet';
 
@@ -98,6 +98,17 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
             </div>
           </div>
           <p className="text-xs text-orange-400 mt-2">{selectedRate.cancelTips || '取消规则以酒店确认为准'} {">"}</p>
+
+          {selectedRate.type === BookingType.NEW_USER && selectedRate.newUserPopupStatus === 'ALERT' && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              新客弹窗告警：该酒店新用户下单可能触发弹窗，继续下单前请确认可接受。
+            </div>
+          )}
+          {selectedRate.type === BookingType.NEW_USER && selectedRate.newUserPopupStatus === 'UNKNOWN' && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              新客弹窗检测未完成，建议谨慎下单。
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl p-4 shadow-sm space-y-4">

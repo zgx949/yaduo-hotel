@@ -540,6 +540,18 @@ export const Booking: React.FC = () => {
       if (!selectedHotel || !selectedRoom || !selectedRate) {
         return;
       }
+      if (
+        submitNow &&
+        selectedRate.type === 'NEW_USER' &&
+        (selectedRate.newUserPopupStatus === 'ALERT' || selectedRate.newUserPopupStatus === 'UNKNOWN')
+      ) {
+        const message = selectedRate.newUserPopupStatus === 'ALERT'
+          ? '该酒店检测到新客下单弹窗风险，继续下单可能受影响。是否仍然提交？'
+          : '该酒店新客弹窗检测结果不确定，是否仍然继续下单？';
+        if (!window.confirm(message)) {
+          return;
+        }
+      }
       setIsLoading(true);
       setSearchError('');
       try {

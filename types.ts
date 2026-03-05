@@ -231,6 +231,8 @@ export interface RatePlan {
   channelKey?: string;
   channelLabel?: string;
   sourceAccountId?: string | null;
+  newUserPopupStatus?: 'ALERT' | 'CLEAR' | 'UNKNOWN' | 'NONE';
+  newUserPopupWarning?: boolean;
   originalPrice?: number;
   type: BookingType;
   tags: string[]; // e.g. ["含双早", "免费取消"]
@@ -265,6 +267,9 @@ export interface Hotel {
   reviews: number;
   image: string;
   tags: string[]; // e.g. ["外宾适用", "免费停车"]
+  newUserPopupStatus?: 'ALERT' | 'CLEAR' | 'UNKNOWN' | 'NONE';
+  newUserPopupWarning?: boolean;
+  newUserPopupMessage?: string;
   minPrice: number;
   rooms: Room[];
   blacklistCount?: number; // How many agents marked this as bad

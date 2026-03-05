@@ -149,6 +149,74 @@ const detectRateType = (rateItem = {}) => {
   return "NORMAL";
 };
 
+const idCardWeights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+const idCardCheckMap = ["1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"];
+
+const buildMockIdCardNumber = () => {
+  const areaCode = "110101";
+  const now = new Date();
+  const year = String(Math.max(1988, now.getFullYear() - Math.floor(Math.random() * 15))).padStart(4, "0");
+  const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, "0");
+  const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, "0");
+  const seq = String(Math.floor(Math.random() * 999) + 1).padStart(3, "0");
+  const base = `${areaCode}${year}${month}${day}${seq}`;
+  let sum = 0;
+  for (let i = 0; i < 17; i += 1) {
+    sum += Number(base[i]) * idCardWeights[i];
+  }
+  return `${base}${idCardCheckMap[sum % 11]}`;
+};
+
+const runNewUserPopupCheck = async ({ token, proxy, chainId }) => {
+  const params = new URLSearchParams({
+    token: String(token),
+    platType: String(env.atourPlatformType),
+    appVer: String(env.atourAppVersion),
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activityId: "",
+    activeId: ""
+  });
+
+  const headers = {
+    Accept: "application/json, text/plain, */*",
+    "At-Platform-Type": env.atourPlatformType,
+    "At-Client-Id": env.atourClientId,
+    "At-App-Version": env.atourAppVersion,
+    "Content-Type": "application/json",
+    "User-Agent": env.atourUserAgent,
+    "At-Access-Token": token,
+    "At-Channel-Id": env.atourChannelId,
+    ...(env.atourCookie ? { Cookie: env.atourCookie } : {})
+  };
+
+  const body = {
+    docType: 1,
+    realName: "刘三",
+    idCardNumber: buildMockIdCardNumber(),
+    chainId: String(chainId)
+  };
+
+  const response = await fetchWithProxy(`${atourApiOrigin}/atourlife/chain/newGuestIdentityCheck?${params.toString()}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    timeoutMs: 10000
+  }, proxy);
+
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok || raw?.retcode !== 0) {
+    throw new Error(raw?.retmsg || "newGuestIdentityCheck failed");
+  }
+
+  const warning = Boolean(raw?.result);
+  return {
+    status: warning ? "ALERT" : "CLEAR",
+    warning,
+    message: warning ? "检测到新客下单弹窗风险" : "未检测到新客下单弹窗"
+  };
+};
+
 const normalizeChainDetail = async (raw, fallback = {}, sourceMeta = {}) => {
   const result = raw?.result || {};
   const priceResponse = result.priceResponse || {};
@@ -196,6 +264,8 @@ const normalizeChainDetail = async (raw, fallback = {}, sourceMeta = {}) => {
           channelKey: sourceMeta?.channelKey || detectRateType(rateItem),
           channelLabel: sourceMeta?.label || sourceMeta?.channelKey || detectRateType(rateItem),
           sourceAccountId: sourceMeta?.tokenAccountId || null,
+          newUserPopupStatus: sourceMeta?.newUserPopupStatus || "NONE",
+          newUserPopupWarning: Boolean(sourceMeta?.newUserPopupWarning),
           tags: mergedTags,
           stock: toNumber(rateItem.leftRoomNum, NaN) || toNumber(rateItem.roomNum, NaN) || undefined,
           cancelTips: String(rateItem.cancelTips || "").trim() || undefined,
@@ -425,6 +495,27 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
         throw new Error(raw?.retmsg || `渠道 ${channel.label} 查询失败`);
       }
 
+      let newUserPopup = {
+        status: "NONE",
+        warning: false,
+        message: ""
+      };
+      if (channel.tier === "NEW_USER") {
+        try {
+          newUserPopup = await runNewUserPopupCheck({
+            token: channel.token,
+            proxy: channel.proxy,
+            chainId: hotelChainId
+          });
+        } catch (err) {
+          newUserPopup = {
+            status: "UNKNOWN",
+            warning: false,
+            message: err instanceof Error ? err.message : "新客弹窗检测失败"
+          };
+        }
+      }
+
       const hotel = await normalizeChainDetail(raw, {
         chainId: hotelChainId,
         name,
@@ -434,7 +525,9 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
         tier: channel.tier,
         channelKey: channel.channelKey,
         label: channel.label,
-        tokenAccountId: channel.tokenAccountId
+        tokenAccountId: channel.tokenAccountId,
+        newUserPopupStatus: newUserPopup.status,
+        newUserPopupWarning: newUserPopup.warning
       });
 
       return {
@@ -445,7 +538,8 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
           retmsg: raw?.retmsg,
           tokenSource: channel.tokenSource,
           tokenAccountId: channel.tokenAccountId,
-          proxyId: channel.proxy?.id || null
+          proxyId: channel.proxy?.id || null,
+          newUserPopup
         }
       };
     })
@@ -494,8 +588,29 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
   const mergedHotel = {
     ...base,
     minPrice: mergedRooms.length > 0 ? Math.min(...mergedRooms.map((room) => Number(room.rates[0]?.price || Infinity))) : 0,
-    rooms: mergedRooms
+    rooms: mergedRooms,
+    newUserPopupStatus: "NONE",
+    newUserPopupWarning: false,
+    newUserPopupMessage: ""
   };
+
+  const newUserMetas = successList
+    .filter((it) => it.channel.tier === "NEW_USER")
+    .map((it) => it.meta.newUserPopup)
+    .filter(Boolean);
+  if (newUserMetas.some((it) => it.status === "ALERT")) {
+    mergedHotel.newUserPopupStatus = "ALERT";
+    mergedHotel.newUserPopupWarning = true;
+    mergedHotel.newUserPopupMessage = "该酒店新用户下单可能触发弹窗，请谨慎操作";
+  } else if (newUserMetas.some((it) => it.status === "CLEAR")) {
+    mergedHotel.newUserPopupStatus = "CLEAR";
+    mergedHotel.newUserPopupWarning = false;
+    mergedHotel.newUserPopupMessage = "新用户下单未检测到弹窗";
+  } else if (newUserMetas.length > 0) {
+    mergedHotel.newUserPopupStatus = "UNKNOWN";
+    mergedHotel.newUserPopupWarning = false;
+    mergedHotel.newUserPopupMessage = "新用户弹窗检测失败，结果不确定";
+  }
 
   return res.json({
     hotel: mergedHotel,
@@ -507,8 +622,12 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
         channelKey: it.channel.channelKey,
         tokenSource: it.meta.tokenSource,
         tokenAccountId: it.meta.tokenAccountId,
-        proxyId: it.meta.proxyId
-      }))
+        proxyId: it.meta.proxyId,
+        newUserPopup: it.meta.newUserPopup
+      })),
+      newUserPopupStatus: mergedHotel.newUserPopupStatus,
+      newUserPopupWarning: mergedHotel.newUserPopupWarning,
+      newUserPopupMessage: mergedHotel.newUserPopupMessage
     }
   });
 });
