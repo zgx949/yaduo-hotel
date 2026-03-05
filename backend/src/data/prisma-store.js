@@ -245,7 +245,7 @@ const aggregateOrderStatuses = (items) => {
 
 const projectPoolAccount = (entity) => {
   const tier = deriveTier(entity);
-  const status = entity.isOnline ? "ACTIVE" : "OFFLINE";
+  const status = !entity.isEnabled ? "BLOCKED" : entity.isOnline ? "ACTIVE" : "OFFLINE";
   const corporateNames = entity.corporateAgreements.map((it) => it.name);
 
   return {
@@ -253,6 +253,7 @@ const projectPoolAccount = (entity) => {
     phone: entity.phone,
     token: "",
     token_configured: Boolean(entity.loginTokenCipher),
+    is_enabled: entity.isEnabled,
     is_online: entity.isOnline,
     remark: entity.remark || null,
     is_platinum: entity.isPlatinum,
@@ -566,6 +567,9 @@ export const prismaStore = {
   },
   async listPoolAccounts(filters = {}) {
     const where = {};
+    if (filters.is_enabled !== undefined) {
+      where.isEnabled = String(filters.is_enabled) === "true" || filters.is_enabled === true;
+    }
     if (filters.is_online !== undefined) {
       where.isOnline = String(filters.is_online) === "true" || filters.is_online === true;
     }
@@ -621,6 +625,7 @@ export const prismaStore = {
         phone: String(payload.phone || "").trim(),
         loginTokenCipher: token ? encryptPoolToken(token) : null,
         remark: payload.remark ? String(payload.remark) : null,
+        isEnabled: hasOwn(payload, "is_enabled") ? Boolean(payload.is_enabled) : true,
         isOnline: Boolean(payload.is_online),
         isPlatinum: Boolean(payload.is_platinum),
         isNewUser: Boolean(payload.is_new_user),
@@ -652,6 +657,9 @@ export const prismaStore = {
     }
     if (hasOwn(patch, "remark")) {
       data.remark = patch.remark ? String(patch.remark) : null;
+    }
+    if (hasOwn(patch, "is_enabled")) {
+      data.isEnabled = Boolean(patch.is_enabled);
     }
     if (hasOwn(patch, "is_online")) {
       data.isOnline = Boolean(patch.is_online);
@@ -699,7 +707,7 @@ export const prismaStore = {
     const corporateName = options.corporateName ? String(options.corporateName).trim() : null;
     const minDailyOrdersLeft = Math.max(0, Number(options.minDailyOrdersLeft || 0));
     const preferredAccountId = options.preferredAccountId ? String(options.preferredAccountId) : null;
-    const rows = await prisma.poolAccount.findMany({ where: { isOnline: true } });
+    const rows = await prisma.poolAccount.findMany({ where: { isOnline: true, isEnabled: true } });
     const candidates = rows.filter((it) => canUseTier(it, tier, corporateName) && (Number(it.dailyOrdersLeft) || 0) >= minDailyOrdersLeft);
 
     if (preferredAccountId) {

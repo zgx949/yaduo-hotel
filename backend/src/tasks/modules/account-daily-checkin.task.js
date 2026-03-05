@@ -1,7 +1,7 @@
 import { prismaStore } from "../../data/prisma-store.js";
 
 export const accountDailyCheckinTask = async ({ proxy }) => {
-  const accounts = await prismaStore.listPoolAccounts({ is_online: true });
+  const accounts = await prismaStore.listPoolAccounts({ is_enabled: true, is_online: true });
   const sample = accounts.slice(0, 10);
   return {
     ok: true,

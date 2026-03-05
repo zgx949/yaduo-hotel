@@ -44,6 +44,7 @@ poolRoutes.get("/accounts", requireAuth, async (req, res) => {
   const filters = {
     search: req.query.search,
     tier: req.query.tier,
+    is_enabled: toBooleanOrUndefined(req.query.is_enabled),
     is_online: toBooleanOrUndefined(req.query.is_online)
   };
   const items = await prismaStore.listPoolAccounts(filters);

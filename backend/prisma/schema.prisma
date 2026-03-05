@@ -36,6 +36,7 @@ model PoolAccount {
   phone               String
   loginTokenCipher    String?
   remark              String?
+  isEnabled           Boolean     @default(true)
   isOnline            Boolean     @default(false)
   isPlatinum          Boolean     @default(false)
   isNewUser           Boolean     @default(false)

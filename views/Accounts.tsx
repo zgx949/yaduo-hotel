@@ -51,6 +51,7 @@ export const Accounts: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [accounts, setAccounts] = useState<PoolAccount[]>(MOCK_ACCOUNTS as unknown as PoolAccount[]);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [togglingEnabledId, setTogglingEnabledId] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(false);
   const [error, setError] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -65,6 +66,7 @@ export const Accounts: React.FC = () => {
     phone: '',
     token: '',
     remark: '',
+    is_enabled: true,
     is_online: true,
     is_platinum: false,
     is_corp_user: false,
@@ -72,7 +74,8 @@ export const Accounts: React.FC = () => {
     corporate_agreements: [] as string[],
     breakfast_coupons: 0,
     room_upgrade_coupons: 0,
-    late_checkout_coupons: 0
+    late_checkout_coupons: 0,
+    dailyOrdersLeft: 0
   });
   
   // Modal State
@@ -278,6 +281,7 @@ export const Accounts: React.FC = () => {
       phone: '',
       token: '',
       remark: '',
+      is_enabled: true,
       is_online: true,
       is_platinum: false,
       is_corp_user: false,
@@ -285,7 +289,8 @@ export const Accounts: React.FC = () => {
       corporate_agreements: [],
       breakfast_coupons: 0,
       room_upgrade_coupons: 0,
-      late_checkout_coupons: 0
+      late_checkout_coupons: 0,
+      dailyOrdersLeft: 0
     });
     setAgreementQuery('');
     setAgreementDropdownOpen(false);
@@ -303,6 +308,7 @@ export const Accounts: React.FC = () => {
       phone: account.phone,
       token: '',
       remark: account.remark || '',
+      is_enabled: account.is_enabled !== false,
       is_online: account.is_online,
       is_platinum: account.is_platinum,
       is_corp_user: account.is_corp_user,
@@ -310,7 +316,8 @@ export const Accounts: React.FC = () => {
       corporate_agreements: (account.corporate_agreements || []).map((it) => it.name),
       breakfast_coupons: account.breakfast_coupons,
       room_upgrade_coupons: account.room_upgrade_coupons,
-      late_checkout_coupons: account.late_checkout_coupons
+      late_checkout_coupons: account.late_checkout_coupons,
+      dailyOrdersLeft: Number(account.dailyOrdersLeft || 0)
     });
     setAgreementQuery('');
     setAgreementDropdownOpen(false);
@@ -327,6 +334,22 @@ export const Accounts: React.FC = () => {
       setAccounts((prev) => prev.filter((it) => it.id !== account.id));
     } catch (err: any) {
       alert(err.message || '删除失败');
+    }
+  };
+
+  const handleToggleEnabled = async (account: PoolAccount) => {
+    const nextEnabled = !(account.is_enabled !== false);
+    setTogglingEnabledId(account.id);
+    try {
+      const updated = await fetchWithAuth(`/api/pool/accounts/${account.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_enabled: nextEnabled })
+      });
+      setAccounts((prev) => prev.map((it) => (it.id === account.id ? updated : it)));
+    } catch (err: any) {
+      alert(err.message || '更新启用状态失败');
+    } finally {
+      setTogglingEnabledId(null);
     }
   };
 
@@ -347,7 +370,8 @@ export const Accounts: React.FC = () => {
         corporate_agreements: form.corporate_agreements,
         breakfast_coupons: Number(form.breakfast_coupons),
         room_upgrade_coupons: Number(form.room_upgrade_coupons),
-        late_checkout_coupons: Number(form.late_checkout_coupons)
+        late_checkout_coupons: Number(form.late_checkout_coupons),
+        dailyOrdersLeft: Number(form.dailyOrdersLeft)
       };
 
       if (editingAccountId && !String(form.token || '').trim()) {
@@ -518,7 +542,8 @@ export const Accounts: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_enabled} onChange={(e) => setForm((prev) => ({ ...prev, is_enabled: e.target.checked }))} />启用</label>
               <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_online} onChange={(e) => setForm((prev) => ({ ...prev, is_online: e.target.checked }))} />在线</label>
               <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_new_user} onChange={(e) => setForm((prev) => ({ ...prev, is_new_user: e.target.checked }))} />新用户</label>
               <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_platinum} onChange={(e) => setForm((prev) => ({ ...prev, is_platinum: e.target.checked }))} />铂金</label>
@@ -620,7 +645,7 @@ export const Accounts: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">早餐券</label>
                 <input type="number" min={0} value={form.breakfast_coupons} onChange={(e) => setForm((prev) => ({ ...prev, breakfast_coupons: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
@@ -632,6 +657,10 @@ export const Accounts: React.FC = () => {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">延迟退房券</label>
                 <input type="number" min={0} value={form.late_checkout_coupons} onChange={(e) => setForm((prev) => ({ ...prev, late_checkout_coupons: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">预计剩余下单次数</label>
+                <input type="number" min={0} value={form.dailyOrdersLeft} onChange={(e) => setForm((prev) => ({ ...prev, dailyOrdersLeft: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
 
@@ -785,12 +814,29 @@ export const Accounts: React.FC = () => {
                              title="立即检测状态"
                            >
                               <svg className={`w-4 h-4 ${loadingAction === `${acc.id}-refresh` ? 'animate-spin text-blue-600' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            </button>
+                         </div>
+                         <div className="mt-2 flex items-center justify-between gap-3">
+                           <span className={`text-[11px] font-medium ${acc.is_enabled !== false ? 'text-emerald-700' : 'text-gray-500'}`}>
+                             {acc.is_enabled !== false ? '已启用' : '已禁用'}
+                           </span>
+                           <button
+                             type="button"
+                             onClick={() => handleToggleEnabled(acc)}
+                             disabled={togglingEnabledId === acc.id}
+                             className={`w-10 h-6 rounded-full p-1 transition-colors ${acc.is_enabled !== false ? 'bg-emerald-500' : 'bg-gray-300'} disabled:opacity-60`}
+                             title={acc.is_enabled !== false ? '点击禁用账号' : '点击启用账号'}
+                           >
+                             <span
+                               className={`block w-4 h-4 rounded-full bg-white shadow transition-transform ${acc.is_enabled !== false ? 'translate-x-4' : ''}`}
+                             />
                            </button>
-                        </div>
+                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded -ml-1" onClick={() => setSelectedAccount(acc)}>
                             <span className="text-xs font-medium text-gray-600">🪙 {acc.points.toLocaleString()} 积分</span>
+                            <span className="text-xs font-medium text-indigo-700">📦 预计剩余下单：{Number(acc.dailyOrdersLeft || 0)} 次</span>
                             <div className="flex flex-wrap gap-1.5">
                               {Object.entries(acc.coupons).map(([type, count]) => {
                                 if (count === 0) return null;

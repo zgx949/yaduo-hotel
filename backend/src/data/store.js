@@ -112,6 +112,7 @@ const poolAccounts = [
       slippersCoupons: 0
     },
     runtime: {
+      isEnabled: true,
       isOnline: true,
       dailyOrdersLeft: 5,
       lastExecution: {},
@@ -283,7 +284,7 @@ const deriveTier = (capabilities) => {
   return "NORMAL";
 };
 
-const deriveStatus = (runtime) => (runtime.isOnline ? "ACTIVE" : "OFFLINE");
+const deriveStatus = (runtime) => (!runtime.isEnabled ? "BLOCKED" : runtime.isOnline ? "ACTIVE" : "OFFLINE");
 const canUseTier = (entity, tier) => {
   if (!tier) {
     return true;
@@ -321,6 +322,7 @@ const projectPoolAccount = (entity) => {
     phone: entity.phone,
     token: "",
     token_configured: Boolean(entity.auth.loginTokenCipher),
+    is_enabled: entity.runtime.isEnabled,
     is_online: entity.runtime.isOnline,
     remark: entity.profile.remark || null,
     is_platinum: entity.capabilities.isPlatinum,
@@ -357,7 +359,7 @@ const normalizePoolPayload = (payload, existing = null) => {
       profile: { remark: null },
       capabilities: { isPlatinum: false, isNewUser: false, corporateBindings: [] },
       wallet: { points: 0, breakfastCoupons: 0, roomUpgradeCoupons: 0, lateCheckoutCoupons: 0, slippersCoupons: 0 },
-      runtime: { isOnline: false, dailyOrdersLeft: 0, lastExecution: {}, lastResult: {} },
+      runtime: { isEnabled: true, isOnline: false, dailyOrdersLeft: 0, lastExecution: {}, lastResult: {} },
       createdAt: now(),
       updatedAt: now()
     };
@@ -378,6 +380,9 @@ const normalizePoolPayload = (payload, existing = null) => {
   }
   if (hasOwn(payload, "is_online")) {
     next.runtime.isOnline = Boolean(payload.is_online);
+  }
+  if (hasOwn(payload, "is_enabled")) {
+    next.runtime.isEnabled = Boolean(payload.is_enabled);
   }
   if (hasOwn(payload, "is_platinum")) {
     next.capabilities.isPlatinum = Boolean(payload.is_platinum);
@@ -640,6 +645,10 @@ export const store = {
           it.capabilities.corporateBindings.some((corp) => corp.name.toLowerCase().includes(keyword))
       );
     }
+    if (filters.is_enabled !== undefined) {
+      const enabled = String(filters.is_enabled) === "true";
+      items = items.filter((it) => Boolean(it.runtime.isEnabled) === enabled);
+    }
     if (filters.is_online !== undefined) {
       const online = String(filters.is_online) === "true";
       items = items.filter((it) => it.runtime.isOnline === online);
@@ -686,7 +695,7 @@ export const store = {
   },
   acquirePoolToken(options = {}) {
     const tier = options.tier ? String(options.tier).toUpperCase() : null;
-    const onlineAccounts = poolAccounts.filter((it) => it.runtime.isOnline);
+    const onlineAccounts = poolAccounts.filter((it) => it.runtime.isOnline && it.runtime.isEnabled);
     const candidates = onlineAccounts.filter((it) => canUseTier(it, tier));
     if (candidates.length === 0) {
       return null;

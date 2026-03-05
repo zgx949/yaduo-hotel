@@ -346,7 +346,7 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
   const finishDate = endDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const systemConfig = await prismaStore.getSystemConfig();
-  const poolAccounts = await prismaStore.listPoolAccounts({ is_online: true });
+  const poolAccounts = await prismaStore.listPoolAccounts({ is_enabled: true, is_online: true });
   const candidateChannels = buildSearchChannelsForUser({
     user: req.auth.user,
     systemChannels: systemConfig.channels,

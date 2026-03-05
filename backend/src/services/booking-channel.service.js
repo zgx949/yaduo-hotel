@@ -110,12 +110,12 @@ export const buildSearchChannelsForUser = ({ user, systemChannels, poolAccounts 
   const channels = [];
   const accounts = asArray(poolAccounts);
 
-  const onlineNewUser = accounts.some((it) => it.is_online && it.is_new_user);
-  const onlinePlatinum = accounts.some((it) => it.is_online && it.is_platinum);
+  const onlineNewUser = accounts.some((it) => it.is_online && it.is_enabled !== false && it.is_new_user);
+  const onlinePlatinum = accounts.some((it) => it.is_online && it.is_enabled !== false && it.is_platinum);
   const onlineCorporateNames = Array.from(
     new Set(
       accounts
-        .filter((it) => it.is_online)
+        .filter((it) => it.is_online && it.is_enabled !== false)
         .flatMap((it) => asArray(it.corporate_agreements))
         .filter((it) => it?.enabled)
         .map((it) => String(it.name || "").trim())
