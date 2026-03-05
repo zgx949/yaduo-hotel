@@ -1,6 +1,8 @@
 import { env } from "../config/env.js";
 import { prismaStore } from "../data/prisma-store.js";
+import { parseBookingTier } from "./booking-channel.service.js";
 import { getInternalRequestContext } from "./internal-resource.service.js";
+import { fetchWithProxy } from "./proxied-fetch.service.js";
 
 const ALIPAY_APP_ID = "2021003121605466";
 const ALIPAY_APP_BRIDGE_ID = "20000067";
@@ -59,13 +61,14 @@ const parseAtourResponse = async (response, fallbackMessage) => {
   return data;
 };
 
-export const calculateOrderV2 = async ({ token, payload }) => {
+export const calculateOrderV2 = async ({ token, payload, proxy }) => {
   const query = buildAtourQuery(token);
-  const response = await fetch(`${env.atourOrderApiBaseUrl}/order/calculateOrderV2?${query}`, {
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/calculateOrderV2?${query}`, {
     method: "POST",
     headers: buildAtourHeaders(token),
-    body: JSON.stringify(payload || {})
-  });
+    body: JSON.stringify(payload || {}),
+    timeoutMs: 12000
+  }, proxy);
   const data = await parseAtourResponse(response, "calculateOrderV2 failed");
   if (!data?.result || (typeof data.result === "object" && Object.keys(data.result).length === 0)) {
     throw new Error(`calculateOrderV2 returned empty result (retcode=${data?.retcode ?? "unknown"} retmsg=${data?.retmsg || ""})`);
@@ -73,19 +76,21 @@ export const calculateOrderV2 = async ({ token, payload }) => {
   return data.result || {};
 };
 
-export const addAppOrder = async ({ token, payload }) => {
+export const addAppOrder = async ({ token, payload, proxy }) => {
   const query = buildAtourQuery(token);
-  const response = await fetch(`${env.atourOrderApiBaseUrl}/order/addAppOrder?${query}`, {
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/addAppOrder?${query}`, {
     method: "POST",
     headers: buildAtourHeaders(token),
-    body: JSON.stringify(payload || {})
-  });
+    body: JSON.stringify(payload || {}),
+    timeoutMs: 12000
+  }, proxy);
   const data = await parseAtourResponse(response, "addAppOrder failed");
   return data.result || {};
 };
 
 export const cancelAtourOrder = async ({
   token,
+  proxy,
   chainId,
   folioId,
   reason = "OTHER",
@@ -112,36 +117,39 @@ export const cancelAtourOrder = async ({
     appVer: String(env.atourAppVersion)
   });
 
-  const response = await fetch(`${env.atourOrderApiBaseUrl}/order/cancelOrder`, {
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/cancelOrder`, {
     method: "POST",
     headers: {
       ...buildAtourHeaders(token),
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: payload.toString()
-  });
+    body: payload.toString(),
+    timeoutMs: 12000
+  }, proxy);
 
   const data = await parseAtourResponse(response, "cancelOrder failed");
   return data.result || {};
 };
 
-export const createPayOrder = async ({ token, payload }) => {
+export const createPayOrder = async ({ token, payload, proxy }) => {
   const query = buildAtourQuery(token);
-  const response = await fetch(`${env.atourOrderApiBaseUrl}/pay/createPayOrder?${query}`, {
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/pay/createPayOrder?${query}`, {
     method: "POST",
     headers: buildAtourHeaders(token),
-    body: JSON.stringify(payload || {})
-  });
+    body: JSON.stringify(payload || {}),
+    timeoutMs: 12000
+  }, proxy);
   const data = await parseAtourResponse(response, "createPayOrder failed");
   return data.result || {};
 };
 
-export const getCashierInformation = async ({ token, payload }) => {
-  const response = await fetch(`${env.atourUserGatewayBaseUrl}/api/cash/atour-cash-ser/cashier/information`, {
+export const getCashierInformation = async ({ token, payload, proxy }) => {
+  const response = await fetchWithProxy(`${env.atourUserGatewayBaseUrl}/api/cash/atour-cash-ser/cashier/information`, {
     method: "POST",
     headers: buildAtourHeaders(token),
-    body: JSON.stringify(payload || {})
-  });
+    body: JSON.stringify(payload || {}),
+    timeoutMs: 12000
+  }, proxy);
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.respCode !== "SUCCESS") {
     throw new Error(data?.respDesc || "cashier information failed");
@@ -149,12 +157,13 @@ export const getCashierInformation = async ({ token, payload }) => {
   return data.data || {};
 };
 
-export const payByCashier = async ({ token, payload }) => {
-  const response = await fetch(`${env.atourUserGatewayBaseUrl}/api/cash/atour-cash-ser/cashier/pay`, {
+export const payByCashier = async ({ token, payload, proxy }) => {
+  const response = await fetchWithProxy(`${env.atourUserGatewayBaseUrl}/api/cash/atour-cash-ser/cashier/pay`, {
     method: "POST",
     headers: buildAtourHeaders(token),
-    body: JSON.stringify(payload || {})
-  });
+    body: JSON.stringify(payload || {}),
+    timeoutMs: 12000
+  }, proxy);
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.respCode !== "SUCCESS") {
     throw new Error(data?.respDesc || "cashier pay failed");
@@ -241,8 +250,8 @@ const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, custo
   };
 };
 
-export const runAtourOrderWorkflow = async ({ token, calculatePayload }) => {
-  const calculateResult = await calculateOrderV2({ token, payload: calculatePayload });
+export const runAtourOrderWorkflow = async ({ token, proxy, calculatePayload }) => {
+  const calculateResult = await calculateOrderV2({ token, proxy, payload: calculatePayload });
   const createPayload = calculatePayload.createPayload || {};
   const addPayload = {
     ...buildAddOrderPayloadFromItem({
@@ -253,7 +262,7 @@ export const runAtourOrderWorkflow = async ({ token, calculatePayload }) => {
     }),
     ...(createPayload.overrideAddPayload || {})
   };
-  const addResult = await addAppOrder({ token, payload: addPayload });
+  const addResult = await addAppOrder({ token, proxy, payload: addPayload });
   const payOrderPayload = {
     chainId: String(calculatePayload.chainId),
     source: "order",
@@ -261,7 +270,7 @@ export const runAtourOrderWorkflow = async ({ token, calculatePayload }) => {
     busType: "room_order",
     ...(createPayload.overridePayOrderPayload || {})
   };
-  const payOrderResult = await createPayOrder({ token, payload: payOrderPayload });
+  const payOrderResult = await createPayOrder({ token, proxy, payload: payOrderPayload });
   const cashierPayload = {
     appFlag: "1",
     reqSeqId: String(Date.now()),
@@ -270,7 +279,7 @@ export const runAtourOrderWorkflow = async ({ token, calculatePayload }) => {
     payTermType: "APP",
     ...(createPayload.overrideCashierPayload || {})
   };
-  const cashierInformation = await getCashierInformation({ token, payload: cashierPayload });
+  const cashierInformation = await getCashierInformation({ token, proxy, payload: cashierPayload });
 
   return {
     calculateResult,
@@ -290,10 +299,21 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     throw new Error("order not found");
   }
 
-  const resourceCtx = await getInternalRequestContext({ tier: item.bookingTier || undefined });
+  const bookingChannel = parseBookingTier(item.bookingTier || undefined);
+  const resourceCtx = await getInternalRequestContext({
+    tier: bookingChannel.tier,
+    corporateName: bookingChannel.corporateName,
+    preferredAccountId: item.accountId || undefined,
+    minDailyOrdersLeft: 1
+  });
   if (!resourceCtx.token) {
-    throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+    throw new Error("余额不足：该下单渠道暂无可用账号");
   }
+  if (!resourceCtx.proxy) {
+    throw new Error("暂无可用代理节点");
+  }
+
+  // TODO: 如果当前账号 dailyOrdersLeft 不足，后续应自动拆单并继续路由到下一可用账号。
 
   const calculatePayload = buildCalculatePayloadFromItem({
     order,
@@ -303,6 +323,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
   });
   const workflow = await runAtourOrderWorkflow({
     token: resourceCtx.token,
+    proxy: resourceCtx.proxy,
     calculatePayload: {
       ...calculatePayload,
       createPayload: {
@@ -314,6 +335,8 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
 
   await prismaStore.updateOrderItem(orderItemId, {
     atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
+    accountId: resourceCtx.tokenAccountId || item.accountId || null,
+    accountPhone: resourceCtx.tokenAccountPhone || item.accountPhone || null,
     status: "CONFIRMED",
     executionStatus: "ORDERED"
   });
@@ -359,13 +382,23 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
     throw new Error("order not found");
   }
 
-  const resourceCtx = await getInternalRequestContext({ tier: item.bookingTier || undefined });
+  const bookingChannel = parseBookingTier(item.bookingTier || undefined);
+  const resourceCtx = await getInternalRequestContext({
+    tier: bookingChannel.tier,
+    corporateName: bookingChannel.corporateName,
+    preferredAccountId: item.accountId || undefined,
+    minDailyOrdersLeft: 1
+  });
   if (!resourceCtx.token) {
     throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+  }
+  if (!resourceCtx.proxy) {
+    throw new Error("暂无可用代理节点");
   }
 
   const payOrderResult = await createPayOrder({
     token: resourceCtx.token,
+    proxy: resourceCtx.proxy,
     payload: {
       chainId: String(order.chainId),
       source: "order",
@@ -376,6 +409,7 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
 
   const cashierInformation = await getCashierInformation({
     token: resourceCtx.token,
+    proxy: resourceCtx.proxy,
     payload: {
       appFlag: "1",
       reqSeqId: String(Date.now()),
@@ -404,6 +438,7 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
   if (payOrgMerId && payOrderResult.token) {
     payData = await payByCashier({
       token: resourceCtx.token,
+      proxy: resourceCtx.proxy,
       payload: {
         channelType,
         payType: "A",

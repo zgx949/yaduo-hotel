@@ -3,7 +3,9 @@ import { Router } from "express";
 import { env } from "../config/env.js";
 import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth } from "../middleware/auth.js";
+import { buildSearchChannelsForUser } from "../services/booking-channel.service.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
+import { fetchWithProxy } from "../services/proxied-fetch.service.js";
 
 export const hotelsRoutes = Router();
 
@@ -147,7 +149,7 @@ const detectRateType = (rateItem = {}) => {
   return "NORMAL";
 };
 
-const normalizeChainDetail = async (raw, fallback = {}) => {
+const normalizeChainDetail = async (raw, fallback = {}, sourceMeta = {}) => {
   const result = raw?.result || {};
   const priceResponse = result.priceResponse || {};
   const roomList = Array.isArray(priceResponse.chainRoomList) ? priceResponse.chainRoomList : [];
@@ -190,7 +192,10 @@ const normalizeChainDetail = async (raw, fallback = {}) => {
           rateCodeActivities: String(rateItem.rateCodeActivities || "").trim() || undefined,
           roomTypeId: String(roomInfo.roomTypeId || "").trim() || undefined,
           originalPrice: toNumber(rateItem.marketPrice, undefined),
-          type: detectRateType(rateItem),
+          type: sourceMeta?.tier || detectRateType(rateItem),
+          channelKey: sourceMeta?.channelKey || detectRateType(rateItem),
+          channelLabel: sourceMeta?.label || sourceMeta?.channelKey || detectRateType(rateItem),
+          sourceAccountId: sourceMeta?.tokenAccountId || null,
           tags: mergedTags,
           stock: toNumber(rateItem.leftRoomNum, NaN) || toNumber(rateItem.roomNum, NaN) || undefined,
           cancelTips: String(rateItem.cancelTips || "").trim() || undefined,
@@ -250,6 +255,9 @@ hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
   if (!resourceCtx.token) {
     return res.status(400).json({ message: "No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN." });
   }
+  if (!resourceCtx.proxy) {
+    return res.status(400).json({ message: "No available proxy from proxy pool." });
+  }
 
   const keyword = String(req.query.keyword || "").trim();
   if (!keyword) {
@@ -285,15 +293,12 @@ hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
     ...(env.atourCookie ? { Cookie: env.atourCookie } : {})
   };
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
-
   try {
-    const response = await fetch(`${env.atourPlaceSearchBaseUrl}?${query.toString()}`, {
+    const response = await fetchWithProxy(`${env.atourPlaceSearchBaseUrl}?${query.toString()}`, {
       method: "GET",
       headers,
-      signal: controller.signal
-    });
+      timeoutMs: 12000
+    }, resourceCtx.proxy);
 
     const raw = await response.json();
     if (!response.ok || raw?.retcode !== 0) {
@@ -318,18 +323,11 @@ hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
     return res.status(502).json({
       message: err.name === "AbortError" ? "Atour place search timeout" : "Atour place search failed"
     });
-  } finally {
-    clearTimeout(timeout);
   }
 });
 
 
 hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
-  const resourceCtx = await getInternalRequestContext();
-  if (!resourceCtx.token) {
-    return res.status(400).json({ message: "No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN." });
-  }
-
   const {
     chainId = "",
     beginDate,
@@ -345,85 +343,172 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
   }
 
   const startDate = beginDate || new Date().toISOString().slice(0, 10);
-  const finishDate =
-    endDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const finishDate = endDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const query = new URLSearchParams({
-    platType: env.atourPlatformType,
-    appVer: env.atourAppVersion,
-    inactiveId: "",
-    channelId: env.atourChannelId,
-    token: resourceCtx.token,
-    activitySource: "",
-    activeId: ""
+  const systemConfig = await prismaStore.getSystemConfig();
+  const poolAccounts = await prismaStore.listPoolAccounts({ is_online: true });
+  const candidateChannels = buildSearchChannelsForUser({
+    user: req.auth.user,
+    systemChannels: systemConfig.channels,
+    poolAccounts
   });
 
-  const headers = {
-    Accept: "*/*",
-    "At-Platform-Type": env.atourPlatformType,
-    "At-Client-Id": env.atourClientId,
-    "At-App-Version": env.atourAppVersion,
-    "Content-Type": "application/json",
-    "User-Agent": env.atourUserAgent,
-    "At-Access-Token": resourceCtx.token,
-    "At-Channel-Id": env.atourChannelId,
-    ...(env.atourCookie ? { Cookie: env.atourCookie } : {})
-  };
-
-  const body = {
-    beginDate: startDate,
-    endDate: finishDate,
-    sortByPriceWithCoupon: 1,
-    chainId: hotelChainId,
-    delegatorId: "",
-    delegatorMebId: "",
-    corporationId: ""
-  };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
-
-  try {
-    const response = await fetch(`${atourApiOrigin}/atourlife/chain/chainDetailQuote?${query.toString()}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-
-    const raw = await response.json();
-    if (!response.ok || raw?.retcode !== 0) {
-      return res.status(response.ok ? 502 : response.status).json({
-        message: raw?.retmsg || "Atour detail request failed"
-      });
-    }
-
-    const hotel = await normalizeChainDetail(raw, {
-      chainId: hotelChainId,
-      name,
-      address,
-      cityName
-    });
-
-    if (!hotel.rooms.length) {
-      return res.status(502).json({ message: "酒店详情返回无可预订房型，请稍后重试" });
-    }
-
-    return res.json({
-      hotel,
-      meta: {
-        retcode: raw?.retcode,
-        retmsg: raw?.retmsg,
-        tokenSource: resourceCtx.tokenSource,
-        tokenAccountId: resourceCtx.tokenAccountId,
-        proxyId: resourceCtx.proxy?.id || null
-      }
-    });
-  } catch (err) {
-    return res.status(502).json({
-      message: err.name === "AbortError" ? "Atour detail timeout" : "Atour detail request failed"
-    });
-  } finally {
-    clearTimeout(timeout);
+  if (candidateChannels.length === 0) {
+    return res.status(403).json({ message: "当前账号无可用查询渠道或配额" });
   }
+
+  const channelContexts = await Promise.all(candidateChannels.map(async (channel) => {
+    const ctx = await getInternalRequestContext({
+      tier: channel.tier,
+      corporateName: channel.corporateName || undefined
+    });
+    if (!ctx.token || !ctx.proxy) {
+      return null;
+    }
+    return {
+      ...channel,
+      token: ctx.token,
+      tokenSource: ctx.tokenSource,
+      tokenAccountId: ctx.tokenAccountId,
+      proxy: ctx.proxy
+    };
+  }));
+
+  const runnableChannels = channelContexts.filter(Boolean);
+  if (runnableChannels.length === 0) {
+    return res.status(502).json({ message: "号池或代理池无可用资源，请稍后重试" });
+  }
+
+  const settled = await Promise.allSettled(
+    runnableChannels.map(async (channel) => {
+      const query = new URLSearchParams({
+        platType: env.atourPlatformType,
+        appVer: env.atourAppVersion,
+        inactiveId: "",
+        channelId: env.atourChannelId,
+        token: channel.token,
+        activitySource: "",
+        activeId: ""
+      });
+
+      const headers = {
+        Accept: "*/*",
+        "At-Platform-Type": env.atourPlatformType,
+        "At-Client-Id": env.atourClientId,
+        "At-App-Version": env.atourAppVersion,
+        "Content-Type": "application/json",
+        "User-Agent": env.atourUserAgent,
+        "At-Access-Token": channel.token,
+        "At-Channel-Id": env.atourChannelId,
+        ...(env.atourCookie ? { Cookie: env.atourCookie } : {})
+      };
+
+      const body = {
+        beginDate: startDate,
+        endDate: finishDate,
+        sortByPriceWithCoupon: 1,
+        chainId: hotelChainId,
+        delegatorId: "",
+        delegatorMebId: "",
+        corporationId: ""
+      };
+
+      const response = await fetchWithProxy(`${atourApiOrigin}/atourlife/chain/chainDetailQuote?${query.toString()}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        timeoutMs: 12000
+      }, channel.proxy);
+
+      const raw = await response.json().catch(() => ({}));
+      if (!response.ok || raw?.retcode !== 0) {
+        throw new Error(raw?.retmsg || `渠道 ${channel.label} 查询失败`);
+      }
+
+      const hotel = await normalizeChainDetail(raw, {
+        chainId: hotelChainId,
+        name,
+        address,
+        cityName
+      }, {
+        tier: channel.tier,
+        channelKey: channel.channelKey,
+        label: channel.label,
+        tokenAccountId: channel.tokenAccountId
+      });
+
+      return {
+        channel,
+        hotel,
+        meta: {
+          retcode: raw?.retcode,
+          retmsg: raw?.retmsg,
+          tokenSource: channel.tokenSource,
+          tokenAccountId: channel.tokenAccountId,
+          proxyId: channel.proxy?.id || null
+        }
+      };
+    })
+  );
+
+  const successList = settled.filter((it) => it.status === "fulfilled").map((it) => it.value);
+  const failedList = settled
+    .filter((it) => it.status === "rejected")
+    .map((it) => ({ message: it.reason?.message || "query failed" }));
+
+  if (successList.length === 0) {
+    return res.status(502).json({
+      message: "全部渠道查询失败",
+      failures: failedList
+    });
+  }
+
+  const base = successList[0].hotel;
+  const roomMap = new Map();
+  for (const entry of successList) {
+    for (const room of entry.hotel.rooms || []) {
+      const roomKey = `${room.id}:${room.name}`;
+      if (!roomMap.has(roomKey)) {
+        roomMap.set(roomKey, {
+          ...room,
+          rates: []
+        });
+      }
+      roomMap.get(roomKey).rates.push(...(room.rates || []));
+    }
+  }
+
+  const mergedRooms = Array.from(roomMap.values())
+    .map((room) => {
+      room.rates = room.rates
+        .filter((rate, index, arr) => {
+          const key = `${rate.channelKey}:${rate.rateCodeId || rate.rpActivityId || rate.id}`;
+          return arr.findIndex((x) => `${x.channelKey}:${x.rateCodeId || x.rpActivityId || x.id}` === key) === index;
+        })
+        .sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+      return room;
+    })
+    .filter((room) => room.rates.length > 0)
+    .sort((a, b) => Number(a.rates[0]?.price || Infinity) - Number(b.rates[0]?.price || Infinity));
+
+  const mergedHotel = {
+    ...base,
+    minPrice: mergedRooms.length > 0 ? Math.min(...mergedRooms.map((room) => Number(room.rates[0]?.price || Infinity))) : 0,
+    rooms: mergedRooms
+  };
+
+  return res.json({
+    hotel: mergedHotel,
+    meta: {
+      channelsTried: runnableChannels.map((it) => it.channelKey),
+      channelsSuccess: successList.map((it) => it.channel.channelKey),
+      partialFailures: failedList,
+      channelDetails: successList.map((it) => ({
+        channelKey: it.channel.channelKey,
+        tokenSource: it.meta.tokenSource,
+        tokenAccountId: it.meta.tokenAccountId,
+        proxyId: it.meta.proxyId
+      }))
+    }
+  });
 });

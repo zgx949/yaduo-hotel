@@ -66,6 +66,14 @@ const asNumber = (value, fallback = 0) => {
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+const decryptPoolTokenSafe = (cipher) => {
+  try {
+    return decryptPoolToken(cipher || "");
+  } catch {
+    return null;
+  }
+};
+
 const normalizeCorporateBindings = (input = [], existing = []) => {
   const source = Array.isArray(input) ? input : existing;
   const seen = new Set();
@@ -100,7 +108,19 @@ const deriveTier = (account) => {
   return "NORMAL";
 };
 
-const canUseTier = (account, tier) => {
+const hasCorporateAgreement = (account, corporateName = null) => {
+  const agreements = Array.isArray(account.corporateAgreements) ? account.corporateAgreements : [];
+  const enabled = agreements.filter((it) => it?.enabled !== false).map((it) => String(it?.name || "").trim()).filter(Boolean);
+  if (enabled.length === 0) {
+    return false;
+  }
+  if (!corporateName) {
+    return true;
+  }
+  return enabled.includes(String(corporateName).trim());
+};
+
+const canUseTier = (account, tier, corporateName = null) => {
   if (!tier) {
     return true;
   }
@@ -111,7 +131,7 @@ const canUseTier = (account, tier) => {
     return Boolean(account.isPlatinum);
   }
   if (tier === "CORPORATE") {
-    return account.corporateAgreements.length > 0;
+    return hasCorporateAgreement(account, corporateName);
   }
   return true;
 };
@@ -676,8 +696,27 @@ export const prismaStore = {
   },
   async acquirePoolToken(options = {}) {
     const tier = options.tier ? String(options.tier).toUpperCase() : null;
+    const corporateName = options.corporateName ? String(options.corporateName).trim() : null;
+    const minDailyOrdersLeft = Math.max(0, Number(options.minDailyOrdersLeft || 0));
+    const preferredAccountId = options.preferredAccountId ? String(options.preferredAccountId) : null;
     const rows = await prisma.poolAccount.findMany({ where: { isOnline: true } });
-    const candidates = rows.filter((it) => canUseTier(it, tier));
+    const candidates = rows.filter((it) => canUseTier(it, tier, corporateName) && (Number(it.dailyOrdersLeft) || 0) >= minDailyOrdersLeft);
+
+    if (preferredAccountId) {
+      const preferred = candidates.find((it) => it.id === preferredAccountId);
+      if (preferred?.loginTokenCipher) {
+        const token = decryptPoolTokenSafe(preferred.loginTokenCipher);
+        if (token) {
+          return {
+            token,
+            accountId: preferred.id,
+            accountPhone: preferred.phone,
+            dailyOrdersLeft: Number(preferred.dailyOrdersLeft) || 0
+          };
+        }
+      }
+    }
+
     if (candidates.length === 0) {
       return null;
     }
@@ -693,7 +732,8 @@ export const prismaStore = {
           return {
             token,
             accountId: item.id,
-            accountPhone: item.phone
+            accountPhone: item.phone,
+            dailyOrdersLeft: Number(item.dailyOrdersLeft) || 0
           };
         }
       } catch {

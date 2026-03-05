@@ -559,7 +559,7 @@ export const Booking: React.FC = () => {
             remark: bookingForm.note,
             splits: [
               {
-                bookingTier: selectedRate.type,
+                bookingTier: selectedRate.channelKey || selectedRate.type,
                 roomTypeId: selectedRate.roomTypeId || selectedRoom.id,
                 rateCode: selectedRate.rateCode,
                 rateCodeId: selectedRate.rateCodeId,

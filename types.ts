@@ -227,6 +227,9 @@ export interface RatePlan {
   rateCodePriceType?: string;
   rateCodeActivities?: string;
   roomTypeId?: string;
+  channelKey?: string;
+  channelLabel?: string;
+  sourceAccountId?: string | null;
   originalPrice?: number;
   type: BookingType;
   tags: string[]; // e.g. ["含双早", "免费取消"]

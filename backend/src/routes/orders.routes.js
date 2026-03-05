@@ -13,6 +13,7 @@ import {
   getCashierInformation,
   runAtourOrderWorkflow
 } from "../services/atour-order.service.js";
+import { canUserUseBookingTier, parseBookingTier } from "../services/booking-channel.service.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
 
 export const ordersRoutes = Router();
@@ -65,10 +66,19 @@ const waitForPaymentReady = async (orderId, timeoutMs = 20000, intervalMs = 600)
   return { order: null, ready: false, timeout: true };
 };
 
-const pickTokenContext = async (tier) => {
-  const ctx = await getInternalRequestContext({ tier: tier || undefined });
+const pickTokenContext = async (tier, options = {}) => {
+  const bookingChannel = parseBookingTier(tier || undefined);
+  const ctx = await getInternalRequestContext({
+    tier: bookingChannel.tier,
+    corporateName: bookingChannel.corporateName,
+    preferredAccountId: options.preferredAccountId,
+    minDailyOrdersLeft: options.minDailyOrdersLeft || 0
+  });
   if (!ctx.token) {
     throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+  }
+  if (!ctx.proxy) {
+    throw new Error("No available proxy from proxy pool");
   }
   return ctx;
 };
@@ -144,9 +154,13 @@ const cancelSingleOrderItem = async (orderItem, options = {}) => {
         throw new Error("order not found");
       }
 
-      const tokenCtx = await pickTokenContext(orderItem.bookingTier || undefined);
+      const tokenCtx = await pickTokenContext(orderItem.bookingTier || undefined, {
+        preferredAccountId: orderItem.accountId || undefined,
+        minDailyOrdersLeft: 1
+      });
       await cancelAtourOrder({
         token: tokenCtx.token,
+        proxy: tokenCtx.proxy,
         chainId: order.chainId,
         folioId: orderItem.atourOrderId,
         reason: options.reason || "OTHER",
@@ -203,6 +217,22 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
     const missingRateIdentity = splits.find((it) => !it?.rpActivityId && !it?.rateCodeId);
     if (missingRateIdentity) {
       return res.status(400).json({ message: "Each split must include rpActivityId or rateCodeId" });
+    }
+  }
+
+  const systemConfig = await prismaStore.getSystemConfig();
+  const previewSplits = Array.isArray(splits) && splits.length > 0
+    ? splits
+    : [{ bookingTier: req.body?.bookingTier || "NORMAL" }];
+  for (const split of previewSplits) {
+    const channel = parseBookingTier(split?.bookingTier || "NORMAL");
+    const permissionCheck = canUserUseBookingTier({
+      user: req.auth.user,
+      channel,
+      systemChannels: systemConfig.channels
+    });
+    if (!permissionCheck.ok) {
+      return res.status(403).json({ message: permissionCheck.message || "该渠道无权限或配额不足" });
     }
   }
 
@@ -333,6 +363,7 @@ ordersRoutes.post("/atour/calculate", requireAuth, async (req, res) => {
     const tokenCtx = await pickTokenContext(req.body?.tier);
     const result = await calculateOrderV2({
       token: tokenCtx.token,
+      proxy: tokenCtx.proxy,
       payload: req.body?.payload || {}
     });
     return res.json({
@@ -351,6 +382,7 @@ ordersRoutes.post("/atour/create", requireAuth, async (req, res) => {
     const tokenCtx = await pickTokenContext(req.body?.tier);
     const result = await addAppOrder({
       token: tokenCtx.token,
+      proxy: tokenCtx.proxy,
       payload: req.body?.payload || {}
     });
     return res.json({
@@ -369,6 +401,7 @@ ordersRoutes.post("/atour/pay-order", requireAuth, async (req, res) => {
     const tokenCtx = await pickTokenContext(req.body?.tier);
     const result = await createPayOrder({
       token: tokenCtx.token,
+      proxy: tokenCtx.proxy,
       payload: req.body?.payload || {}
     });
     return res.json({
@@ -387,6 +420,7 @@ ordersRoutes.post("/atour/pay-methods", requireAuth, async (req, res) => {
     const tokenCtx = await pickTokenContext(req.body?.tier);
     const result = await getCashierInformation({
       token: tokenCtx.token,
+      proxy: tokenCtx.proxy,
       payload: req.body?.payload || {}
     });
     return res.json({
@@ -406,6 +440,7 @@ ordersRoutes.post("/atour/workflow", requireAuth, async (req, res) => {
     // TODO: 自动领门店优惠券，并选择优惠券
     const result = await runAtourOrderWorkflow({
       token: tokenCtx.token,
+      proxy: tokenCtx.proxy,
       calculatePayload: req.body?.calculatePayload || {}
     });
     return res.json({
