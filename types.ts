@@ -17,8 +17,8 @@ export enum AccountTier {
   NEW_USER = 'NEW_USER',       // 新用户
   NORMAL = 'NORMAL',           // 普通账号
   GOLD = 'GOLD',               // 金卡
-  PLATINUM = 'PLATINUM',       // 白金
-  CO_PLATINUM = 'CO_PLATINUM', // 联合白金
+  PLATINUM = 'PLATINUM',       // 铂金
+  CO_PLATINUM = 'CO_PLATINUM', // 联合铂金
   CORPORATE = 'CORPORATE',     // 企业协议
   DIAMOND = 'DIAMOND'          // 钻石
 }
@@ -219,7 +219,7 @@ export interface QuoteTask {
 
 export interface RatePlan {
   id: string;
-  name: string; // e.g. "白金会员专享价", "企业协议价"
+  name: string; // e.g. "铂金会员专享价", "企业协议价"
   price: number;
   rateCode?: string;
   rateCodeId?: string;

@@ -335,7 +335,7 @@ export const SystemSettings: React.FC = () => {
       <Card title="下单渠道总开关">
         <div className="space-y-3 text-sm">
           <label className="flex items-center justify-between"><span>新客首单</span><input type="checkbox" checked={config.channels.enableNewUser} onChange={() => handleToggleChannel('enableNewUser')} /></label>
-          <label className="flex items-center justify-between"><span>白金会员</span><input type="checkbox" checked={config.channels.enablePlatinum} onChange={() => handleToggleChannel('enablePlatinum')} /></label>
+          <label className="flex items-center justify-between"><span>铂金会员</span><input type="checkbox" checked={config.channels.enablePlatinum} onChange={() => handleToggleChannel('enablePlatinum')} /></label>
           <label className="flex items-center justify-between"><span>企业协议</span><input type="checkbox" checked={config.channels.enableCorporate} onChange={() => handleToggleChannel('enableCorporate')} /></label>
         </div>
       </Card>

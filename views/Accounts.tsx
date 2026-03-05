@@ -25,8 +25,8 @@ const TIER_LABELS: Record<string, { label: string, color: string }> = {
   [AccountTier.NEW_USER]: { label: '新用户', color: 'bg-green-100 text-green-800' },
   [AccountTier.NORMAL]: { label: '普通', color: 'bg-gray-100 text-gray-800' },
   [AccountTier.GOLD]: { label: '金卡', color: 'bg-yellow-100 text-yellow-800' },
-  [AccountTier.PLATINUM]: { label: '白金', color: 'bg-purple-100 text-purple-800' },
-  [AccountTier.CO_PLATINUM]: { label: '联合白金', color: 'bg-indigo-100 text-indigo-800' },
+  [AccountTier.PLATINUM]: { label: '铂金', color: 'bg-purple-100 text-purple-800' },
+  [AccountTier.CO_PLATINUM]: { label: '联合铂金', color: 'bg-indigo-100 text-indigo-800' },
   [AccountTier.CORPORATE]: { label: '企业协议', color: 'bg-blue-100 text-blue-800' },
   [AccountTier.DIAMOND]: { label: '钻石', color: 'bg-slate-800 text-white' },
 };

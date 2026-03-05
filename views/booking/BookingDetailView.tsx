@@ -222,7 +222,7 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
                         <div className="flex-1 pr-2">
                           <div className="flex items-center gap-2">
                             <h4 className="font-bold text-sm text-gray-800">{rate.name}</h4>
-                            {rate.type === BookingType.PLATINUM && <span className="text-[10px] bg-slate-800 text-amber-200 px-1 rounded">白金卡</span>}
+                            {rate.type === BookingType.PLATINUM && <span className="text-[10px] bg-slate-800 text-amber-200 px-1 rounded">铂金卡</span>}
                             {rate.type === BookingType.CORPORATE && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded">企</span>}
                             {effectiveStock !== undefined && effectiveStock > 0 && (
                               <span className={`text-[10px] px-1 rounded ${effectiveStock <= 3 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>

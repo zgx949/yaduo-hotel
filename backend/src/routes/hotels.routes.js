@@ -143,7 +143,7 @@ const detectRateType = (rateItem = {}) => {
     return "NEW_USER";
   }
   const rateName = String(rateItem.rateCodeName || "");
-  if (rateName.includes("铂金") || rateName.includes("白金")) {
+  if (rateName.includes("铂金")) {
     return "PLATINUM";
   }
   return "NORMAL";

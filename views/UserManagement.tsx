@@ -465,7 +465,7 @@ export const UserManagement: React.FC = () => {
                                       </div>
                                       {/* Platinum */}
                                       <div className={`flex items-center gap-2 ${user.permissions.allowPlatinumBooking ? 'text-gray-900' : 'text-gray-400 opacity-50'}`}>
-                                          <span className="text-[10px] font-bold border border-current px-1 rounded text-amber-700 border-amber-200 bg-amber-50 w-8 text-center">白金</span>
+                                          <span className="text-[10px] font-bold border border-current px-1 rounded text-amber-700 border-amber-200 bg-amber-50 w-8 text-center">铂金</span>
                                           <div className="flex text-xs gap-3">
                                               <span>日限: <strong>{renderValueText(user.permissions.platinumLimit)}</strong></span>
                                               <span className="text-gray-300">|</span>
@@ -595,7 +595,7 @@ export const UserManagement: React.FC = () => {
                                   checked={bulkTargetPermissions.platinum}
                                   onChange={e => setBulkTargetPermissions({...bulkTargetPermissions, platinum: e.target.checked})}
                               />
-                              <span className="text-sm font-medium text-gray-700">白金会员权限</span>
+                              <span className="text-sm font-medium text-gray-700">铂金会员权限</span>
                           </label>
                           <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                               <input 
@@ -742,7 +742,7 @@ export const UserManagement: React.FC = () => {
                               <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
                                   <div className="flex items-center justify-between mb-3">
                                       <span className="text-sm font-bold text-amber-800 flex items-center gap-2">
-                                          👑 白金会员权限
+                                          👑 铂金会员权限
                                       </span>
                                       <label className="relative inline-flex items-center cursor-pointer">
                                           <input 
