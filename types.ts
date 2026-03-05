@@ -106,6 +106,11 @@ export interface OrderSplitItem {
   rpActivityId?: string | null;
   rateCodePriceType?: string | null;
   rateCodeActivities?: string | null;
+  remark?: string | null;
+  breakfastCount?: number;
+  roomLevelUpCount?: number;
+  delayedCheckOutCount?: number;
+  shooseCount?: number;
   roomType: string;
   roomCount: number;
   accountId?: string | null;

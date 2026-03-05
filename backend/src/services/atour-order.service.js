@@ -88,6 +88,167 @@ export const addAppOrder = async ({ token, payload, proxy }) => {
   return data.result || {};
 };
 
+const listChainCouponsForChain = async ({ token, proxy, chainId }) => {
+  const params = new URLSearchParams({
+    platType: env.atourPlatformType,
+    appVer: env.atourAppVersion,
+    channelId: env.atourChannelId,
+    "At-Platform-Type": env.atourPlatformType,
+    "At-Client-Id": env.atourClientId,
+    "At-App-Version": env.atourAppVersion,
+    "At-Channel-Id": env.atourChannelId,
+    deviceId: env.atourClientId,
+    token: String(token),
+    chainId: String(chainId),
+    inactiveId: "",
+    activitySource: "",
+    activeId: ""
+  });
+
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/coupon/center/list/forChain?${params.toString()}`, {
+    method: "GET",
+    headers: buildAtourHeaders(token),
+    timeoutMs: 12000
+  }, proxy);
+  const data = await parseAtourResponse(response, "coupon center list for chain failed");
+  return Array.isArray(data?.result) ? data.result : [];
+};
+
+const claimCouponByReAuditCode = async ({ token, proxy, reAuditCode }) => {
+  const params = new URLSearchParams({
+    platType: env.atourPlatformType,
+    appVer: env.atourAppVersion,
+    channelId: env.atourChannelId,
+    "At-Platform-Type": env.atourPlatformType,
+    "At-Client-Id": env.atourClientId,
+    "At-App-Version": env.atourAppVersion,
+    "At-Channel-Id": env.atourChannelId,
+    deviceId: env.atourClientId,
+    token: String(token),
+    reAuditCode: String(reAuditCode),
+    inactiveId: "",
+    activitySource: "",
+    activeId: ""
+  });
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/coupon/center/getCoupon?${params.toString()}`, {
+    method: "GET",
+    headers: buildAtourHeaders(token),
+    timeoutMs: 12000
+  }, proxy);
+  await parseAtourResponse(response, "claim coupon failed");
+};
+
+const listUsableCouponsForOrder = async ({
+  token,
+  proxy,
+  chainId,
+  rpActivityId,
+  startDate,
+  endDate,
+  defaultAmount,
+  roomTypeId
+}) => {
+  const payload = new URLSearchParams({
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activeId: "",
+    platType: String(env.atourPlatformType),
+    r: String(Math.random()),
+    token: String(token),
+    chainId: String(chainId),
+    type: "2",
+    rpActivityId: String(rpActivityId),
+    startDate: String(startDate),
+    endDate: String(endDate),
+    defaultAmount: String(defaultAmount),
+    roomTypeId: String(roomTypeId),
+    appVer: String(env.atourAppVersion)
+  });
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/coupon/getMebDiscountCouponsListByChainNew`, {
+    method: "POST",
+    headers: {
+      ...buildAtourHeaders(token),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: payload.toString(),
+    timeoutMs: 12000
+  }, proxy);
+  const data = await parseAtourResponse(response, "query usable coupons failed");
+  const list = Array.isArray(data?.result?.discountCouponList) ? data.result.discountCouponList : [];
+  return list
+    .map((it) => ({
+      code: String(it?.code || "").trim(),
+      value: Number(it?.value) || 0,
+      endDate: String(it?.endDate || ""),
+      disTypeCode: Number(it?.disCountTypeCode || it?.disType || 0)
+    }))
+    .filter((it) => Boolean(it.code));
+};
+
+const computeNightCount = (startDate, endDate) => {
+  const startMs = new Date(String(startDate || "")).getTime();
+  const endMs = new Date(String(endDate || "")).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    return 1;
+  }
+  const diff = Math.ceil((endMs - startMs) / (24 * 60 * 60 * 1000));
+  return Math.max(1, diff);
+};
+
+const buildCouponsForAddOrder = async ({
+  token,
+  proxy,
+  chainId,
+  rpActivityId,
+  startDate,
+  endDate,
+  defaultAmount,
+  roomTypeId
+}) => {
+  try {
+    const centerList = await listChainCouponsForChain({ token, proxy, chainId });
+    const claimableCodes = centerList
+      .filter((it) => Boolean(it?.canGet) && it?.reAuditCode)
+      .map((it) => String(it.reAuditCode));
+
+    if (claimableCodes.length > 0) {
+      await Promise.allSettled(claimableCodes.map((reAuditCode) => claimCouponByReAuditCode({ token, proxy, reAuditCode })));
+    }
+
+    const coupons = await listUsableCouponsForOrder({
+      token,
+      proxy,
+      chainId,
+      rpActivityId,
+      startDate,
+      endDate,
+      defaultAmount,
+      roomTypeId
+    });
+
+    const nightCount = computeNightCount(startDate, endDate);
+    const selected = coupons
+      .sort((a, b) => {
+        if (b.value !== a.value) {
+          return b.value - a.value;
+        }
+        if (a.endDate !== b.endDate) {
+          return a.endDate.localeCompare(b.endDate);
+        }
+        return a.code.localeCompare(b.code);
+      })
+      .slice(0, nightCount)
+      .map((it) => it.code);
+
+    return Array.from(new Set(selected)).join(",");
+  } catch (err) {
+    if (env.nodeEnv !== "production") {
+      console.warn("coupon workflow failed, continue without coupons:", err?.message || err);
+    }
+    return "";
+  }
+};
+
 export const cancelAtourOrder = async ({
   token,
   proxy,
@@ -210,16 +371,26 @@ const buildCalculatePayloadFromItem = ({ order, item, customerName, customerPhon
   };
 };
 
-const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, customerName, customerPhone }) => {
+const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, customerName, customerPhone, orderItem, coupons }) => {
+  const itemRemark = orderItem?.remark ? String(orderItem.remark) : "";
+  const breakfastCount = Math.max(0, Number(orderItem?.breakfastCount) || 0);
+  const roomLevelUpCount = Math.max(0, Number(orderItem?.roomLevelUpCount) || 0);
+  const delayedCheckOutCount = Math.max(0, Number(orderItem?.delayedCheckOutCount) || 0);
+  const shooseCount = Math.max(0, Number(orderItem?.shooseCount) || 0);
+
   return {
-    inactiveId: "",
+    inactiveId: "", // 发票信息id
     activeId: "",
     repeatToken: String(calculateResult.repeatToken || ""),
+
+    invoiceId: "",
     invoiceType: "",
-    remark: "",
+    invoiceEmail: "",
+    invoiceRemark: "",
+
+    remark: itemRemark,
     mergeInvoice: "",
     rateCode: calculatePayload.rateCode,
-    invoiceEmail: "",
     rateCodePriceType: String(calculateResult.rateCodePriceType || calculatePayload.rateCodePriceType || "2"),
     roomCount: calculatePayload.roomCount,
     recipientsMobile: "",
@@ -228,22 +399,20 @@ const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, custo
     customerNeedList: [],
     expectArrivalTime: "",
     getType: "0",
-    invoiceRemark: "",
     rpActivityId: calculatePayload.rpActivityId,
     checkInPersons: customerName || "",
     isPointPayAppChannel: "1",
     end: calculatePayload.end,
-    breakfastCount: 0,
-    roomLevelUpCount: 0,
-    delayedCheckOutCount: 0,
-    shooseCount: 0,
+    breakfastCount,
+    roomLevelUpCount,
+    delayedCheckOutCount,
+    shooseCount,
+    coupons: String(coupons || ""),
     delegatorId: "",
-    invoiceId: "",
-    orderAmount: Number(calculateResult.defaultAmount || calculateResult.amount || 0),
     mailAddr: "",
+    orderAmount: Number(calculateResult.defaultAmount || calculateResult.amount || 0),
     roomTypeId: Number(calculatePayload.roomTypeId),
     mobile: customerPhone || "",
-    coupons: "",
     customerNeeds: [],
     chainId: Number(calculatePayload.chainId),
     rateCodeActivities: calculatePayload.rateCodeActivities || ""
@@ -253,12 +422,24 @@ const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, custo
 export const runAtourOrderWorkflow = async ({ token, proxy, calculatePayload }) => {
   const calculateResult = await calculateOrderV2({ token, proxy, payload: calculatePayload });
   const createPayload = calculatePayload.createPayload || {};
+  const couponCodes = await buildCouponsForAddOrder({
+    token,
+    proxy,
+    chainId: calculatePayload.chainId,
+    rpActivityId: calculatePayload.rpActivityId,
+    startDate: calculatePayload.start,
+    endDate: calculatePayload.end,
+    defaultAmount: Number(calculateResult.defaultAmount || calculateResult.amount || 0),
+    roomTypeId: calculatePayload.roomTypeId
+  });
   const addPayload = {
     ...buildAddOrderPayloadFromItem({
       calculateResult,
       calculatePayload,
       customerName: createPayload.customerName,
-      customerPhone: createPayload.customerPhone
+      customerPhone: createPayload.customerPhone,
+      orderItem: createPayload.orderItem || null,
+      coupons: couponCodes
     }),
     ...(createPayload.overrideAddPayload || {})
   };
@@ -328,7 +509,14 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
       ...calculatePayload,
       createPayload: {
         customerName: order.customerName,
-        customerPhone: order.contactPhone
+        customerPhone: order.contactPhone,
+        orderItem: {
+          remark: item.remark || order.remark || "",
+          breakfastCount: Number(item.breakfastCount) || 0,
+          roomLevelUpCount: Number(item.roomLevelUpCount) || 0,
+          delayedCheckOutCount: Number(item.delayedCheckOutCount) || 0,
+          shooseCount: Number(item.shooseCount) || 0
+        }
       }
     }
   });

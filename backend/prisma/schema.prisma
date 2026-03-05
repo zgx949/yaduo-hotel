@@ -91,6 +91,11 @@ model OrderItem {
   rpActivityId       String?
   rateCodePriceType  String?
   rateCodeActivities String?
+  remark             String?
+  breakfastCount     Int          @default(0)
+  roomLevelUpCount   Int          @default(0)
+  delayedCheckOutCount Int        @default(0)
+  shooseCount        Int          @default(0)
   roomType           String
   roomCount          Int          @default(1)
   accountId          String?

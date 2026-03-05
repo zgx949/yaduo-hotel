@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "OrderItem" ADD COLUMN     "breakfastCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "delayedCheckOutCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "remark" TEXT,
+ADD COLUMN     "roomLevelUpCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "shooseCount" INTEGER NOT NULL DEFAULT 0;
