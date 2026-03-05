@@ -155,6 +155,12 @@ export const Booking: React.FC = () => {
     });
   };
 
+  const refreshOrderStatus = async (orderId: string) => {
+    return fetchWithAuth(`/api/orders/${orderId}/refresh-status`, {
+      method: 'POST'
+    });
+  };
+
   const hasPendingSplit = (splits: OrderPaymentPrepareSplit[]) =>
     splits.some((it) => it.linkState === 'PENDING_ORDER_SUBMIT');
 
@@ -204,6 +210,7 @@ export const Booking: React.FC = () => {
     setPaymentFlowStage('PREPARING');
     setPaymentFlowMessage('正在准备拆单支付信息...');
     try {
+      await refreshOrderStatus(orderId);
       const data = await fetchPaymentPrepare(orderId, waitForReady);
       const { nextDecision, nextSplits } = applyPreparedPaymentData(data);
       setPaymentFlowStage('LIST');
@@ -234,6 +241,7 @@ export const Booking: React.FC = () => {
     setIsPaymentSyncing(true);
     setPaymentFlowMessage('正在同步支付状态...');
     try {
+      await refreshOrderStatus(activeOrderId);
       const syncResult = await fetchWithAuth(`/api/orders/${activeOrderId}/payment/sync`, {
         method: 'POST',
         body: JSON.stringify({ paidItemIds, refreshExecutionStatus: true })

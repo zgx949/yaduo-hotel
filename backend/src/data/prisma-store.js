@@ -1037,7 +1037,8 @@ export const prismaStore = {
       where: { id: itemId },
       data: {
         status: "CANCELLED",
-        executionStatus: "CANCELLED"
+        executionStatus: "CANCELLED",
+        paymentStatus: "UNPAID"
       }
     });
     await prisma.task.updateMany({

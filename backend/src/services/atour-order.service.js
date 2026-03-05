@@ -292,6 +292,40 @@ export const cancelAtourOrder = async ({
   return data.result || {};
 };
 
+export const getAtourOrderDetail = async ({ token, proxy, chainId, folioId }) => {
+  if (!token) {
+    throw new Error("getOrderDetail failed (missing token)");
+  }
+  if (!chainId || !folioId) {
+    throw new Error("getOrderDetail failed (missing chainId or folioId)");
+  }
+
+  const payload = new URLSearchParams({
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activeId: "",
+    platType: String(env.atourPlatformType),
+    r: String(Math.random()),
+    token: String(token),
+    chainId: String(chainId),
+    folioId: String(folioId),
+    appVer: String(env.atourAppVersion)
+  });
+
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/getOrderDetail`, {
+    method: "POST",
+    headers: {
+      ...buildAtourHeaders(token),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: payload.toString(),
+    timeoutMs: 12000
+  }, proxy);
+
+  const data = await parseAtourResponse(response, "getOrderDetail failed");
+  return data.result || {};
+};
+
 export const createPayOrder = async ({ token, payload, proxy }) => {
   const query = buildAtourQuery(token);
   const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/pay/createPayOrder?${query}`, {
