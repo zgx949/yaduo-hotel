@@ -49,6 +49,7 @@ model PoolAccount {
   dailyOrdersLeft     Int         @default(0)
   lastExecution       Json
   lastResult          Json
+  discountCouponAssets Json?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
   orderItems          OrderItem[]

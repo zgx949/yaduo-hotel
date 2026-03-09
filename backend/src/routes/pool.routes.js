@@ -88,9 +88,6 @@ poolRoutes.post("/accounts", requireAuth, async (req, res) => {
   if (validationError) {
     return res.status(400).json({ message: validationError });
   }
-  if (await prismaStore.isPoolTokenTaken(payload.token)) {
-    return res.status(409).json({ message: "token already exists" });
-  }
   try {
     const item = await prismaStore.createPoolAccount(payload);
     return res.status(201).json(item);
@@ -108,10 +105,6 @@ poolRoutes.patch("/accounts/:id", requireAuth, async (req, res) => {
   if (validationError) {
     return res.status(400).json({ message: validationError });
   }
-  if (payload.token && await prismaStore.isPoolTokenTaken(payload.token, req.params.id)) {
-    return res.status(409).json({ message: "token already exists" });
-  }
-
   try {
     const item = await prismaStore.updatePoolAccount(req.params.id, payload);
     if (!item) {

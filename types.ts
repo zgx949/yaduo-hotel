@@ -53,6 +53,22 @@ export interface HotelAccount {
     scan?: string;     // e.g. "扫描完成，发现 2 张新券"
     refresh?: string;
     pointsScan?: string;
+    couponAssets?: {
+      discountCoupons?: number;
+      chainId?: string | null;
+      claimSummary?: { total?: number; success?: number; failed?: number };
+      details?: Array<{
+        code?: string;
+        discountId?: number | string;
+        couponDesc?: string;
+        valueDesc?: string;
+        expiryStr?: string;
+        expiryTip?: string;
+        couponState?: string;
+        discountRule?: string;
+      }>;
+      scannedAt?: string;
+    };
   };
 }
 
@@ -69,6 +85,16 @@ export interface PoolAccount extends HotelAccount {
     id: string;
     name: string;
     enabled: boolean;
+  }>;
+  discount_coupon_assets?: Array<{
+    code?: string;
+    discountId?: number | string;
+    couponDesc?: string;
+    valueDesc?: string;
+    expiryStr?: string;
+    expiryTip?: string;
+    couponState?: string;
+    discountRule?: string;
   }>;
   breakfast_coupons: number;
   room_upgrade_coupons: number;

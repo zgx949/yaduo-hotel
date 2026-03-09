@@ -118,6 +118,109 @@ const fetchCouponWallet = async ({ token, proxy }) => {
   };
 };
 
+const queryAllDiscountCouponAssets = async ({ token, proxy }) => {
+  const appVer = process.env.ATOUR_COUPON_ASSET_APP_VER || "4.8.0";
+  const deviceId = process.env.ATOUR_COUPON_ASSET_DEVICE_ID || env.atourClientId;
+  const base = process.env.ATOUR_COUPON_ASSET_BASE_URL || "https://miniapp.yaduo.com";
+  const params = new URLSearchParams({
+    appVer,
+    version: appVer,
+    channelId: String(env.atourChannelId),
+    deviceId: String(deviceId),
+    token: String(token),
+    inactiveId: "",
+    clientId: process.env.ATOUR_COUPON_ASSET_CLIENT_ID || "6",
+    elementId: "0",
+    traceId: "0",
+    activeId: "0",
+    activityId: "0",
+    activitySource: "",
+    osversion: process.env.ATOUR_COUPON_ASSET_OS_VERSION || "iOS",
+    devbrand: process.env.ATOUR_COUPON_ASSET_BRAND || "iPhone",
+    devmodel: process.env.ATOUR_COUPON_ASSET_MODEL || "iPhone",
+    browser: "0.0.0",
+    brversion: "0.0.0",
+    platType: String(env.atourPlatformType),
+    "At-Platform-Type": String(env.atourPlatformType)
+  });
+
+  const response = await fetchWithProxy(`${base}/atourlife/coupon/memberCouponListOfType?${params.toString()}`, {
+    method: "POST",
+    headers: {
+      ...buildAtourHeaders(token),
+      Host: "miniapp.yaduo.com",
+      Origin: "https://mobile.yaduo.com",
+      Referer: "https://mobile.yaduo.com/",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      titleCode: "DISCOUNT_COUPON",
+      sortScene: "",
+      stateCodes: ["AVAILABLE"],
+      token: String(token)
+    }),
+    timeoutMs: 12000
+  }, proxy);
+
+  const data = await parseJsonSafe(response);
+  if (!response.ok || Number(data?.retcode) !== 0) {
+    throw new Error(data?.retmsg || "查询账号优惠券资产失败");
+  }
+  const couponList = Array.isArray(data?.result?.couponList) ? data.result.couponList : [];
+  return couponList.map((it) => ({
+    code: String(it?.code || ""),
+    discountId: it?.discountId,
+    couponDesc: String(it?.couponDesc || ""),
+    valueDesc: String(it?.valueDesc || ""),
+    expiryStr: String(it?.expiryStr || ""),
+    expiryTip: String(it?.expiryTip || ""),
+    couponState: String(it?.couponState || ""),
+    discountRule: String(it?.discountRule || "")
+  })).filter((it) => Boolean(it.code));
+};
+
+const listOrderDiscountCoupons = async ({
+  token,
+  proxy,
+  chainId,
+  rpActivityId,
+  startDate,
+  endDate,
+  defaultAmount,
+  roomTypeId
+}) => {
+  if (!chainId || !rpActivityId || !startDate || !endDate || !roomTypeId) {
+    return [];
+  }
+  const body = new URLSearchParams({
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activeId: "",
+    platType: String(env.atourPlatformType),
+    r: String(Math.random()),
+    token: String(token),
+    chainId: String(chainId),
+    type: "2",
+    rpActivityId: String(rpActivityId),
+    startDate: String(startDate),
+    endDate: String(endDate),
+    defaultAmount: String(defaultAmount || 0),
+    roomTypeId: String(roomTypeId),
+    appVer: String(env.atourAppVersion)
+  });
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/coupon/getMebDiscountCouponsListByChainNew`, {
+    method: "POST",
+    headers: buildAtourHeaders(token, "application/x-www-form-urlencoded"),
+    body: body.toString(),
+    timeoutMs: 12000
+  }, proxy);
+  const data = await parseJsonSafe(response);
+  if (!response.ok || Number(data?.retcode) !== 0) {
+    return [];
+  }
+  return Array.isArray(data?.result?.discountCouponList) ? data.result.discountCouponList : [];
+};
+
 const runSigninViaGateway = async ({ token, proxy }) => {
   const proxyParam = buildProxyParam(proxy);
   const captchaBase = process.env.ATOUR_CAPTCHA_API_BASE_URL || "http://81.68.144.211:5050/getvalidate/jy4";
@@ -263,6 +366,10 @@ export const runCouponScanTask = async ({ payload = {}, proxy }) => {
   for (const target of targets) {
     const { account, token } = target;
     try {
+      const resolvedChainId = payload.chainId
+        ? String(payload.chainId)
+        : await prismaStore.getLatestChainIdByAccount(account.id);
+
       const res = await fetchCouponWallet({ token, proxy });
       const retcode = Number(res?.data?.retcode);
       if (!res.ok && retcode === 10002) {
@@ -280,18 +387,37 @@ export const runCouponScanTask = async ({ payload = {}, proxy }) => {
       }
 
       const summary = summarizeCouponCounts(Array.isArray(res?.data?.result) ? res.data.result : []);
+      const discountCouponAssets = await queryAllDiscountCouponAssets({ token, proxy }).catch(() => []);
+      const discountCouponCount = discountCouponAssets.length;
+
       await writeTaskResult({
         account,
         taskKey: "scan",
-        message: `礼遇券同步完成（早${summary.breakfast}/升${summary.upgrade}/延${summary.lateCheckout}/鞋${summary.slippers})`,
+        message: `礼遇券同步（早${summary.breakfast}/升${summary.upgrade}/延${summary.lateCheckout}/鞋${summary.slippers}）；满减优惠券资产 ${discountCouponCount} 张`,
         patch: {
           breakfast_coupons: summary.breakfast,
           room_upgrade_coupons: summary.upgrade,
           late_checkout_coupons: summary.lateCheckout,
-          slippers_coupons: summary.slippers
+          slippers_coupons: summary.slippers,
+          discount_coupon_assets: discountCouponAssets,
+          lastResult: {
+            couponAssets: {
+              discountCoupons: discountCouponCount,
+              chainId: resolvedChainId || null,
+              details: discountCouponAssets,
+              scannedAt: nowIso()
+            }
+          }
         }
       });
-      results.push({ accountId: account.id, ok: true, ...summary });
+      results.push({
+        accountId: account.id,
+        ok: true,
+        chainId: resolvedChainId || null,
+        discountCoupons: discountCouponCount,
+        discountCouponAssets,
+        ...summary
+      });
     } catch (err) {
       await writeTaskResult({
         account,

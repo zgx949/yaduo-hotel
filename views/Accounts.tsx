@@ -80,6 +80,7 @@ export const Accounts: React.FC = () => {
   
   // Modal State
   const [selectedAccount, setSelectedAccount] = useState<PoolAccount | null>(null);
+  const [showDiscountCouponDetail, setShowDiscountCouponDetail] = useState(false);
 
   const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
 
@@ -161,6 +162,10 @@ export const Accounts: React.FC = () => {
     };
   }, [isFormOpen]);
 
+  useEffect(() => {
+    setShowDiscountCouponDetail(false);
+  }, [selectedAccount?.id]);
+
   const knownCorporateNames = useMemo(() => {
     const fromAccounts = accounts.flatMap((it) => (it.corporate_agreements || []).map((corp) => corp.name));
     const merged = [...corporateOptions, ...fromAccounts];
@@ -223,6 +228,7 @@ export const Accounts: React.FC = () => {
       .then((data) => {
         if (data?.account) {
           setAccounts((prev) => prev.map((acc) => (acc.id === id ? data.account : acc)));
+          setSelectedAccount((prev) => (prev && prev.id === id ? data.account : prev));
         } else {
           return loadAccounts();
         }
@@ -391,7 +397,7 @@ export const Accounts: React.FC = () => {
 
       return (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelectedAccount(null)}>
-              <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-fadeIn" onClick={e => e.stopPropagation()}>
+              <div className="bg-white w-full max-w-md max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-fadeIn" onClick={e => e.stopPropagation()}>
                   <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
                       <div>
                           <h3 className="font-bold text-lg">{selectedAccount.phone}</h3>
@@ -400,7 +406,7 @@ export const Accounts: React.FC = () => {
                       <button onClick={() => setSelectedAccount(null)} className="text-white/50 hover:text-white">✕</button>
                   </div>
 
-                  <div className="p-4 space-y-6">
+                  <div className="p-4 space-y-6 overflow-y-auto">
                       {/* Daily Tasks Report */}
                       <div>
                           <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -416,6 +422,9 @@ export const Accounts: React.FC = () => {
                                   const time = lastExecution[key];
                                   const result = selectedAccount.lastResult[key as keyof typeof selectedAccount.lastResult];
                                   const doneToday = isToday(time);
+                                  const loading = loadingAction === `${selectedAccount.id}-${String(key)}`;
+                                  const lotteryCanRerun = key === 'lottery' && doneToday && Boolean(result) && (/未中奖|未命中|遗憾/.test(String(result)));
+                                  const canRunNow = key === 'scan' || !doneToday || lotteryCanRerun;
 
                                   return (
                                       <div key={task.key} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100">
@@ -431,16 +440,24 @@ export const Accounts: React.FC = () => {
                                               </div>
                                           </div>
                                           <div className="text-right">
-                                              {doneToday ? (
+                                              {!canRunNow ? (
                                                   <span className={`text-xs font-bold ${result?.includes('未') || result?.includes('遗憾') ? 'text-gray-500' : 'text-green-600'}`}>
                                                       {result || '执行成功'}
                                                   </span>
                                               ) : (
                                                   <button 
                                                       onClick={() => handleManualAction(selectedAccount.id, key as any)}
-                                                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                                      disabled={loading}
+                                                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-1"
                                                   >
-                                                      立即运行
+                                                      {loading ? (
+                                                        <>
+                                                          <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-30"></circle><path d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" className="opacity-90"></path></svg>
+                                                          执行中
+                                                        </>
+                                                      ) : (
+                                                        (key === 'scan' || lotteryCanRerun) ? '再次执行' : '立即运行'
+                                                      )}
                                                   </button>
                                               )}
                                           </div>
@@ -474,6 +491,31 @@ export const Accounts: React.FC = () => {
                           <div className="mt-3 bg-blue-50 p-2 rounded text-xs text-blue-700 text-center">
                               当前积分余额: <span className="font-bold">{selectedAccount.points.toLocaleString()}</span>
                           </div>
+                          <div className="mt-2 bg-purple-50 p-2 rounded text-xs text-purple-700 text-center">
+                              可用优惠券(立减/满减等): <span className="font-bold">{Number(selectedAccount.lastResult?.couponAssets?.discountCoupons || 0)}</span>
+                          </div>
+                          {Array.isArray(selectedAccount.discount_coupon_assets) && selectedAccount.discount_coupon_assets.length > 0 && (
+                            <div className="mt-3 border border-purple-100 rounded-lg overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setShowDiscountCouponDetail((prev) => !prev)}
+                                className="w-full px-3 py-2 bg-purple-50 text-xs font-medium text-purple-700 text-left flex items-center justify-between"
+                              >
+                                <span>满减优惠券明细（{selectedAccount.discount_coupon_assets.length}）</span>
+                                <span>{showDiscountCouponDetail ? '收起' : '展开'}</span>
+                              </button>
+                              {showDiscountCouponDetail && (
+                                <div className="max-h-52 overflow-auto divide-y divide-gray-100">
+                                  {selectedAccount.discount_coupon_assets.map((coupon, idx) => (
+                                    <div key={`${coupon.code || 'coupon'}-${idx}`} className="px-3 py-2 text-xs">
+                                      <div className="font-medium text-gray-800">{coupon.couponDesc || '优惠券'} {coupon.valueDesc ? `¥${coupon.valueDesc}` : ''}</div>
+                                      <div className="text-gray-500">{coupon.expiryStr || coupon.expiryTip || ''}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                       </div>
                   </div>
               </div>
@@ -764,6 +806,7 @@ export const Accounts: React.FC = () => {
               ) : filteredAccounts.map(acc => {
                   const statusInfo = STATUS_LABELS[acc.status];
                   const tierInfo = TIER_LABELS[acc.tier];
+                  const couponAssets = Array.isArray(acc.discount_coupon_assets) ? acc.discount_coupon_assets : [];
 
                   return (
                     <tr key={acc.id} className="hover:bg-gray-50/50 transition-colors group">
@@ -836,6 +879,7 @@ export const Accounts: React.FC = () => {
                                 <span className="text-[10px] text-gray-400">无卡券</span>
                               )}
                             </div>
+                            <span className="text-[11px] font-medium text-purple-700">🎟 满减券：{couponAssets.length} 张</span>
                         </div>
                       </td>
                       
@@ -845,11 +889,14 @@ export const Accounts: React.FC = () => {
                           const time = acc.lastExecution[taskKey];
                           const doneToday = isToday(time);
                           const loading = loadingAction === `${acc.id}-${task}`;
+                          const resultText = acc.lastResult[taskKey as keyof typeof acc.lastResult];
+                          const lotteryCanRerun = taskKey === 'lottery' && doneToday && Boolean(resultText) && (/未中奖|未命中|遗憾/.test(String(resultText)));
+                          const canRunNow = taskKey === 'scan' || !doneToday || lotteryCanRerun;
 
                           return (
                             <td key={task} className="px-6 py-4 text-center">
                                 <div className="flex flex-col items-center justify-center gap-1">
-                                    {doneToday ? (
+                                    {!canRunNow ? (
                                         <button 
                                             onClick={() => setSelectedAccount(acc)}
                                             className="w-8 h-8 rounded-full bg-green-50 text-green-600 flex items-center justify-center border border-green-100 hover:bg-green-100 hover:scale-110 transition-all" 
@@ -862,7 +909,7 @@ export const Accounts: React.FC = () => {
                                             onClick={() => handleManualAction(acc.id, taskKey as any)}
                                             disabled={loading}
                                             className="w-8 h-8 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center border border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
-                                            title="点击立即运行"
+                                            title={taskKey === 'scan' || lotteryCanRerun ? '再次执行' : '点击立即运行'}
                                         >
                                             {loading ? (
                                                 <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>

@@ -281,6 +281,7 @@ const projectPoolAccount = (entity) => {
     dailyOrdersLeft: entity.dailyOrdersLeft,
     lastExecution: entity.lastExecution,
     lastResult: entity.lastResult,
+    discount_coupon_assets: Array.isArray(entity.discountCouponAssets) ? entity.discountCouponAssets : [],
     created_at: entity.createdAt,
     updated_at: entity.updatedAt
   };
@@ -642,7 +643,8 @@ export const prismaStore = {
         slippersCoupons: Math.max(0, Number(payload.slippersCoupons) || 0),
         dailyOrdersLeft: Math.max(0, Number(payload.dailyOrdersLeft) || 0),
         lastExecution: {},
-        lastResult: {}
+        lastResult: {},
+        discountCouponAssets: Array.isArray(payload.discount_coupon_assets) ? payload.discount_coupon_assets : []
       }
     });
     return projectPoolAccount(row);
@@ -717,6 +719,9 @@ export const prismaStore = {
         : {};
       data.lastResult = { ...current, ...incoming };
     }
+    if (hasOwn(patch, "discount_coupon_assets")) {
+      data.discountCouponAssets = Array.isArray(patch.discount_coupon_assets) ? patch.discount_coupon_assets : [];
+    }
     const updated = await prisma.poolAccount.update({ where: { id }, data });
     return projectPoolAccount(updated);
   },
@@ -743,6 +748,43 @@ export const prismaStore = {
     return {
       account: projectPoolAccount(row),
       token: row.loginTokenCipher ? decryptPoolTokenSafe(row.loginTokenCipher) : null
+    };
+  },
+  async getLatestChainIdByAccount(accountId) {
+    if (!accountId) {
+      return null;
+    }
+    const item = await prisma.orderItem.findFirst({
+      where: { accountId: String(accountId) },
+      include: { group: true },
+      orderBy: { updatedAt: "desc" }
+    });
+    return item?.group?.chainId ? String(item.group.chainId) : null;
+  },
+  async getLatestCouponScanContextByAccount(accountId) {
+    if (!accountId) {
+      return null;
+    }
+    const item = await prisma.orderItem.findFirst({
+      where: {
+        accountId: String(accountId),
+        group: { chainId: { not: "" } },
+        roomTypeId: { not: null },
+        OR: [{ rpActivityId: { not: null } }, { rateCodeId: { not: null } }]
+      },
+      include: { group: true },
+      orderBy: { updatedAt: "desc" }
+    });
+    if (!item || !item.group) {
+      return null;
+    }
+    return {
+      chainId: String(item.group.chainId || ""),
+      rpActivityId: String(item.rpActivityId || item.rateCodeId || ""),
+      startDate: item.checkInDate.toISOString().slice(0, 10),
+      endDate: item.checkOutDate.toISOString().slice(0, 10),
+      roomTypeId: String(item.roomTypeId || ""),
+      defaultAmount: Number(item.amount) || 0
     };
   },
   async deletePoolAccount(id) {

@@ -2,6 +2,7 @@ import { env } from "../config/env.js";
 import { prismaStore } from "../data/prisma-store.js";
 import { parseBookingTier } from "./booking-channel.service.js";
 import { getInternalRequestContext } from "./internal-resource.service.js";
+import { runCouponScanTask } from "./atour-maintenance.service.js";
 import { fetchWithProxy } from "./proxied-fetch.service.js";
 
 const ALIPAY_APP_ID = "2021003121605466";
@@ -536,6 +537,15 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     customerName: order.customerName,
     customerPhone: order.contactPhone
   });
+
+  const scanAccountId = resourceCtx.tokenAccountId || item.accountId || null;
+  if (scanAccountId) {
+    await runCouponScanTask({
+      payload: { accountId: scanAccountId, chainId: order.chainId },
+      proxy: resourceCtx.proxy
+    }).catch(() => undefined);
+  }
+
   const workflow = await runAtourOrderWorkflow({
     token: resourceCtx.token,
     proxy: resourceCtx.proxy,
@@ -563,6 +573,13 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     executionStatus: "ORDERED"
   });
   await prismaStore.refreshOrderStatus(item.groupId);
+
+  if (scanAccountId) {
+    await runCouponScanTask({
+      payload: { accountId: scanAccountId, chainId: order.chainId },
+      proxy: resourceCtx.proxy
+    }).catch(() => undefined);
+  }
 
   return {
     tokenSource: resourceCtx.tokenSource,
