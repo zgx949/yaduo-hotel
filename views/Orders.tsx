@@ -17,13 +17,16 @@ const TOKEN_KEY = 'skyhotel_auth_token';
 const statusText = (status: string) => {
   const dict: Record<string, string> = {
     PROCESSING: '处理中',
+    WAIT_CONFIRM: '待确认',
+    WAITING_CHECKIN: '待入住',
     CONFIRMED: '已确认',
     CANCELLED: '已取消',
     COMPLETED: '已完成',
     FAILED: '失败',
     UNPAID: '未支付',
     PAID: '已支付',
-    PARTIAL: '部分支付'
+    PARTIAL: '部分支付',
+    REFUNDED: '已退款'
   };
   return dict[status] || status;
 };
@@ -50,6 +53,9 @@ const statusClass = (status: string) => {
 };
 
 const isRotatingExecution = (status: string) => status === 'QUEUED' || status === 'SUBMITTING';
+
+const canSubmitOrder = (order: OrderGroup) =>
+  (order.items || []).some((it) => it.executionStatus === 'PLAN_PENDING' || it.executionStatus === 'FAILED');
 
 export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const [orders, setOrders] = useState<OrderGroup[]>([]);
@@ -376,17 +382,19 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                       >
                         {refreshingOrderId === order.id ? '刷新中...' : '一键刷新状态'}
                       </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          submitOrder(order.id);
-                        }}
-                        disabled={submittingOrderId === order.id}
-                        className="px-2 py-1 rounded border border-emerald-200 text-xs bg-emerald-50 text-emerald-700 disabled:opacity-50"
-                      >
-                        {submittingOrderId === order.id ? '下单中...' : '一键下单'}
-                      </button>
+                      {canSubmitOrder(order) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            submitOrder(order.id);
+                          }}
+                          disabled={submittingOrderId === order.id}
+                          className="px-2 py-1 rounded border border-emerald-200 text-xs bg-emerald-50 text-emerald-700 disabled:opacity-50"
+                        >
+                          {submittingOrderId === order.id ? '下单中...' : '一键下单'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {

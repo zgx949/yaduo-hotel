@@ -238,10 +238,13 @@ const aggregateOrderStatuses = (items) => {
   }
 
   const paidCount = items.filter((it) => it.paymentStatus === "PAID").length;
+  const refundedCount = items.filter((it) => it.paymentStatus === "REFUNDED").length;
   let paymentStatus = "UNPAID";
-  if (paidCount === items.length) {
+  if (refundedCount === items.length && items.length > 0) {
+    paymentStatus = "REFUNDED";
+  } else if (paidCount === items.length) {
     paymentStatus = "PAID";
-  } else if (paidCount > 0) {
+  } else if (paidCount > 0 || refundedCount > 0) {
     paymentStatus = "PARTIAL";
   }
 
@@ -1302,14 +1305,25 @@ export const prismaStore = {
 
     const nextData = {};
     if (hasOwn(patch, "status") && patch.status) {
-      nextData.status = String(patch.status);
+      const nextStatus = String(patch.status);
+      const lockedByPaid = ["PAID", "REFUNDED"].includes(String(existed.paymentStatus || ""));
+      if (!(lockedByPaid && ["PROCESSING", "WAIT_CONFIRM"].includes(nextStatus))) {
+        nextData.status = nextStatus;
+      }
     }
     if (hasOwn(patch, "executionStatus") && patch.executionStatus) {
-      nextData.executionStatus = String(patch.executionStatus);
+      const nextExecution = String(patch.executionStatus);
+      const lockedByPaid = ["PAID", "REFUNDED"].includes(String(existed.paymentStatus || ""));
+      if (!(lockedByPaid && ["PLAN_PENDING", "QUEUED", "SUBMITTING", "ORDERED"].includes(nextExecution))) {
+        nextData.executionStatus = nextExecution;
+      }
     }
     if (hasOwn(patch, "paymentStatus") && patch.paymentStatus) {
       const nextPayment = String(patch.paymentStatus);
-      if (!(existed.paymentStatus === "PAID" && nextPayment && nextPayment !== "PAID")) {
+      if (
+        !((existed.paymentStatus === "PAID" && nextPayment !== "PAID") ||
+          (existed.paymentStatus === "REFUNDED" && nextPayment !== "REFUNDED"))
+      ) {
         nextData.paymentStatus = nextPayment;
       }
     }

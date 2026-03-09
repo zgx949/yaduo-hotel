@@ -331,12 +331,21 @@ class TaskPlatform {
     if (!queue) {
       return [];
     }
-    const jobs = await queue.getJobs([status], 0, Math.max(1, limit) - 1, true);
+    const allowedStates = new Set(["waiting", "active", "completed", "failed", "delayed", "paused"]);
+    const statuses = String(status || "waiting")
+      .split(",")
+      .map((it) => it.trim())
+      .filter((it) => Boolean(it) && allowedStates.has(it));
+    const jobs = await queue.getJobs(statuses.length > 0 ? statuses : ["waiting"], 0, Math.max(1, limit) - 1, true);
     return jobs.map((job) => ({
       id: String(job.id),
       name: job.name,
       data: job.data,
       attemptsMade: job.attemptsMade,
+      failedReason: job.failedReason ? String(job.failedReason).slice(0, 2000) : null,
+      stacktrace: Array.isArray(job.stacktrace) ? job.stacktrace.map((it) => String(it).slice(0, 4000)) : [],
+      returnvalue: job.returnvalue,
+      opts: job.opts,
       timestamp: job.timestamp,
       processedOn: job.processedOn,
       finishedOn: job.finishedOn

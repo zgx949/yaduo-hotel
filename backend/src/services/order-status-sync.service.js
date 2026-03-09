@@ -3,7 +3,7 @@ import { getAtourOrderDetail } from "./atour-order.service.js";
 import { parseBookingTier } from "./booking-channel.service.js";
 import { getInternalRequestContext } from "./internal-resource.service.js";
 
-const mapAtourOrderDetailToPatch = (detail = {}) => {
+const mapAtourOrderDetailToPatch = (detail = {}, currentItem = null) => {
   const orderState = Number(detail?.orderState);
   const payState = Number(detail?.payState);
   const feeAmount = Number(detail?.feeDetail?.newTotal || detail?.roomRate || 0);
@@ -16,7 +16,7 @@ const mapAtourOrderDetailToPatch = (detail = {}) => {
   if (orderState === 2) {
     patch.status = "CANCELLED";
     patch.executionStatus = "CANCELLED";
-    patch.paymentStatus = "UNPAID";
+    patch.paymentStatus = currentItem?.paymentStatus === "PAID" ? "REFUNDED" : "UNPAID";
     return patch;
   }
 
@@ -35,9 +35,9 @@ const mapAtourOrderDetailToPatch = (detail = {}) => {
   }
 
   if (orderState === 1) {
-    patch.status = "PROCESSING";
-    patch.executionStatus = "ORDERED";
-    patch.paymentStatus = payState === 1 ? "PAID" : "UNPAID";
+    patch.status = payState === 1 ? "CONFIRMED" : "PROCESSING";
+    patch.executionStatus = payState === 1 ? "DONE" : "ORDERED";
+    patch.paymentStatus = payState === 1 ? "PAID" : (currentItem?.paymentStatus === "REFUNDED" ? "REFUNDED" : "UNPAID");
     return patch;
   }
 
@@ -77,7 +77,7 @@ const syncSingleOrderItem = async (order, item, source) => {
     folioId: item.atourOrderId
   });
 
-  const patch = mapAtourOrderDetailToPatch(detail);
+  const patch = mapAtourOrderDetailToPatch(detail, item);
   if (Object.keys(patch).length === 0) {
     return { itemId: item.id, ok: true, skipped: true, reason: "NO_PATCH" };
   }
@@ -128,7 +128,6 @@ const runScan = async ({ scanType, source, listFn, limit }) => {
   const touchedOrderIds = new Set();
 
   for (const item of candidates) {
-    if(item.status !== "CONFIRMED") continue;
     if (!item.chainId) {
       perItem.push({ itemId: item.id, ok: false, message: "missing chainId" });
       continue;

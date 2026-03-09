@@ -23,6 +23,27 @@ const createEmptyModel = (): LLMConfig => ({
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
+interface TaskQueueJob {
+  id: string;
+  name: string;
+  attemptsMade: number;
+  failedReason?: string | null;
+  stacktrace?: string[];
+  returnvalue?: unknown;
+  data?: unknown;
+  timestamp?: number;
+  processedOn?: number;
+  finishedOn?: number;
+}
+
+const asPrettyJson = (value: unknown) => {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value ?? '');
+  }
+};
+
 export const SystemSettings: React.FC = () => {
   const [config, setConfig] = useState<SystemConfig>(MOCK_SYSTEM_CONFIG);
   const [activeTab, setActiveTab] = useState<SettingsTab>('GENERAL');
@@ -44,6 +65,13 @@ export const SystemSettings: React.FC = () => {
   const [taskModules, setTaskModules] = useState<TaskModuleConfig[]>([]);
   const [taskQueues, setTaskQueues] = useState<TaskQueueStats[]>([]);
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
+  const [taskQueueJobs, setTaskQueueJobs] = useState<TaskQueueJob[]>([]);
+  const [selectedQueueName, setSelectedQueueName] = useState('');
+  const [queueJobState, setQueueJobState] = useState('failed');
+  const [queueJobLimit, setQueueJobLimit] = useState(20);
+  const [runFilters, setRunFilters] = useState({ moduleId: '', queueName: '', state: '', limit: 30 });
+  const [taskModuleDrafts, setTaskModuleDrafts] = useState<Record<string, TaskModuleConfig>>({});
+  const [detailsModal, setDetailsModal] = useState<{ title: string; content: string } | null>(null);
   const [taskLoading, setTaskLoading] = useState(false);
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
@@ -86,17 +114,61 @@ export const SystemSettings: React.FC = () => {
     loadConfig();
   }, []);
 
+  const loadQueueJobs = async (queueNameParam?: string) => {
+    const queueName = queueNameParam || selectedQueueName;
+    if (!queueName) {
+      setTaskQueueJobs([]);
+      return;
+    }
+    try {
+      const jobsRes = await fetchWithAuth(
+        `/api/system/tasks/queues/${encodeURIComponent(queueName)}/jobs?state=${encodeURIComponent(queueJobState)}&limit=${encodeURIComponent(String(queueJobLimit))}`
+      );
+      setTaskQueueJobs(Array.isArray(jobsRes.items) ? jobsRes.items : []);
+    } catch (err) {
+      setError(getErrorMessage(err, '加载队列任务失败'));
+    }
+  };
+
   const loadTaskPanel = async () => {
     setTaskLoading(true);
     try {
+      const runQuery = new URLSearchParams();
+      if (runFilters.moduleId) runQuery.set('moduleId', runFilters.moduleId);
+      if (runFilters.queueName) runQuery.set('queueName', runFilters.queueName);
+      if (runFilters.state) runQuery.set('state', runFilters.state);
+      runQuery.set('limit', String(Math.max(1, runFilters.limit || 30)));
+
       const [modulesRes, queuesRes, runsRes] = await Promise.all([
         fetchWithAuth('/api/system/tasks/modules'),
         fetchWithAuth('/api/system/tasks/queues'),
-        fetchWithAuth('/api/system/tasks/runs?limit=30')
+        fetchWithAuth(`/api/system/tasks/runs?${runQuery.toString()}`)
       ]);
-      setTaskModules(Array.isArray(modulesRes.items) ? modulesRes.items : []);
-      setTaskQueues(Array.isArray(queuesRes.items) ? queuesRes.items : []);
+      const modules = Array.isArray(modulesRes.items) ? modulesRes.items : [];
+      const queues = Array.isArray(queuesRes.items) ? queuesRes.items : [];
+
+      setTaskModules(modules);
+      setTaskQueues(queues);
       setTaskRuns(Array.isArray(runsRes.items) ? runsRes.items : []);
+
+      setTaskModuleDrafts((prev) => {
+        const next = { ...prev };
+        for (const mod of modules) {
+          next[mod.moduleId] = prev[mod.moduleId] || mod;
+        }
+        return next;
+      });
+
+      const nextQueue = selectedQueueName || queues[0]?.queueName || '';
+      if (nextQueue !== selectedQueueName) {
+        setSelectedQueueName(nextQueue);
+      }
+      if (nextQueue) {
+        const jobsRes = await fetchWithAuth(
+          `/api/system/tasks/queues/${encodeURIComponent(nextQueue)}/jobs?state=${encodeURIComponent(queueJobState)}&limit=${encodeURIComponent(String(queueJobLimit))}`
+        );
+        setTaskQueueJobs(Array.isArray(jobsRes.items) ? jobsRes.items : []);
+      }
     } catch (err) {
       setError(getErrorMessage(err, '加载任务面板失败'));
     } finally {
@@ -109,7 +181,7 @@ export const SystemSettings: React.FC = () => {
     loadTaskPanel();
     const timer = window.setInterval(loadTaskPanel, 4000);
     return () => window.clearInterval(timer);
-  }, [activeTab]);
+  }, [activeTab, runFilters.moduleId, runFilters.queueName, runFilters.state, runFilters.limit, queueJobState, queueJobLimit, selectedQueueName]);
 
   const handleSave = async () => {
     setSaveStatus('SAVING');
@@ -253,6 +325,40 @@ export const SystemSettings: React.FC = () => {
       await loadTaskPanel();
     } catch (err) {
       setError(getErrorMessage(err, '更新任务模块开关失败'));
+    }
+  };
+
+  const patchTaskModuleDraft = (moduleId: string, patch: Partial<TaskModuleConfig>) => {
+    setTaskModuleDrafts((prev) => ({
+      ...prev,
+      [moduleId]: {
+        ...(prev[moduleId] || taskModules.find((it) => it.moduleId === moduleId)),
+        ...patch
+      } as TaskModuleConfig
+    }));
+  };
+
+  const saveTaskModuleConfig = async (moduleId: string) => {
+    const draft = taskModuleDrafts[moduleId];
+    if (!draft) {
+      return;
+    }
+    try {
+      await fetchWithAuth(`/api/system/tasks/modules/${moduleId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          enabled: Boolean(draft.enabled),
+          queueName: String(draft.queueName || '').trim(),
+          schedule: draft.category === 'SCHEDULED' ? (String(draft.schedule || '').trim() || null) : null,
+          concurrency: Math.max(1, Number(draft.concurrency) || 1),
+          attempts: Math.max(1, Number(draft.attempts) || 1),
+          backoffMs: Math.max(0, Number(draft.backoffMs) || 0),
+          useProxy: Boolean(draft.useProxy)
+        })
+      });
+      await loadTaskPanel();
+    } catch (err) {
+      setError(getErrorMessage(err, '保存任务模块配置失败'));
     }
   };
 
@@ -496,21 +602,71 @@ export const SystemSettings: React.FC = () => {
 
       <Card title="任务模块开关">
         <div className="space-y-3">
-          {taskModules.map((mod) => (
-            <div key={mod.moduleId} className="border border-gray-100 rounded-lg px-3 py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          {taskModules.map((mod) => {
+            const draft = taskModuleDrafts[mod.moduleId] || mod;
+            return (
+            <div key={mod.moduleId} className="border border-gray-100 rounded-lg px-3 py-2 flex flex-col gap-3">
               <div>
                 <div className="text-sm font-medium text-gray-900">{mod.name}</div>
-                <div className="text-xs text-gray-500">{mod.moduleId} | {mod.category} | queue={mod.queueName}{mod.schedule ? ` | cron=${mod.schedule}` : ''}</div>
+                <div className="text-xs text-gray-500">{mod.moduleId} | {mod.category}</div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => runTaskModuleNow(mod.moduleId)} className="px-2 py-1 text-xs rounded border border-blue-200 text-blue-700 bg-blue-50">执行一次</button>
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+                <input
+                  value={draft.queueName || ''}
+                  onChange={(e) => patchTaskModuleDraft(mod.moduleId, { queueName: e.target.value })}
+                  className="border border-gray-200 rounded px-2 py-1 text-xs"
+                  placeholder="queueName"
+                />
+                {mod.category === 'SCHEDULED' ? (
+                  <input
+                    value={draft.schedule || ''}
+                    onChange={(e) => patchTaskModuleDraft(mod.moduleId, { schedule: e.target.value })}
+                    className="border border-gray-200 rounded px-2 py-1 text-xs md:col-span-2"
+                    placeholder="cron 表达式"
+                  />
+                ) : (
+                  <div className="text-xs text-gray-400 flex items-center">实时任务无 cron</div>
+                )}
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.concurrency}
+                  onChange={(e) => patchTaskModuleDraft(mod.moduleId, { concurrency: Number(e.target.value) || 1 })}
+                  className="border border-gray-200 rounded px-2 py-1 text-xs"
+                  placeholder="并发"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.attempts}
+                  onChange={(e) => patchTaskModuleDraft(mod.moduleId, { attempts: Number(e.target.value) || 1 })}
+                  className="border border-gray-200 rounded px-2 py-1 text-xs"
+                  placeholder="重试"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.backoffMs}
+                  onChange={(e) => patchTaskModuleDraft(mod.moduleId, { backoffMs: Number(e.target.value) || 0 })}
+                  className="border border-gray-200 rounded px-2 py-1 text-xs"
+                  placeholder="退避ms"
+                />
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
                 <label className="text-xs flex items-center gap-2">
-                  <input type="checkbox" checked={mod.enabled} onChange={(e) => toggleTaskModule(mod.moduleId, e.target.checked)} />
+                  <input type="checkbox" checked={draft.enabled} onChange={(e) => patchTaskModuleDraft(mod.moduleId, { enabled: e.target.checked })} />
                   启用
                 </label>
+                <label className="text-xs flex items-center gap-2">
+                  <input type="checkbox" checked={draft.useProxy} onChange={(e) => patchTaskModuleDraft(mod.moduleId, { useProxy: e.target.checked })} />
+                  走代理
+                </label>
+                <button onClick={() => runTaskModuleNow(mod.moduleId)} className="px-2 py-1 text-xs rounded border border-blue-200 text-blue-700 bg-blue-50">执行一次</button>
+                <button onClick={() => saveTaskModuleConfig(mod.moduleId)} className="px-2 py-1 text-xs rounded border border-emerald-200 text-emerald-700 bg-emerald-50">保存配置</button>
+                <button onClick={() => toggleTaskModule(mod.moduleId, !mod.enabled)} className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-700 bg-white">快速{mod.enabled ? '停用' : '启用'}</button>
               </div>
             </div>
-          ))}
+          )})}
           {taskModules.length === 0 && <div className="text-xs text-gray-400">暂无任务模块</div>}
         </div>
       </Card>
@@ -549,6 +705,25 @@ export const SystemSettings: React.FC = () => {
 
       <Card title="最近任务执行">
         {taskLoading && <div className="text-xs text-gray-500 mb-2">加载中...</div>}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <select value={runFilters.moduleId} onChange={(e) => setRunFilters((prev) => ({ ...prev, moduleId: e.target.value }))} className="border border-gray-200 rounded px-2 py-1 text-xs bg-white">
+            <option value="">全部模块</option>
+            {taskModules.map((mod) => <option key={mod.moduleId} value={mod.moduleId}>{mod.moduleId}</option>)}
+          </select>
+          <select value={runFilters.queueName} onChange={(e) => setRunFilters((prev) => ({ ...prev, queueName: e.target.value }))} className="border border-gray-200 rounded px-2 py-1 text-xs bg-white">
+            <option value="">全部队列</option>
+            {taskQueues.map((q) => <option key={q.queueName} value={q.queueName}>{q.queueName}</option>)}
+          </select>
+          <select value={runFilters.state} onChange={(e) => setRunFilters((prev) => ({ ...prev, state: e.target.value }))} className="border border-gray-200 rounded px-2 py-1 text-xs bg-white">
+            <option value="">全部状态</option>
+            <option value="waiting">waiting</option>
+            <option value="active">active</option>
+            <option value="completed">completed</option>
+            <option value="failed">failed</option>
+            <option value="cancelled">cancelled</option>
+          </select>
+          <input type="number" min={1} max={200} value={runFilters.limit} onChange={(e) => setRunFilters((prev) => ({ ...prev, limit: Number(e.target.value) || 30 }))} className="w-24 border border-gray-200 rounded px-2 py-1 text-xs" />
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-gray-500">
@@ -559,6 +734,7 @@ export const SystemSettings: React.FC = () => {
                 <th className="text-left py-2">状态</th>
                 <th className="text-left py-2">进度</th>
                 <th className="text-left py-2">错误</th>
+                <th className="text-right py-2">详情</th>
               </tr>
             </thead>
             <tbody>
@@ -570,8 +746,77 @@ export const SystemSettings: React.FC = () => {
                   <td className="py-2">{run.state}</td>
                   <td className="py-2">{run.progress}%</td>
                   <td className="py-2 text-xs text-red-600 max-w-[280px] truncate">{run.error || '-'}</td>
+                  <td className="py-2 text-right">
+                    <button
+                      onClick={() => setDetailsModal({
+                        title: `任务运行详情 ${run.moduleId}`,
+                        content: `payload:\n${asPrettyJson(run.payload)}\n\nresult:\n${asPrettyJson(run.result)}\n\nerror:\n${run.error || '-'}\n\nstate: ${run.state}`
+                      })}
+                      className="text-xs text-blue-600"
+                    >
+                      查看
+                    </button>
+                  </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="队列任务筛选">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <select value={selectedQueueName} onChange={(e) => setSelectedQueueName(e.target.value)} className="border border-gray-200 rounded px-2 py-1 text-xs bg-white">
+            {taskQueues.map((q) => <option key={q.queueName} value={q.queueName}>{q.queueName}</option>)}
+          </select>
+          <select value={queueJobState} onChange={(e) => setQueueJobState(e.target.value)} className="border border-gray-200 rounded px-2 py-1 text-xs bg-white">
+            <option value="waiting">waiting</option>
+            <option value="active">active</option>
+            <option value="delayed">delayed</option>
+            <option value="failed">failed</option>
+            <option value="completed">completed</option>
+            <option value="paused">paused</option>
+            <option value="waiting,active,failed,completed,delayed">all-major</option>
+          </select>
+          <input type="number" min={1} max={100} value={queueJobLimit} onChange={(e) => setQueueJobLimit(Math.max(1, Number(e.target.value) || 20))} className="w-24 border border-gray-200 rounded px-2 py-1 text-xs" />
+          <button onClick={() => loadQueueJobs()} className="px-2 py-1 text-xs rounded border border-gray-200 bg-white">查询</button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="text-left py-2">jobId</th>
+                <th className="text-left py-2">name</th>
+                <th className="text-left py-2">attempts</th>
+                <th className="text-left py-2">failedReason</th>
+                <th className="text-left py-2">时间</th>
+                <th className="text-right py-2">详情</th>
+              </tr>
+            </thead>
+            <tbody>
+              {taskQueueJobs.map((job) => (
+                <tr key={`${job.id}-${job.timestamp}`} className="border-t border-gray-100">
+                  <td className="py-2 font-mono text-xs">{job.id}</td>
+                  <td className="py-2 font-mono text-xs">{job.name}</td>
+                  <td className="py-2">{job.attemptsMade}</td>
+                  <td className="py-2 text-xs text-red-600 max-w-[320px] truncate">{job.failedReason || '-'}</td>
+                  <td className="py-2 text-xs text-gray-500">{job.timestamp ? new Date(job.timestamp).toLocaleString() : '-'}</td>
+                  <td className="py-2 text-right">
+                    <button
+                      onClick={() => setDetailsModal({
+                        title: `队列任务详情 ${job.name}`,
+                        content: `data:\n${asPrettyJson(job.data)}\n\nreturnvalue:\n${asPrettyJson(job.returnvalue)}\n\nfailedReason:\n${job.failedReason || '-'}\n\nstacktrace:\n${(job.stacktrace || []).join('\n\n') || '-'}`
+                      })}
+                      className="text-xs text-blue-600"
+                    >
+                      查看
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {taskQueueJobs.length === 0 && (
+                <tr><td className="py-3 text-xs text-gray-400" colSpan={6}>当前条件下无任务</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -632,6 +877,18 @@ export const SystemSettings: React.FC = () => {
           {activeTab === 'TASKS' && renderTasksTab()}
         </div>
       </div>
+
+      {detailsModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl max-h-[80vh] rounded-xl bg-white border border-gray-200 shadow-xl p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-gray-900">{detailsModal.title}</h4>
+              <button onClick={() => setDetailsModal(null)} className="px-2 py-1 text-xs rounded border border-gray-200">关闭</button>
+            </div>
+            <pre className="flex-1 overflow-auto text-xs bg-gray-50 border border-gray-200 rounded p-3 whitespace-pre-wrap">{detailsModal.content}</pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
