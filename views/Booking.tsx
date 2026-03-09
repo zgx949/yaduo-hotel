@@ -670,7 +670,7 @@ export const Booking: React.FC = () => {
                       <p className="text-xs text-gray-400 mb-1">入住</p>
                       <div className="flex items-baseline gap-2">
                           <span className="text-lg font-bold text-gray-900">{getDisplayDate(searchParams.checkIn)}</span>
-                          <span className="text-xs text-gray-500">今天</span>
+                          <span className="text-xs text-gray-500">入住</span>
                       </div>
                   </div>
                   <div className="bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-600">
@@ -680,7 +680,7 @@ export const Booking: React.FC = () => {
                       <p className="text-xs text-gray-400 mb-1">离店</p>
                       <div className="flex items-baseline gap-2 justify-end">
                           <span className="text-lg font-bold text-gray-900">{getDisplayDate(searchParams.checkOut)}</span>
-                          <span className="text-xs text-gray-500">明天</span>
+                          <span className="text-xs text-gray-500">离开</span>
                       </div>
                   </div>
               </div>

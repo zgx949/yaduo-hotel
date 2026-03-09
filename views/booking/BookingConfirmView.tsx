@@ -89,12 +89,12 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
           <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
             <div className="flex items-baseline gap-2">
               <span className="font-bold text-lg text-gray-900">{getDisplayDate(checkIn)}</span>
-              <span className="text-xs text-gray-500">今天</span>
+              <span className="text-xs text-gray-500">入住</span>
             </div>
             <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded font-medium">{nightCount} 晚</div>
             <div className="flex items-baseline gap-2 justify-end">
               <span className="font-bold text-lg text-gray-900">{getDisplayDate(checkOut)}</span>
-              <span className="text-xs text-gray-500">明天</span>
+              <span className="text-xs text-gray-500">离开</span>
             </div>
           </div>
           <p className="text-xs text-orange-400 mt-2">{selectedRate.cancelTips || '取消规则以酒店确认为准'} {">"}</p>
