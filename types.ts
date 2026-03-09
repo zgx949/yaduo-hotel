@@ -43,12 +43,16 @@ export interface HotelAccount {
     checkIn?: string;  // 上次自动签到时间
     lottery?: string;  // 上次自动抽奖时间
     scan?: string;     // 上次优惠券扫描时间
+    refresh?: string;
+    pointsScan?: string;
   };
   // New field to store the text result of the last execution
   lastResult: {
     checkIn?: string;  // e.g. "签到成功 +50积分"
     lottery?: string;  // e.g. "未中奖"
     scan?: string;     // e.g. "扫描完成，发现 2 张新券"
+    refresh?: string;
+    pointsScan?: string;
   };
 }
 

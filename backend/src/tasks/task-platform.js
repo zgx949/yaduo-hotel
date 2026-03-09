@@ -132,6 +132,7 @@ class TaskPlatform {
     if (!this.connection) {
       return;
     }
+    await prismaStore.ensureTaskModuleDefaults();
     const rawModules = await prismaStore.listTaskModules();
     const modules = [];
     for (const rawModule of rawModules) {

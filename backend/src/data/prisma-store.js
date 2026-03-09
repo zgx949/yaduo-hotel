@@ -690,14 +690,60 @@ export const prismaStore = {
     if (hasOwn(patch, "late_checkout_coupons")) {
       data.lateCheckoutCoupons = Math.max(0, Number(patch.late_checkout_coupons) || 0);
     }
+    if (hasOwn(patch, "slippers_coupons") || hasOwn(patch, "slippersCoupons")) {
+      data.slippersCoupons = Math.max(0, Number(patch.slippers_coupons ?? patch.slippersCoupons) || 0);
+    }
     if (hasOwn(patch, "points")) {
       data.points = Math.max(0, Number(patch.points) || 0);
     }
     if (hasOwn(patch, "dailyOrdersLeft")) {
       data.dailyOrdersLeft = Math.max(0, Number(patch.dailyOrdersLeft) || 0);
     }
+    if (hasOwn(patch, "lastExecution")) {
+      const current = (existed.lastExecution && typeof existed.lastExecution === "object" && !Array.isArray(existed.lastExecution))
+        ? existed.lastExecution
+        : {};
+      const incoming = (patch.lastExecution && typeof patch.lastExecution === "object" && !Array.isArray(patch.lastExecution))
+        ? patch.lastExecution
+        : {};
+      data.lastExecution = { ...current, ...incoming };
+    }
+    if (hasOwn(patch, "lastResult")) {
+      const current = (existed.lastResult && typeof existed.lastResult === "object" && !Array.isArray(existed.lastResult))
+        ? existed.lastResult
+        : {};
+      const incoming = (patch.lastResult && typeof patch.lastResult === "object" && !Array.isArray(patch.lastResult))
+        ? patch.lastResult
+        : {};
+      data.lastResult = { ...current, ...incoming };
+    }
     const updated = await prisma.poolAccount.update({ where: { id }, data });
     return projectPoolAccount(updated);
+  },
+  async listPoolAccountCredentials(filters = {}) {
+    const where = {};
+    if (filters.is_enabled !== undefined) {
+      where.isEnabled = Boolean(filters.is_enabled);
+    }
+    if (filters.is_online !== undefined) {
+      where.isOnline = Boolean(filters.is_online);
+    }
+
+    const rows = await prisma.poolAccount.findMany({ where, orderBy: { updatedAt: "desc" } });
+    return rows.map((row) => ({
+      account: projectPoolAccount(row),
+      token: row.loginTokenCipher ? decryptPoolTokenSafe(row.loginTokenCipher) : null
+    }));
+  },
+  async getPoolAccountCredential(id) {
+    const row = await prisma.poolAccount.findUnique({ where: { id } });
+    if (!row) {
+      return null;
+    }
+    return {
+      account: projectPoolAccount(row),
+      token: row.loginTokenCipher ? decryptPoolTokenSafe(row.loginTokenCipher) : null
+    };
   },
   async deletePoolAccount(id) {
     try {
@@ -1543,6 +1589,124 @@ export const prismaStore = {
       createdAt: it.createdAt.toISOString(),
       updatedAt: it.updatedAt.toISOString()
     }));
+  },
+  async ensureTaskModuleDefaults() {
+    const defaults = [
+      {
+        moduleId: "order.submit",
+        name: "订单下单执行",
+        category: "REALTIME",
+        queueName: "realtime-orders",
+        enabled: true,
+        schedule: null,
+        concurrency: 4,
+        attempts: 3,
+        backoffMs: 2000,
+        useProxy: true
+      },
+      {
+        moduleId: "order.cancel",
+        name: "订单取消执行",
+        category: "REALTIME",
+        queueName: "realtime-orders",
+        enabled: true,
+        schedule: null,
+        concurrency: 2,
+        attempts: 2,
+        backoffMs: 2000,
+        useProxy: true
+      },
+      {
+        moduleId: "order.payment-link",
+        name: "支付链接生成",
+        category: "REALTIME",
+        queueName: "realtime-payments",
+        enabled: true,
+        schedule: null,
+        concurrency: 3,
+        attempts: 2,
+        backoffMs: 1500,
+        useProxy: false
+      },
+      {
+        moduleId: "account.token-refresh",
+        name: "账号令牌巡检",
+        category: "SCHEDULED",
+        queueName: "scheduled-accounts",
+        enabled: true,
+        schedule: "*/30 * * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
+      },
+      {
+        moduleId: "account.daily-checkin",
+        name: "每日签到",
+        category: "SCHEDULED",
+        queueName: "scheduled-accounts",
+        enabled: true,
+        schedule: "0 3 * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
+      },
+      {
+        moduleId: "account.daily-lottery",
+        name: "每日抽奖",
+        category: "SCHEDULED",
+        queueName: "scheduled-accounts",
+        enabled: true,
+        schedule: "10 3 * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
+      },
+      {
+        moduleId: "account.points-scan",
+        name: "积分扫描",
+        category: "SCHEDULED",
+        queueName: "scheduled-accounts",
+        enabled: true,
+        schedule: "20 */2 * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
+      },
+      {
+        moduleId: "account.coupon-scan",
+        name: "礼遇券扫描",
+        category: "SCHEDULED",
+        queueName: "scheduled-accounts",
+        enabled: true,
+        schedule: "25 */2 * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
+      }
+    ];
+
+    for (const module of defaults) {
+      await prisma.taskModuleConfig.upsert({
+        where: { moduleId: module.moduleId },
+        update: {
+          name: module.name,
+          category: module.category,
+          queueName: module.queueName,
+          enabled: module.enabled,
+          schedule: module.schedule,
+          concurrency: module.concurrency,
+          attempts: module.attempts,
+          backoffMs: module.backoffMs,
+          useProxy: module.useProxy
+        },
+        create: module
+      });
+    }
   },
   async getTaskModuleByModuleId(moduleId) {
     if (!moduleId) {

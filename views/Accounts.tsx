@@ -217,61 +217,43 @@ export const Accounts: React.FC = () => {
 
   const handleManualAction = (id: string, action: 'checkIn' | 'lottery' | 'scan' | 'refresh') => {
     setLoadingAction(`${id}-${action}`);
-    setTimeout(() => {
-        setAccounts(prev => prev.map(acc => {
-            if (acc.id !== id) return acc;
-            
-            const now = new Date().toISOString();
-            if (action === 'refresh') {
-                const newStatus = Math.random() > 0.2 ? AccountStatus.ACTIVE : AccountStatus.OFFLINE;
-                return { ...acc, status: newStatus };
-            }
-            
-            let updatedCoupons = acc.coupons;
-            let resultMessage = '';
-
-            // Generate Result Logic
-            if (action === 'checkIn') {
-                const points = Math.floor(Math.random() * 50) + 10;
-                resultMessage = `签到成功 +${points}积分`;
-            } else if (action === 'lottery') {
-                const win = Math.random() > 0.7;
-                if (win) {
-                    updatedCoupons = { ...acc.coupons, breakfast: acc.coupons.breakfast + 1 };
-                    resultMessage = '中奖：早餐券 x1';
-                } else {
-                    resultMessage = '很遗憾，未中奖';
-                }
-            } else if (action === 'scan') {
-                const count = Math.floor(Math.random() * 3);
-                if (count > 0) {
-                     updatedCoupons = { ...acc.coupons, slippers: acc.coupons.slippers + count };
-                     resultMessage = `扫描完成，发现 ${count} 张新券`;
-                } else {
-                     resultMessage = '扫描完毕，无新增';
-                }
-            }
-
-            return {
-                ...acc,
-                coupons: updatedCoupons,
-                lastExecution: {
-                    ...acc.lastExecution,
-                    [action]: now
-                },
-                lastResult: {
-                    ...acc.lastResult,
-                    [action]: resultMessage
-                }
-            };
-        }));
+    fetchWithAuth(`/api/pool/accounts/${id}/actions/${action}/run`, {
+      method: 'POST'
+    })
+      .then((data) => {
+        if (data?.account) {
+          setAccounts((prev) => prev.map((acc) => (acc.id === id ? data.account : acc)));
+        } else {
+          return loadAccounts();
+        }
+      })
+      .catch((err: any) => {
+        alert(err.message || '执行任务失败');
+      })
+      .finally(() => {
         setLoadingAction(null);
-    }, 800);
+      });
   };
 
   const handleBulkAction = (action: 'checkIn' | 'refresh') => {
       if (!window.confirm(`确定要对当前列表显示的 ${filteredAccounts.length} 个账号执行批量操作吗？`)) return;
-      alert(`已将 ${filteredAccounts.length} 个任务加入后台队列，请稍后查看状态。`);
+      setLoadingAction(`bulk-${action}`);
+      fetchWithAuth(`/api/pool/actions/${action}/run`, {
+        method: 'POST',
+        body: JSON.stringify({ accountIds: filteredAccounts.map((it) => it.id) })
+      })
+        .then((data) => {
+          const success = Number(data?.success || 0);
+          const failed = Number(data?.failed || 0);
+          alert(`批量执行完成：成功 ${success} 个，失败 ${failed} 个`);
+          return loadAccounts();
+        })
+        .catch((err: any) => {
+          alert(err.message || '批量执行失败');
+        })
+        .finally(() => {
+          setLoadingAction(null);
+        });
   };
 
   const resetForm = () => {
@@ -696,15 +678,17 @@ export const Accounts: React.FC = () => {
                 </button>
                 <button 
                   onClick={() => handleBulkAction('refresh')}
+                  disabled={loadingAction === 'bulk-refresh'}
                   className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2"
                 >
-                    🔄 批量检测状态
+                    {loadingAction === 'bulk-refresh' ? '执行中...' : '🔄 批量检测状态'}
                 </button>
                 <button 
                   onClick={() => handleBulkAction('checkIn')}
+                  disabled={loadingAction === 'bulk-checkIn'}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center gap-2"
                 >
-                    📅 批量一键签到
+                    {loadingAction === 'bulk-checkIn' ? '执行中...' : '📅 批量一键签到'}
                 </button>
                 <button 
                   onClick={handleCreate}

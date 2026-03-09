@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { prismaStore } from "../data/prisma-store.js";
 import { requireAuth } from "../middleware/auth.js";
+import {
+  runCouponScanTask,
+  runDailyCheckinTask,
+  runDailyLotteryTask,
+  runPointsScanTask,
+  runTokenRefreshTask
+} from "../services/atour-maintenance.service.js";
 
 export const poolRoutes = Router();
 
@@ -122,4 +129,90 @@ poolRoutes.delete("/accounts/:id", requireAuth, async (req, res) => {
     return res.status(404).json({ message: "Pool account not found" });
   }
   return res.status(204).send();
+});
+
+const runAccountAction = async ({ action, accountId, proxy }) => {
+  if (action === "checkIn") {
+    return runDailyCheckinTask({ payload: { accountId }, proxy });
+  }
+  if (action === "lottery") {
+    return runDailyLotteryTask({ payload: { accountId }, proxy });
+  }
+  if (action === "scan") {
+    const couponResult = await runCouponScanTask({ payload: { accountId }, proxy });
+    const pointsResult = await runPointsScanTask({ payload: { accountId }, proxy });
+    return {
+      ok: true,
+      couponResult,
+      pointsResult
+    };
+  }
+  if (action === "refresh") {
+    return runTokenRefreshTask({ payload: { accountId }, proxy });
+  }
+  throw new Error("unsupported action");
+};
+
+poolRoutes.post("/accounts/:id/actions/:action/run", requireAuth, async (req, res) => {
+  const account = await prismaStore.getPoolAccount(req.params.id);
+  if (!account) {
+    return res.status(404).json({ message: "Pool account not found" });
+  }
+  if (!account.is_enabled) {
+    return res.status(400).json({ message: "账号已禁用，不能执行任务" });
+  }
+
+  const proxy = await prismaStore.acquireProxyNode();
+  if (!proxy) {
+    return res.status(400).json({ message: "暂无可用代理节点" });
+  }
+
+  try {
+    const result = await runAccountAction({ action: req.params.action, accountId: account.id, proxy });
+    const latest = await prismaStore.getPoolAccount(account.id);
+    return res.json({
+      ok: true,
+      result,
+      account: latest,
+      proxyId: proxy.id
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "执行任务失败" });
+  }
+});
+
+poolRoutes.post("/actions/:action/run", requireAuth, async (req, res) => {
+  const accountIds = Array.isArray(req.body?.accountIds) ? req.body.accountIds.map((it) => String(it)) : [];
+  const proxy = await prismaStore.acquireProxyNode();
+  if (!proxy) {
+    return res.status(400).json({ message: "暂无可用代理节点" });
+  }
+
+  const baseFilters = req.params.action === "refresh"
+    ? { is_enabled: true }
+    : { is_enabled: true, is_online: true };
+  let targets = await prismaStore.listPoolAccounts(baseFilters);
+  if (accountIds.length > 0) {
+    const idSet = new Set(accountIds);
+    targets = targets.filter((it) => idSet.has(it.id));
+  }
+
+  const results = [];
+  for (const account of targets) {
+    try {
+      const result = await runAccountAction({ action: req.params.action, accountId: account.id, proxy });
+      results.push({ accountId: account.id, ok: true, result });
+    } catch (err) {
+      results.push({ accountId: account.id, ok: false, message: err.message || "failed" });
+    }
+  }
+
+  return res.json({
+    ok: true,
+    total: targets.length,
+    success: results.filter((it) => it.ok).length,
+    failed: results.filter((it) => !it.ok).length,
+    results,
+    proxyId: proxy.id
+  });
 });
