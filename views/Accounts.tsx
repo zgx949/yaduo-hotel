@@ -683,8 +683,8 @@ export const Accounts: React.FC = () => {
                 <input type="number" min={0} value={form.late_checkout_coupons} onChange={(e) => setForm((prev) => ({ ...prev, late_checkout_coupons: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">预计剩余下单次数</label>
-                <input type="number" min={0} value={form.dailyOrdersLeft} onChange={(e) => setForm((prev) => ({ ...prev, dailyOrdersLeft: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                  <label className="block text-xs text-gray-500 mb-1">预计剩余可下间夜</label>
+                  <input type="number" min={0} value={form.dailyOrdersLeft} onChange={(e) => setForm((prev) => ({ ...prev, dailyOrdersLeft: Number(e.target.value) }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
 
@@ -863,7 +863,7 @@ export const Accounts: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded -ml-1" onClick={() => setSelectedAccount(acc)}>
                             <span className="text-xs font-medium text-gray-600">🪙 {acc.points.toLocaleString()} 积分</span>
-                            <span className="text-xs font-medium text-indigo-700">📦 预计剩余下单：{Number(acc.dailyOrdersLeft || 0)} 次</span>
+                            <span className="text-xs font-medium text-indigo-700">📦 预计剩余可下：{Number(acc.dailyOrdersLeft || 0)} 间夜</span>
                             <div className="flex flex-wrap gap-1.5">
                               {Object.entries(acc.coupons).map(([type, count]) => {
                                 if (count === 0) return null;

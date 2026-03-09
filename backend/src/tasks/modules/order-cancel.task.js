@@ -25,7 +25,7 @@ export const orderCancelTask = async ({ payload }) => {
       tier: bookingChannel.tier,
       corporateName: bookingChannel.corporateName,
       preferredAccountId: existing.accountId || undefined,
-      minDailyOrdersLeft: 1
+      minDailyOrdersLeft: 0
     });
     if (!resourceCtx.token) {
       throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");

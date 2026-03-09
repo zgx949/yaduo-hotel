@@ -425,6 +425,8 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                             <th className="px-3 py-2 text-left">亚朵单号</th>
                             <th className="px-3 py-2 text-left">账号</th>
                             <th className="px-3 py-2 text-left">金额</th>
+                            <th className="px-3 py-2 text-left">礼遇券</th>
+                            <th className="px-3 py-2 text-left">备注</th>
                             <th className="px-3 py-2 text-left">执行状态</th>
                             <th className="px-3 py-2 text-left">支付状态</th>
                             <th className="px-3 py-2 text-right">操作</th>
@@ -438,6 +440,15 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                               <td className="px-3 py-2 font-mono text-xs">{item.atourOrderId || '-'}</td>
                               <td className="px-3 py-2">{item.accountPhone || '-'}</td>
                               <td className="px-3 py-2">{order.currency} {item.amount}</td>
+                              <td className="px-3 py-2 text-xs text-gray-600">
+                                {[
+                                  item.breakfastCount > 0 ? `早${item.breakfastCount}` : '',
+                                  item.roomLevelUpCount > 0 ? `升${item.roomLevelUpCount}` : '',
+                                  item.delayedCheckOutCount > 0 ? `延${item.delayedCheckOutCount}` : '',
+                                  item.shooseCount > 0 ? `鞋${item.shooseCount}` : ''
+                                ].filter(Boolean).join(' / ') || '-'}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-600 max-w-[180px] truncate">{item.remark || order.remark || '-'}</td>
                               <td className="px-3 py-2">
                                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-xs ${statusClass(item.executionStatus)}`}>
                                   {isRotatingExecution(item.executionStatus) && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}

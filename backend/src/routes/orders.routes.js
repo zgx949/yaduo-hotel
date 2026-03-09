@@ -24,6 +24,174 @@ export const ordersRoutes = Router();
 
 const PAYMENT_READY_STATES = new Set(["ORDERED", "DONE"]);
 
+const toDateOnly = (value) => new Date(value).toISOString().slice(0, 10);
+
+const dayOffset = (dateText, offsetDays) => {
+  const ms = new Date(String(dateText)).getTime() + offsetDays * 24 * 60 * 60 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+};
+
+const calcNights = (checkInDate, checkOutDate) => {
+  const startMs = new Date(String(checkInDate)).getTime();
+  const endMs = new Date(String(checkOutDate)).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    return 1;
+  }
+  return Math.max(1, Math.ceil((endMs - startMs) / (24 * 60 * 60 * 1000)));
+};
+
+const splitAmountByNights = (amount, nights) => {
+  const total = Number(amount) || 0;
+  if (nights <= 1) {
+    return [Math.round(total * 100) / 100];
+  }
+  const per = Math.floor((total / nights) * 100) / 100;
+  const list = Array.from({ length: nights }, () => per);
+  const used = per * (nights - 1);
+  list[nights - 1] = Math.round((total - used) * 100) / 100;
+  return list;
+};
+
+const expandNewUserSplitsByNight = (payload = {}) => {
+  const baseCheckIn = toDateOnly(payload.checkInDate);
+  const baseCheckOut = toDateOnly(payload.checkOutDate);
+  const sourceSplits = Array.isArray(payload.splits) && payload.splits.length > 0
+    ? payload.splits
+    : [payload];
+
+  const expanded = [];
+  for (const split of sourceSplits) {
+    const tier = parseBookingTier(split?.bookingTier || payload?.bookingTier || "NORMAL");
+    const splitCheckIn = split?.checkInDate ? toDateOnly(split.checkInDate) : baseCheckIn;
+    const splitCheckOut = split?.checkOutDate ? toDateOnly(split.checkOutDate) : baseCheckOut;
+    const nights = calcNights(splitCheckIn, splitCheckOut);
+
+    if (tier.tier !== "NEW_USER" || nights <= 1) {
+      expanded.push({
+        ...split,
+        checkInDate: splitCheckIn,
+        checkOutDate: splitCheckOut
+      });
+      continue;
+    }
+
+    const amountList = splitAmountByNights(split.amount, nights);
+    for (let i = 0; i < nights; i += 1) {
+      expanded.push({
+        ...split,
+        checkInDate: dayOffset(splitCheckIn, i),
+        checkOutDate: dayOffset(splitCheckIn, i + 1),
+        roomCount: 1,
+        amount: amountList[i]
+      });
+    }
+  }
+
+  return {
+    ...payload,
+    checkInDate: baseCheckIn,
+    checkOutDate: baseCheckOut,
+    splits: expanded
+  };
+};
+
+const reserveNewUserAccounts = async (payload = {}) => {
+  const splitList = Array.isArray(payload.splits) ? payload.splits : [];
+  const targetItems = splitList.filter((it) => parseBookingTier(it?.bookingTier || payload.bookingTier || "NORMAL").tier === "NEW_USER");
+  if (targetItems.length === 0) {
+    return payload;
+  }
+
+  const credentials = await prismaStore.listPoolAccountCredentials({ is_enabled: true, is_online: true });
+  const candidates = credentials
+    .filter((it) => it?.token && it?.account?.is_new_user && (Number(it?.account?.dailyOrdersLeft) || 0) >= 1)
+    .sort((a, b) => (Number(b.account.dailyOrdersLeft) || 0) - (Number(a.account.dailyOrdersLeft) || 0));
+
+  if (candidates.length < targetItems.length) {
+    throw new Error(`新客账号不足：需要 ${targetItems.length} 个可用账号，当前仅 ${candidates.length} 个`);
+  }
+
+  const selected = candidates.slice(0, targetItems.length);
+  const reserveIds = selected.map((it) => String(it.account.id));
+  const check = await prismaStore.checkPoolAccountsAvailability(reserveIds);
+  if (!check.ok) {
+    throw new Error(`新客账号不足：需要 ${check.total} 个可用账号，当前仅 ${check.available} 个`);
+  }
+
+  let cursor = 0;
+  const nextSplits = splitList.map((it) => {
+    const tier = parseBookingTier(it?.bookingTier || payload.bookingTier || "NORMAL");
+    if (tier.tier !== "NEW_USER") {
+      return it;
+    }
+    const picked = selected[cursor];
+    cursor += 1;
+    return {
+      ...it,
+      accountId: picked.account.id,
+      accountPhone: picked.account.phone
+    };
+  });
+
+  return {
+    ...payload,
+    splits: nextSplits
+  };
+};
+
+const reserveNewUserAccountsForItems = async (items = []) => {
+  const targets = (Array.isArray(items) ? items : [])
+    .filter((it) => parseBookingTier(it?.bookingTier || "NORMAL").tier === "NEW_USER");
+
+  if (targets.length === 0) {
+    return { assignments: [] };
+  }
+
+  const credentials = await prismaStore.listPoolAccountCredentials({ is_enabled: true, is_online: true });
+  const candidates = credentials
+    .filter((it) => it?.token && it?.account?.is_new_user && (Number(it?.account?.dailyOrdersLeft) || 0) >= 1)
+    .sort((a, b) => (Number(b.account.dailyOrdersLeft) || 0) - (Number(a.account.dailyOrdersLeft) || 0));
+
+  if (candidates.length < targets.length) {
+    throw new Error(`新客账号不足：需要 ${targets.length} 个可用账号，当前仅 ${candidates.length} 个`);
+  }
+
+  const used = new Set();
+  const assignments = [];
+  for (const item of targets) {
+    let selected = null;
+    if (item.accountId) {
+      selected = candidates.find((it) => it.account.id === item.accountId && !used.has(it.account.id)) || null;
+    }
+    if (!selected) {
+      selected = candidates.find((it) => !used.has(it.account.id)) || null;
+    }
+    if (!selected) {
+      throw new Error("新客账号不足：无法完成账号分配");
+    }
+    used.add(selected.account.id);
+    assignments.push({
+      itemId: item.id,
+      accountId: selected.account.id,
+      accountPhone: selected.account.phone
+    });
+  }
+
+  const accountIds = assignments.map((it) => it.accountId);
+  const check = await prismaStore.checkPoolAccountsAvailability(accountIds);
+  if (!check.ok) {
+    throw new Error(`新客账号不足：需要 ${check.total} 个可用账号，当前仅 ${check.available} 个`);
+  }
+  await Promise.all(assignments.map((it) =>
+    prismaStore.updateOrderItem(it.itemId, {
+      accountId: it.accountId,
+      accountPhone: it.accountPhone
+    })
+  ));
+
+  return { assignments };
+};
+
 const toPaymentSplitView = (item) => ({
   itemId: item.id,
   splitIndex: item.splitIndex,
@@ -160,7 +328,7 @@ const cancelSingleOrderItem = async (orderItem, options = {}) => {
 
       const tokenCtx = await pickTokenContext(orderItem.bookingTier || undefined, {
         preferredAccountId: orderItem.accountId || undefined,
-        minDailyOrdersLeft: 1
+        minDailyOrdersLeft: 0
       });
       await cancelAtourOrder({
         token: tokenCtx.token,
@@ -200,6 +368,8 @@ ordersRoutes.get("/", requireAuth, async (req, res) => {
 });
 
 ordersRoutes.post("/", requireAuth, async (req, res) => {
+  try {
+    const requestPayload = expandNewUserSplitsByNight(req.body || {});
   const {
     hotelName,
     customerName,
@@ -207,7 +377,7 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
     checkInDate,
     checkOutDate,
     splits
-  } = req.body || {};
+  } = requestPayload;
 
   if (!hotelName || !customerName || !chainId || !checkInDate || !checkOutDate) {
     return res.status(400).json({ message: "hotelName, customerName, chainId, checkInDate, checkOutDate are required" });
@@ -227,7 +397,7 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
   const systemConfig = await prismaStore.getSystemConfig();
   const previewSplits = Array.isArray(splits) && splits.length > 0
     ? splits
-    : [{ bookingTier: req.body?.bookingTier || "NORMAL" }];
+    : [{ bookingTier: requestPayload?.bookingTier || "NORMAL" }];
   for (const split of previewSplits) {
     const channel = parseBookingTier(split?.bookingTier || "NORMAL");
     const permissionCheck = canUserUseBookingTier({
@@ -240,12 +410,20 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
     }
   }
 
-  const order = await prismaStore.createOrder(req.body || {}, req.auth.user);
-  const tasks = [];
+  const submitNow = requestPayload.submitNow !== false;
+  const payloadWithReservations = submitNow
+    ? await reserveNewUserAccounts(requestPayload)
+    : requestPayload;
 
-  for (const item of order.items.filter((it) => it.executionStatus === "QUEUED")) {
-    const task = await enqueueOrderItemTask(item);
-    tasks.push(task);
+  let order = null;
+  let tasks = [];
+  try {
+    order = await prismaStore.createOrder(payloadWithReservations, req.auth.user);
+    tasks = await Promise.all(order.items
+      .filter((it) => it.executionStatus === "QUEUED")
+      .map((item) => enqueueOrderItemTask(item)));
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "create order failed" });
   }
 
   return res.status(201).json({
@@ -253,6 +431,9 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
     tasks,
     paymentDecision: buildPaymentDecision(order)
   });
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "create order failed" });
+  }
 });
 
 ordersRoutes.get("/:id/payment-options", requireAuth, async (req, res) => {
@@ -494,15 +675,26 @@ ordersRoutes.post("/:id/submit", requireAuth, async (req, res) => {
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const result = await prismaStore.submitOrder(order.id);
-  const tasks = [];
-  for (const item of result.items.filter((it) => it.executionStatus === "QUEUED")) {
-    const existingTask = await prismaStore.findTaskByOrderItem(item.id);
-    if (existingTask && ["waiting", "active"].includes(existingTask.state)) {
-      continue;
-    }
-    tasks.push(await enqueueOrderItemTask(item));
+  const pendingForSubmit = order.items.filter(
+    (it) => it.status !== "CANCELLED" && ["PLAN_PENDING", "FAILED"].includes(it.executionStatus)
+  );
+  try {
+    await reserveNewUserAccountsForItems(pendingForSubmit);
+  } catch (err) {
+    return res.status(409).json({ message: err?.message || "新客账号预检失败" });
   }
+
+  const result = await prismaStore.submitOrder(order.id);
+  const taskResults = await Promise.all(result.items
+    .filter((it) => it.executionStatus === "QUEUED")
+    .map(async (item) => {
+      const existingTask = await prismaStore.findTaskByOrderItem(item.id);
+      if (existingTask && ["waiting", "active"].includes(existingTask.state)) {
+        return null;
+      }
+      return enqueueOrderItemTask(item);
+    }));
+  const tasks = taskResults.filter(Boolean);
   return res.json({
     order: result.order,
     tasks,
@@ -600,6 +792,15 @@ ordersRoutes.post("/items/:itemId/confirm-submit", requireAuth, async (req, res)
 
   if (!["PLAN_PENDING", "FAILED"].includes(item.executionStatus)) {
     return res.json({ item, task: null });
+  }
+
+  const tier = parseBookingTier(item.bookingTier || "NORMAL");
+  if (tier.tier === "NEW_USER") {
+    try {
+      await reserveNewUserAccountsForItems([item]);
+    } catch (err) {
+      return res.status(409).json({ message: err?.message || "新客账号预检失败" });
+    }
   }
 
   const submitted = await prismaStore.submitOrderItem(item.id);

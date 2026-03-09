@@ -7,6 +7,25 @@ import { fetchWithProxy } from "./proxied-fetch.service.js";
 
 const ALIPAY_APP_ID = "2021003121605466";
 const ALIPAY_APP_BRIDGE_ID = "20000067";
+const NEW_GUEST_API_BASE = "https://miniapp.yaduo.com/atourlife";
+
+const idCardWeights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+const idCardCheckMap = ["1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"];
+
+const buildMockIdCardNumber = () => {
+  const areaCode = "110101";
+  const now = new Date();
+  const year = String(Math.max(1988, now.getFullYear() - Math.floor(Math.random() * 15))).padStart(4, "0");
+  const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, "0");
+  const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, "0");
+  const seq = String(Math.floor(Math.random() * 999) + 1).padStart(3, "0");
+  const base = `${areaCode}${year}${month}${day}${seq}`;
+  let sum = 0;
+  for (let i = 0; i < 17; i += 1) {
+    sum += Number(base[i]) * idCardWeights[i];
+  }
+  return `${base}${idCardCheckMap[sum % 11]}`;
+};
 
 const buildAtourQuery = (token) => {
   const params = new URLSearchParams({
@@ -32,6 +51,35 @@ const buildAtourHeaders = (token) => ({
   "At-Channel-Id": env.atourChannelId,
   ...(env.atourCookie ? { Cookie: env.atourCookie } : {})
 });
+
+const runNewGuestIdentityUpdate = async ({ token, proxy, chainId, realName }) => {
+  const params = new URLSearchParams({
+    token: String(token),
+    platType: String(env.atourPlatformType),
+    appVer: String(env.atourAppVersion),
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activityId: "",
+    activeId: ""
+  });
+
+  const response = await fetchWithProxy(`${NEW_GUEST_API_BASE}/chain/newGuestIdentityCheck?${params.toString()}`, {
+    method: "POST",
+    headers: buildAtourHeaders(token),
+    body: JSON.stringify({
+      docType: 1,
+      realName: String(realName || "刘三"),
+      idCardNumber: buildMockIdCardNumber(),
+      chainId: String(chainId)
+    }),
+    timeoutMs: 12000
+  }, proxy);
+
+  const raw = await parseAtourResponse(response, "newGuestIdentityCheck failed");
+  return {
+    warning: Boolean(raw?.result)
+  };
+};
 
 const parseAtourResponse = async (response, fallbackMessage) => {
   const rawText = await response.text();
@@ -520,7 +568,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     tier: bookingChannel.tier,
     corporateName: bookingChannel.corporateName,
     preferredAccountId: item.accountId || undefined,
-    minDailyOrdersLeft: 1
+    minDailyOrdersLeft: item.accountId ? 0 : 1
   });
   if (!resourceCtx.token) {
     throw new Error("余额不足：该下单渠道暂无可用账号");
@@ -538,6 +586,15 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     customerPhone: order.contactPhone
   });
 
+  if (bookingChannel.tier === "NEW_USER") {
+    await runNewGuestIdentityUpdate({
+      token: resourceCtx.token,
+      proxy: resourceCtx.proxy,
+      chainId: order.chainId,
+      realName: order.customerName || "刘三"
+    });
+  }
+
   const scanAccountId = resourceCtx.tokenAccountId || item.accountId || null;
   if (scanAccountId) {
     await runCouponScanTask({
@@ -553,7 +610,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
       ...calculatePayload,
       createPayload: {
         customerName: order.customerName,
-        customerPhone: order.contactPhone,
+        customerPhone: item.accountPhone,
         orderItem: {
           remark: item.remark || order.remark || "",
           breakfastCount: Number(item.breakfastCount) || 0,
@@ -565,7 +622,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     }
   });
 
-  await prismaStore.updateOrderItem(orderItemId, {
+  await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
     atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
     accountId: resourceCtx.tokenAccountId || item.accountId || null,
     accountPhone: resourceCtx.tokenAccountPhone || item.accountPhone || null,
@@ -626,7 +683,7 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
     tier: bookingChannel.tier,
     corporateName: bookingChannel.corporateName,
     preferredAccountId: item.accountId || undefined,
-    minDailyOrdersLeft: 1
+    minDailyOrdersLeft: 0
   });
   if (!resourceCtx.token) {
     throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");

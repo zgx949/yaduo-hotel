@@ -266,6 +266,15 @@ const projectOrderStatusScanCandidate = (item) => ({
   chainId: item.group?.chainId ? String(item.group.chainId) : ""
 });
 
+const calcRoomNights = (item) => {
+  const start = new Date(item.checkInDate).getTime();
+  const end = new Date(item.checkOutDate).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return 1;
+  }
+  return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
+};
+
 const projectPoolAccount = (entity) => {
   const tier = deriveTier(entity);
   const status = !entity.isEnabled ? "BLOCKED" : entity.isOnline ? "ACTIVE" : "OFFLINE";
@@ -861,6 +870,115 @@ export const prismaStore = {
     }
     return null;
   },
+  async reservePoolAccounts(accountIds = []) {
+    const ids = Array.from(new Set((Array.isArray(accountIds) ? accountIds : []).map((it) => String(it)).filter(Boolean)));
+    if (ids.length === 0) {
+      return { ok: true, reserved: [] };
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const reserved = [];
+      for (const id of ids) {
+        const updated = await tx.poolAccount.updateMany({
+          where: {
+            id,
+            isOnline: true,
+            isEnabled: true,
+            dailyOrdersLeft: { gte: 1 }
+          },
+          data: {
+            dailyOrdersLeft: { decrement: 1 }
+          }
+        });
+        if (updated.count !== 1) {
+          throw new Error(`POOL_ACCOUNT_RESERVE_CONFLICT:${id}`);
+        }
+        reserved.push(id);
+      }
+      return { ok: true, reserved };
+    });
+  },
+  async checkPoolAccountsAvailability(accountIds = []) {
+    const ids = Array.from(new Set((Array.isArray(accountIds) ? accountIds : []).map((it) => String(it)).filter(Boolean)));
+    if (ids.length === 0) {
+      return { ok: true, total: 0 };
+    }
+
+    const rows = await prisma.poolAccount.findMany({
+      where: {
+        id: { in: ids },
+        isOnline: true,
+        isEnabled: true,
+        dailyOrdersLeft: { gte: 1 }
+      },
+      select: { id: true }
+    });
+    return {
+      ok: rows.length === ids.length,
+      total: ids.length,
+      available: rows.length
+    };
+  },
+  async releasePoolAccountReservation(accountId, amount = 1) {
+    if (!accountId) {
+      return false;
+    }
+    const delta = Math.max(1, Number(amount) || 1);
+    const updated = await prisma.poolAccount.updateMany({
+      where: { id: String(accountId) },
+      data: { dailyOrdersLeft: { increment: delta } }
+    });
+    return updated.count > 0;
+  },
+  async applyOrderItemSubmitSuccess(itemId, patch = {}) {
+    if (!itemId) {
+      throw new Error("order item id required");
+    }
+    return prisma.$transaction(async (tx) => {
+      const existed = await tx.orderItem.findUnique({ where: { id: itemId } });
+      if (!existed) {
+        throw new Error("order item not found");
+      }
+      if (existed.status === "CANCELLED") {
+        throw new Error("order item already cancelled");
+      }
+
+      const nextAccountId = patch.accountId ? String(patch.accountId) : (existed.accountId ? String(existed.accountId) : null);
+      const claimed = await tx.orderItem.updateMany({
+        where: {
+          id: itemId,
+          status: { not: "CANCELLED" },
+          executionStatus: { notIn: ["ORDERED", "DONE"] }
+        },
+        data: {
+          atourOrderId: hasOwn(patch, "atourOrderId") ? (patch.atourOrderId ? String(patch.atourOrderId) : null) : undefined,
+          accountId: hasOwn(patch, "accountId") ? (patch.accountId ? String(patch.accountId) : null) : undefined,
+          accountPhone: hasOwn(patch, "accountPhone") ? (patch.accountPhone ? String(patch.accountPhone) : null) : undefined,
+          status: patch.status ? String(patch.status) : undefined,
+          executionStatus: patch.executionStatus ? String(patch.executionStatus) : "ORDERED"
+        }
+      });
+
+      if (claimed.count > 0 && nextAccountId) {
+        const nights = calcRoomNights(existed);
+        const charged = await tx.poolAccount.updateMany({
+          where: {
+            id: nextAccountId,
+            dailyOrdersLeft: { gte: nights }
+          },
+          data: {
+            dailyOrdersLeft: { decrement: nights }
+          }
+        });
+        if (charged.count !== 1) {
+          throw new Error(`账号可用间夜数不足：需要 ${nights} 间夜`);
+        }
+      }
+
+      const latest = await tx.orderItem.findUnique({ where: { id: itemId } });
+      return latest ? projectOrderItem(latest) : null;
+    });
+  },
   async createOrder(payload, creator) {
     const nowDate = new Date();
     const checkInDate = payload.checkInDate ? new Date(payload.checkInDate) : nowDate;
@@ -1139,6 +1257,10 @@ export const prismaStore = {
     if (!item) {
       return null;
     }
+    if (item.status === "CANCELLED") {
+      return projectOrderItem(item);
+    }
+
     const updated = await prisma.orderItem.update({
       where: { id: itemId },
       data: {
@@ -1147,6 +1269,16 @@ export const prismaStore = {
         paymentStatus: "UNPAID"
       }
     });
+
+    const shouldRefundNights = Boolean(item.accountId) && (Boolean(item.atourOrderId) || ["ORDERED", "DONE"].includes(String(item.executionStatus || "")));
+    if (shouldRefundNights) {
+      const nights = calcRoomNights(item);
+      await prisma.poolAccount.updateMany({
+        where: { id: String(item.accountId) },
+        data: { dailyOrdersLeft: { increment: nights } }
+      });
+    }
+
     await prisma.task.updateMany({
       where: { orderItemId: itemId, state: { in: ["waiting", "active"] } },
       data: { state: "cancelled", error: "cancelled by user" }
