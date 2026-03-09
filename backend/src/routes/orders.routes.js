@@ -9,13 +9,16 @@ import {
   calculateOrderV2,
   cancelAtourOrder,
   createPayOrder,
-  getAtourOrderDetail,
   generateOrderItemPaymentLink,
   getCashierInformation,
   runAtourOrderWorkflow
 } from "../services/atour-order.service.js";
 import { canUserUseBookingTier, parseBookingTier } from "../services/booking-channel.service.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
+import {
+  refreshOrderItemStatusByAtour,
+  refreshOrderStatusByAtour
+} from "../services/order-status-sync.service.js";
 
 export const ordersRoutes = Router();
 
@@ -184,90 +187,6 @@ const cancelSingleOrderItem = async (orderItem, options = {}) => {
       message: err?.message || "cancel failed"
     };
   }
-};
-
-const buildPatchFromAtourOrderDetail = (detail = {}) => {
-  const orderState = Number(detail?.orderState);
-  const payState = Number(detail?.payState);
-  const feeAmount = Number(detail?.feeDetail?.newTotal || detail?.roomRate || 0);
-
-  const patch = {};
-  if (feeAmount > 0) {
-    patch.amount = feeAmount;
-  }
-
-  if (orderState === 2) {
-    patch.status = "CANCELLED";
-    patch.executionStatus = "CANCELLED";
-    patch.paymentStatus = "UNPAID";
-    return patch;
-  }
-
-  if (orderState === 5) {
-    patch.status = "COMPLETED";
-    patch.executionStatus = "DONE";
-    patch.paymentStatus = payState === 1 ? "PAID" : "UNPAID";
-    return patch;
-  }
-
-  if (orderState === 3) {
-    patch.status = "CONFIRMED";
-    patch.executionStatus = "DONE";
-    patch.paymentStatus = payState === 1 ? "PAID" : "UNPAID";
-    return patch;
-  }
-
-  if (orderState === 1) {
-    patch.status = "PROCESSING";
-    patch.executionStatus = "ORDERED";
-    patch.paymentStatus = payState === 1 ? "PAID" : "UNPAID";
-    return patch;
-  }
-
-  if (payState === 1) {
-    patch.paymentStatus = "PAID";
-  }
-  return patch;
-};
-
-const refreshOrderItemStatusByAtour = async (order, item) => {
-  if (!item?.atourOrderId) {
-    return item;
-  }
-
-  const tokenCtx = await pickTokenContext(item.bookingTier || undefined, {
-    preferredAccountId: item.accountId || undefined,
-    minDailyOrdersLeft: 0
-  });
-  const detail = await getAtourOrderDetail({
-    token: tokenCtx.token,
-    proxy: tokenCtx.proxy,
-    chainId: order.chainId,
-    folioId: item.atourOrderId
-  });
-
-  const patch = buildPatchFromAtourOrderDetail(detail);
-  if (Object.keys(patch).length === 0) {
-    return item;
-  }
-  return prismaStore.updateOrderItem(item.id, patch);
-};
-
-const refreshOrderStatusByAtour = async (order) => {
-  const details = [];
-  for (const item of order.items || []) {
-    if (!item.atourOrderId) {
-      continue;
-    }
-    try {
-      const updated = await refreshOrderItemStatusByAtour(order, item);
-      details.push({ itemId: item.id, ok: true, status: updated?.status || item.status });
-    } catch (err) {
-      details.push({ itemId: item.id, ok: false, message: err?.message || "refresh failed" });
-    }
-  }
-  const refreshedOrder = await prismaStore.refreshOrderStatus(order.id);
-  return { order: refreshedOrder, details };
 };
 
 ordersRoutes.get("/", requireAuth, async (req, res) => {
@@ -659,9 +578,8 @@ ordersRoutes.post("/items/:itemId/refresh-status", requireAuth, async (req, res)
   }
 
   try {
-    const updated = await refreshOrderItemStatusByAtour(order, item);
-    await prismaStore.refreshOrderStatus(order.id);
-    return res.json({ item: updated, source: "atour" });
+    const refreshed = await refreshOrderItemStatusByAtour(order, item, { source: "route.refresh-order-item" });
+    return res.json({ item: refreshed.item, source: "atour", details: refreshed.details });
   } catch (err) {
     return res.status(400).json({ message: err?.message || "刷新拆单状态失败" });
   }

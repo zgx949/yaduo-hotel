@@ -248,6 +248,21 @@ const aggregateOrderStatuses = (items) => {
   return { status, paymentStatus };
 };
 
+const ORDER_STATUS_SYNC_TERMINAL = new Set(["CANCELLED", "COMPLETED", "REFUNDED", "REFUNDING"]);
+
+const projectOrderStatusScanCandidate = (item) => ({
+  id: item.id,
+  groupId: item.groupId,
+  atourOrderId: item.atourOrderId,
+  bookingTier: item.bookingTier || null,
+  accountId: item.accountId || null,
+  status: item.status,
+  paymentStatus: item.paymentStatus,
+  executionStatus: item.executionStatus,
+  updatedAt: item.updatedAt.toISOString(),
+  chainId: item.group?.chainId ? String(item.group.chainId) : ""
+});
+
 const projectPoolAccount = (entity) => {
   const tier = deriveTier(entity);
   const status = !entity.isEnabled ? "BLOCKED" : entity.isOnline ? "ACTIVE" : "OFFLINE";
@@ -1228,6 +1243,100 @@ export const prismaStore = {
     });
     return this.getOrder(orderGroupId);
   },
+  async listOrderItemsForPaymentStatusScan(options = {}) {
+    const limit = Math.max(1, Math.min(500, Number(options.limit) || 200));
+    const rows = await prisma.orderItem.findMany({
+      where: {
+        atourOrderId: { not: null },
+        paymentStatus: { not: "PAID" },
+        status: { notIn: Array.from(ORDER_STATUS_SYNC_TERMINAL) }
+      },
+      include: {
+        group: {
+          select: {
+            chainId: true
+          }
+        }
+      },
+      orderBy: [{ updatedAt: "asc" }],
+      take: limit
+    });
+    return rows.map(projectOrderStatusScanCandidate);
+  },
+  async listOrderItemsForStayStatusScan(options = {}) {
+    const limit = Math.max(1, Math.min(500, Number(options.limit) || 500));
+    const rows = await prisma.orderItem.findMany({
+      where: {
+        atourOrderId: { not: null },
+        status: { in: ["CONFIRMED", "WAITING_CHECKIN", "CHECKED_IN", "PROCESSING"] }
+      },
+      include: {
+        group: {
+          select: {
+            chainId: true
+          }
+        }
+      },
+      orderBy: [{ updatedAt: "asc" }],
+      take: limit
+    });
+    return rows.map(projectOrderStatusScanCandidate);
+  },
+  async safeSyncOrderItemStatus(itemId, patch = {}, options = {}) {
+    if (!itemId) {
+      return { applied: false, reason: "INVALID_ITEM_ID", item: null };
+    }
+
+    const blockedCurrentStatuses = Array.isArray(options.blockedCurrentStatuses) && options.blockedCurrentStatuses.length > 0
+      ? options.blockedCurrentStatuses.map((it) => String(it))
+      : Array.from(ORDER_STATUS_SYNC_TERMINAL);
+
+    const existed = await prisma.orderItem.findUnique({ where: { id: itemId } });
+    if (!existed) {
+      return { applied: false, reason: "NOT_FOUND", item: null };
+    }
+
+    if (blockedCurrentStatuses.includes(String(existed.status || ""))) {
+      return { applied: false, reason: "TERMINAL_BLOCKED", item: projectOrderItem(existed) };
+    }
+
+    const nextData = {};
+    if (hasOwn(patch, "status") && patch.status) {
+      nextData.status = String(patch.status);
+    }
+    if (hasOwn(patch, "executionStatus") && patch.executionStatus) {
+      nextData.executionStatus = String(patch.executionStatus);
+    }
+    if (hasOwn(patch, "paymentStatus") && patch.paymentStatus) {
+      const nextPayment = String(patch.paymentStatus);
+      if (!(existed.paymentStatus === "PAID" && nextPayment && nextPayment !== "PAID")) {
+        nextData.paymentStatus = nextPayment;
+      }
+    }
+    if (hasOwn(patch, "amount")) {
+      nextData.amount = Number(patch.amount) || 0;
+    }
+
+    if (Object.keys(nextData).length === 0) {
+      return { applied: false, reason: "NO_CHANGES", item: projectOrderItem(existed) };
+    }
+
+    const where = {
+      id: itemId,
+      status: { notIn: blockedCurrentStatuses }
+    };
+    if (options.expectedUpdatedAt) {
+      where.updatedAt = new Date(options.expectedUpdatedAt);
+    }
+
+    const result = await prisma.orderItem.updateMany({ where, data: nextData });
+    const latest = await prisma.orderItem.findUnique({ where: { id: itemId } });
+    return {
+      applied: result.count > 0,
+      reason: result.count > 0 ? "UPDATED" : "CONFLICT",
+      item: latest ? projectOrderItem(latest) : null
+    };
+  },
   async getOrderItemLinks(itemId) {
     const item = await prisma.orderItem.findUnique({ where: { id: itemId } });
     if (!item) {
@@ -1669,6 +1778,30 @@ export const prismaStore = {
         attempts: 2,
         backoffMs: 1500,
         useProxy: false
+      },
+      {
+        moduleId: "order.payment-status-scan",
+        name: "订单支付状态扫描",
+        category: "SCHEDULED",
+        queueName: "scheduled-orders",
+        enabled: true,
+        schedule: "*/30 * * * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
+      },
+      {
+        moduleId: "order.stay-status-scan",
+        name: "待入住订单巡检",
+        category: "SCHEDULED",
+        queueName: "scheduled-orders",
+        enabled: true,
+        schedule: "10 2 * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
       },
       {
         moduleId: "account.token-refresh",
