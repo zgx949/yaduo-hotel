@@ -361,10 +361,14 @@ ordersRoutes.get("/", requireAuth, async (req, res) => {
   const filters = {
     search: req.query.search,
     status: req.query.status,
+    checkInFrom: req.query.checkInFrom,
+    checkInTo: req.query.checkInTo,
+    page: req.query.page,
+    pageSize: req.query.pageSize,
     creatorId: req.auth.user.role === "ADMIN" ? undefined : req.auth.user.id
   };
-  const items = await prismaStore.listOrders(filters);
-  return res.json({ items });
+  const result = await prismaStore.listOrdersPage(filters);
+  return res.json({ items: result.items, data: result.items, meta: result.meta });
 });
 
 ordersRoutes.post("/", requireAuth, async (req, res) => {

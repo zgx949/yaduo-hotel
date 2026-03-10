@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 export type UserRole = 'ADMIN' | 'USER';
 
@@ -8,6 +8,12 @@ interface MenuItem {
   label: string;
   icon: string;
   devOnly?: boolean;
+}
+
+interface MenuGroup {
+  id: string;
+  label: string;
+  items: MenuItem[];
 }
 
 interface SidebarProps {
@@ -23,20 +29,40 @@ interface SidebarProps {
 
 const isDevMode = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
 
-export const MENU_ITEMS: MenuItem[] = [
-  { id: 'dashboard', label: '仪表盘', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
-  { id: 'booking', label: '新建预订', icon: 'M12 4v16m8-8H4' },
-  { id: 'orders', label: '订单管理', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-  { id: 'accounts', label: '账号池管理', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-  { id: 'pool-import', label: '批量导入账号', icon: 'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 12v9m0 0l-3-3m3 3l3-3' },
-  { id: 'users', label: '用户/权限管理', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
-  { id: 'monitor', label: '监控/捡漏', icon: 'M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z' },
-  { id: 'ai-quote', label: 'AI 查价/报价', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-  { id: 'blacklist', label: '酒店黑名单', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
-  { id: 'invoices', label: '发票管理', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { id: 'settings', label: '系统管理', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
-  { id: 'crypto-lab', label: '加解密实验室', icon: 'M7 11V7a5 5 0 1110 0v4m-9 0h8a2 2 0 012 2v5a2 2 0 01-2 2H8a2 2 0 01-2-2v-5a2 2 0 012-2z', devOnly: true },
+export const MENU_GROUPS: MenuGroup[] = [
+  {
+    id: 'overview',
+    label: '总览',
+    items: [
+      { id: 'dashboard', label: '仪表盘', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' }
+    ]
+  },
+  {
+    id: 'hotel-booking',
+    label: '酒店预定',
+    items: [
+      { id: 'booking', label: '新建预订', icon: 'M12 4v16m8-8H4' },
+      { id: 'orders', label: '订单管理', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+      { id: 'invoices', label: '发票管理', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+      { id: 'ai-quote', label: 'AI 查价/报价', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+      { id: 'monitor', label: '监控/捡漏', icon: 'M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z' },
+      { id: 'blacklist', label: '酒店黑名单', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' }
+    ]
+  },
+  {
+    id: 'system-management',
+    label: '系统管理',
+    items: [
+      { id: 'accounts', label: '号池管理', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
+      { id: 'pool-import', label: '批量导入账号', icon: 'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 12v9m0 0l-3-3m3 3l3-3' },
+      { id: 'users', label: '用户/权限管理', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+      { id: 'settings', label: '系统管理', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+      { id: 'crypto-lab', label: '加解密实验室', icon: 'M7 11V7a5 5 0 1110 0v4m-9 0h8a2 2 0 012 2v5a2 2 0 01-2 2H8a2 2 0 01-2-2v-5a2 2 0 012-2z', devOnly: true }
+    ]
+  }
 ];
+
+export const MENU_ITEMS: MenuItem[] = MENU_GROUPS.flatMap((group) => group.items);
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   activeTab, 
@@ -48,15 +74,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   onLogout 
 }) => {
+  const GROUP_COLLAPSE_KEY = 'skyagent_sidebar_group_collapsed';
   
   // Filter menu based on role
-  const visibleMenuItems = useMemo(() => {
-    const modeSafeItems = MENU_ITEMS.filter((item) => !item.devOnly || isDevMode);
-    if (userRole === 'ADMIN') return modeSafeItems;
+  const visibleMenuGroups = useMemo(() => {
+    const modeSafeGroups = MENU_GROUPS
+      .map((group) => ({ ...group, items: group.items.filter((item) => !item.devOnly || isDevMode) }))
+      .filter((group) => group.items.length > 0);
+    if (userRole === 'ADMIN') return modeSafeGroups;
     // User Role: Hide Dashboard, Accounts, Users, Settings
     const userAllowedIds = ['booking', 'orders', 'monitor', 'ai-quote', 'blacklist', 'invoices'];
-    return modeSafeItems.filter(item => userAllowedIds.includes(item.id));
+    return modeSafeGroups
+      .map((group) => ({ ...group, items: group.items.filter((item) => userAllowedIds.includes(item.id)) }))
+      .filter((group) => group.items.length > 0);
   }, [userRole]);
+
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(GROUP_COLLAPSE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map((it) => String(it)) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(GROUP_COLLAPSE_KEY, JSON.stringify(collapsedGroupIds));
+  }, [collapsedGroupIds]);
+
+  useEffect(() => {
+    if (isCollapsed) {
+      return;
+    }
+    const activeGroup = visibleMenuGroups.find((group) => group.items.some((item) => item.id === activeTab));
+    if (!activeGroup) {
+      return;
+    }
+    setCollapsedGroupIds((prev) => prev.filter((id) => id !== activeGroup.id));
+  }, [activeTab, visibleMenuGroups, isCollapsed]);
+
+  const toggleGroupCollapsed = (groupId: string) => {
+    setCollapsedGroupIds((prev) => prev.includes(groupId)
+      ? prev.filter((id) => id !== groupId)
+      : [...prev, groupId]);
+  };
 
   return (
     <>
@@ -115,25 +177,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
         
         {/* Menu Items */}
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden">
-          {visibleMenuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                onTabChange(item.id);
-                onClose(); // Close sidebar on mobile selection
-              }}
-              title={isCollapsed ? item.label : ''}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === item.id 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              } ${isCollapsed ? 'justify-center' : ''}`}
-            >
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-              </svg>
-              {!isCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
-            </button>
+          {visibleMenuGroups.map((group) => (
+            <div key={group.id} className="space-y-1">
+              {!isCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => toggleGroupCollapsed(group.id)}
+                  className="w-full px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-slate-500 flex items-center justify-between hover:text-slate-300"
+                >
+                  <span>{group.label}</span>
+                  <span>{collapsedGroupIds.includes(group.id) ? '▸' : '▾'}</span>
+                </button>
+              )}
+              {(isCollapsed || !collapsedGroupIds.includes(group.id)) && group.items.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    onTabChange(item.id);
+                    onClose(); // Close sidebar on mobile selection
+                  }}
+                  title={isCollapsed ? item.label : ''}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === item.id
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  } ${isCollapsed ? 'justify-center' : ''}`}
+                >
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+                  </svg>
+                  {!isCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 

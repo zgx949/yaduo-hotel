@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { OrderGroup, OrderSplitItem, SystemUser } from '../types';
 
@@ -13,6 +13,31 @@ interface CancelConfirmState {
 }
 
 const TOKEN_KEY = 'skyhotel_auth_token';
+const ORDERS_LIST_STATE_KEY = 'skyagent_orders_list_state_v1';
+
+const loadOrdersListState = () => {
+  try {
+    const raw = localStorage.getItem(ORDERS_LIST_STATE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      search: typeof parsed.search === 'string' ? parsed.search : '',
+      statusFilter: typeof parsed.statusFilter === 'string' ? parsed.statusFilter : 'ALL',
+      checkInFrom: typeof parsed.checkInFrom === 'string' ? parsed.checkInFrom : '',
+      checkInTo: typeof parsed.checkInTo === 'string' ? parsed.checkInTo : '',
+      page: Math.max(1, Number(parsed.page) || 1),
+      pageSize: Math.max(1, Number(parsed.pageSize) || 20)
+    };
+  } catch {
+    return {
+      search: '',
+      statusFilter: 'ALL',
+      checkInFrom: '',
+      checkInTo: '',
+      page: 1,
+      pageSize: 20
+    };
+  }
+};
 
 const statusText = (status: string) => {
   const dict: Record<string, string> = {
@@ -58,12 +83,19 @@ const canSubmitOrder = (order: OrderGroup) =>
   (order.items || []).some((it) => it.executionStatus === 'PLAN_PENDING' || it.executionStatus === 'FAILED');
 
 export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
+  const savedState = loadOrdersListState();
   const [orders, setOrders] = useState<OrderGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [search, setSearch] = useState(savedState.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(savedState.search);
+  const [statusFilter, setStatusFilter] = useState(savedState.statusFilter);
+  const [checkInFrom, setCheckInFrom] = useState(savedState.checkInFrom);
+  const [checkInTo, setCheckInTo] = useState(savedState.checkInTo);
+  const [page, setPage] = useState(savedState.page);
+  const [pageSize, setPageSize] = useState(savedState.pageSize);
+  const [meta, setMeta] = useState({ total: 0, page: 1, pageSize: 20, totalPages: 1, hasMore: false });
   const [updatingItemId, setUpdatingItemId] = useState('');
   const [refreshingOrderId, setRefreshingOrderId] = useState('');
   const [submittingOrderId, setSubmittingOrderId] = useState('');
@@ -98,8 +130,32 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     setError('');
     setNotice('');
     try {
-      const data = await fetchWithAuth('/api/orders');
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
+      if (debouncedSearch.trim()) {
+        params.set('search', debouncedSearch.trim());
+      }
+      if (statusFilter !== 'ALL') {
+        params.set('status', statusFilter);
+      }
+      if (checkInFrom) {
+        params.set('checkInFrom', checkInFrom);
+      }
+      if (checkInTo) {
+        params.set('checkInTo', checkInTo);
+      }
+
+      const data = await fetchWithAuth(`/api/orders?${params.toString()}`);
       setOrders(Array.isArray(data.items) ? data.items : []);
+      const nextMeta = data.meta || {};
+      setMeta({
+        total: Number(nextMeta.total || 0),
+        page: Number(nextMeta.page || page),
+        pageSize: Number(nextMeta.pageSize || pageSize),
+        totalPages: Number(nextMeta.totalPages || 1),
+        hasMore: Boolean(nextMeta.hasMore)
+      });
       setExpandedId((prev) => prev && data.items?.some((it: OrderGroup) => it.id === prev) ? prev : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载订单失败');
@@ -110,25 +166,26 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
 
   useEffect(() => {
     loadOrders();
-  }, []);
+  }, [page, pageSize, debouncedSearch, statusFilter, checkInFrom, checkInTo]);
 
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    return orders.filter((order) => {
-      if (statusFilter !== 'ALL' && order.status !== statusFilter) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      return (
-        order.bizOrderNo.toLowerCase().includes(keyword) ||
-        order.hotelName.toLowerCase().includes(keyword) ||
-        order.customerName.toLowerCase().includes(keyword) ||
-        order.creatorName.toLowerCase().includes(keyword)
-      );
-    });
-  }, [orders, search, statusFilter]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    localStorage.setItem(ORDERS_LIST_STATE_KEY, JSON.stringify({
+      search,
+      statusFilter,
+      checkInFrom,
+      checkInTo,
+      page,
+      pageSize
+    }));
+  }, [search, statusFilter, checkInFrom, checkInTo, page, pageSize]);
 
   const updateSplitItem = async (item: OrderSplitItem, patch: Record<string, unknown>) => {
     setUpdatingItemId(item.id);
@@ -311,7 +368,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
       </div>
 
       <Card>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -320,7 +377,10 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
           />
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
           >
             <option value="ALL">全部状态</option>
@@ -330,8 +390,26 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
             <option value="CANCELLED">已取消</option>
             <option value="FAILED">失败</option>
           </select>
+          <input
+            type="date"
+            value={checkInFrom}
+            onChange={(e) => {
+              setCheckInFrom(e.target.value);
+              setPage(1);
+            }}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+          />
+          <input
+            type="date"
+            value={checkInTo}
+            onChange={(e) => {
+              setCheckInTo(e.target.value);
+              setPage(1);
+            }}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+          />
           <div className="text-sm text-gray-500 flex items-center justify-end">
-            共 {filtered.length} 个主订单
+            共 {meta.total} 个主订单
           </div>
         </div>
       </Card>
@@ -346,10 +424,10 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
       <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pb-3">
         {loading ? (
           <Card><div className="py-10 text-center text-gray-500">订单加载中...</div></Card>
-        ) : filtered.length === 0 ? (
+        ) : orders.length === 0 ? (
           <Card><div className="py-10 text-center text-gray-400">暂无订单数据</div></Card>
         ) : (
-          filtered.map((order) => {
+          orders.map((order) => {
             const expanded = expandedId === order.id;
             return (
               <Card key={order.id} className="p-0 overflow-hidden">
@@ -509,6 +587,34 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
           })
         )}
       </div>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <div className="text-gray-500">第 {meta.page} / {meta.totalPages} 页</div>
+          <div className="flex items-center gap-2">
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value) || 20);
+                setPage(1);
+              }}
+              className="px-2 py-1 rounded border border-gray-200"
+            >
+              {[10, 20, 50, 100].map((size) => <option key={size} value={size}>{size}/页</option>)}
+            </select>
+            <button
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={meta.page <= 1}
+              className="px-3 py-1.5 rounded border border-gray-200 disabled:opacity-40"
+            >上一页</button>
+            <button
+              onClick={() => setPage((prev) => (meta.hasMore ? prev + 1 : prev))}
+              disabled={!meta.hasMore}
+              className="px-3 py-1.5 rounded border border-gray-200 disabled:opacity-40"
+            >下一页</button>
+          </div>
+        </div>
+      </Card>
 
       {iframeUrl && (
         <div className="fixed inset-0 bg-black/60 z-50 p-4">

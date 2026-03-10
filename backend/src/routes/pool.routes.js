@@ -72,10 +72,12 @@ poolRoutes.get("/accounts", requireAuth, async (req, res) => {
     search: req.query.search,
     tier: req.query.tier,
     is_enabled: toBooleanOrUndefined(req.query.is_enabled),
-    is_online: toBooleanOrUndefined(req.query.is_online)
+    is_online: toBooleanOrUndefined(req.query.is_online),
+    page: req.query.page,
+    pageSize: req.query.pageSize
   };
-  const items = await prismaStore.listPoolAccounts(filters);
-  return res.json({ items });
+  const result = await prismaStore.listPoolAccountsPage(filters);
+  return res.json({ items: result.items, data: result.items, meta: result.meta });
 });
 
 poolRoutes.get("/accounts/:id", requireAuth, async (req, res) => {

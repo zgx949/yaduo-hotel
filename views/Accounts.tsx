@@ -45,10 +45,37 @@ const COUPON_CONFIG = {
   slippers: { label: '鞋', fullLabel: '拖鞋券', color: 'bg-gray-50 text-gray-600 border-gray-200' },
 };
 
+const ACCOUNTS_LIST_STATE_KEY = 'skyagent_accounts_list_state_v1';
+
+const loadAccountsListState = () => {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_LIST_STATE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      filterType: typeof parsed.filterType === 'string' ? parsed.filterType : 'ALL',
+      searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
+      page: Math.max(1, Number(parsed.page) || 1),
+      pageSize: Math.max(1, Number(parsed.pageSize) || 20)
+    };
+  } catch {
+    return {
+      filterType: 'ALL',
+      searchQuery: '',
+      page: 1,
+      pageSize: 20
+    };
+  }
+};
+
 export const Accounts: React.FC = () => {
+  const savedListState = loadAccountsListState();
   const TOKEN_KEY = 'skyhotel_auth_token';
-  const [filterType, setFilterType] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<string>(savedListState.filterType);
+  const [searchQuery, setSearchQuery] = useState(savedListState.searchQuery);
+  const [debouncedSearch, setDebouncedSearch] = useState(savedListState.searchQuery);
+  const [page, setPage] = useState(savedListState.page);
+  const [pageSize, setPageSize] = useState(savedListState.pageSize);
+  const [meta, setMeta] = useState({ total: 0, page: 1, pageSize: 20, totalPages: 1, hasMore: false });
   const [accounts, setAccounts] = useState<PoolAccount[]>(MOCK_ACCOUNTS as unknown as PoolAccount[]);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [togglingEnabledId, setTogglingEnabledId] = useState<string | null>(null);
@@ -117,11 +144,29 @@ export const Accounts: React.FC = () => {
     setLoadingList(true);
     setError('');
     try {
-      const data = await fetchWithAuth('/api/pool/accounts');
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
+      if (debouncedSearch.trim()) {
+        params.set('search', debouncedSearch.trim());
+      }
+      if (filterType !== 'ALL') {
+        params.set('tier', filterType);
+      }
+      const data = await fetchWithAuth(`/api/pool/accounts?${params.toString()}`);
       setAccounts(data.items || []);
+      const nextMeta = data.meta || {};
+      setMeta({
+        total: Number(nextMeta.total || 0),
+        page: Number(nextMeta.page || page),
+        pageSize: Number(nextMeta.pageSize || pageSize),
+        totalPages: Number(nextMeta.totalPages || 1),
+        hasMore: Boolean(nextMeta.hasMore)
+      });
     } catch (err: any) {
       setError(err.message || '加载账号池失败，已回退到本地数据');
       setAccounts(MOCK_ACCOUNTS as unknown as PoolAccount[]);
+      setMeta({ total: MOCK_ACCOUNTS.length, page: 1, pageSize, totalPages: 1, hasMore: false });
     } finally {
       setLoadingList(false);
     }
@@ -140,7 +185,24 @@ export const Accounts: React.FC = () => {
   useEffect(() => {
     loadAccounts();
     loadCorporateOptions();
-  }, []);
+  }, [page, pageSize, debouncedSearch, filterType]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    localStorage.setItem(ACCOUNTS_LIST_STATE_KEY, JSON.stringify({
+      filterType,
+      searchQuery,
+      page,
+      pageSize
+    }));
+  }, [filterType, searchQuery, page, pageSize]);
 
   useEffect(() => {
     if (!isFormOpen) {
@@ -207,18 +269,9 @@ export const Accounts: React.FC = () => {
   };
 
   // Stats
-  const totalAccounts = accounts.length;
+  const totalAccounts = meta.total;
   const activeAccounts = accounts.filter(a => a.status === AccountStatus.ACTIVE).length;
   const todayCheckedIn = accounts.filter(a => isToday(a.lastExecution.checkIn)).length;
-
-  // Filter Logic
-  const filteredAccounts = accounts.filter(acc => {
-    const matchType = filterType === 'ALL' || acc.tier === filterType;
-    const matchSearch = acc.phone.includes(searchQuery) || 
-                        (acc.corporateName && acc.corporateName.includes(searchQuery)) ||
-                        (acc.corporate_agreements || []).some((corp) => corp.name.includes(searchQuery));
-    return matchType && matchSearch;
-  });
 
   const handleManualAction = (id: string, action: 'checkIn' | 'lottery' | 'scan' | 'refresh') => {
     setLoadingAction(`${id}-${action}`);
@@ -242,11 +295,11 @@ export const Accounts: React.FC = () => {
   };
 
   const handleBulkAction = (action: 'checkIn' | 'refresh') => {
-      if (!window.confirm(`确定要对当前列表显示的 ${filteredAccounts.length} 个账号执行批量操作吗？`)) return;
+      if (!window.confirm(`确定要对当前页显示的 ${accounts.length} 个账号执行批量操作吗？`)) return;
       setLoadingAction(`bulk-${action}`);
       fetchWithAuth(`/api/pool/actions/${action}/run`, {
         method: 'POST',
-        body: JSON.stringify({ accountIds: filteredAccounts.map((it) => it.id) })
+        body: JSON.stringify({ accountIds: accounts.map((it) => it.id) })
       })
         .then((data) => {
           const success = Number(data?.success || 0);
@@ -709,7 +762,7 @@ export const Accounts: React.FC = () => {
         <div className="flex justify-between items-center">
             <div>
                 <h2 className="text-2xl font-bold text-gray-800">账号池管理</h2>
-                <p className="text-gray-500 text-sm">当前共 {totalAccounts} 个账号，{activeAccounts} 个在线。今日已签到: {todayCheckedIn}</p>
+                <p className="text-gray-500 text-sm">当前共 {totalAccounts} 个账号（当前页在线 {activeAccounts} 个）。今日已签到: {todayCheckedIn}</p>
             </div>
             <div className="flex gap-2">
                 <button 
@@ -762,7 +815,10 @@ export const Accounts: React.FC = () => {
             
             <div className="flex gap-2 overflow-x-auto pb-1">
                 <button 
-                    onClick={() => setFilterType('ALL')}
+                    onClick={() => {
+                      setFilterType('ALL');
+                      setPage(1);
+                    }}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                         filterType === 'ALL' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
@@ -770,7 +826,10 @@ export const Accounts: React.FC = () => {
                 {Object.keys(TIER_LABELS).map(tier => (
                     <button 
                         key={tier}
-                        onClick={() => setFilterType(tier)}
+                        onClick={() => {
+                          setFilterType(tier);
+                          setPage(1);
+                        }}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                             filterType === tier ? TIER_LABELS[tier].color : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
                         }`}
@@ -803,7 +862,7 @@ export const Accounts: React.FC = () => {
                   <tr>
                       <td colSpan={8} className="px-6 py-12 text-center text-gray-400">加载中...</td>
                   </tr>
-              ) : filteredAccounts.map(acc => {
+              ) : accounts.map(acc => {
                   const statusInfo = STATUS_LABELS[acc.status];
                   const tierInfo = TIER_LABELS[acc.tier];
                   const couponAssets = Array.isArray(acc.discount_coupon_assets) ? acc.discount_coupon_assets : [];
@@ -952,7 +1011,7 @@ export const Accounts: React.FC = () => {
                   );
               })}
               
-              {filteredAccounts.length === 0 && (
+              {accounts.length === 0 && (
                   <tr>
                       <td colSpan={8} className="px-6 py-12 text-center text-gray-400">
                           没有找到匹配的账号。
@@ -963,10 +1022,28 @@ export const Accounts: React.FC = () => {
           </table>
         </div>
         <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 flex justify-between items-center">
-            <span>显示 {filteredAccounts.length} 条记录</span>
+            <span>显示 {accounts.length} 条记录（总计 {meta.total}）</span>
             <div className="flex gap-2">
-                <button className="px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50" disabled>上一页</button>
-                <button className="px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100">下一页</button>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value) || 20);
+                    setPage(1);
+                  }}
+                  className="px-2 py-1 bg-white border border-gray-300 rounded"
+                >
+                  {[10, 20, 50, 100].map((size) => <option key={size} value={size}>{size}/页</option>)}
+                </select>
+                <button
+                  className="px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50"
+                  disabled={meta.page <= 1}
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                >上一页</button>
+                <button
+                  className="px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50"
+                  disabled={!meta.hasMore}
+                  onClick={() => setPage((prev) => (meta.hasMore ? prev + 1 : prev))}
+                >下一页</button>
             </div>
         </div>
       </Card>

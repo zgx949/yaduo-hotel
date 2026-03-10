@@ -275,6 +275,9 @@ const calcRoomNights = (item) => {
   return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
 };
 
+const clampPage = (value) => Math.max(1, Number(value) || 1);
+const clampPageSize = (value, max = 200, fallback = 20) => Math.max(1, Math.min(max, Number(value) || fallback));
+
 const projectPoolAccount = (entity) => {
   const tier = deriveTier(entity);
   const status = !entity.isEnabled ? "BLOCKED" : entity.isOnline ? "ACTIVE" : "OFFLINE";
@@ -627,6 +630,55 @@ export const prismaStore = {
       items = items.filter((it) => it.tier === filters.tier);
     }
     return items;
+  },
+  async listPoolAccountsPage(filters = {}) {
+    const page = clampPage(filters.page);
+    const pageSize = clampPageSize(filters.pageSize, 200, 20);
+
+    const where = {};
+    if (filters.is_enabled !== undefined) {
+      where.isEnabled = String(filters.is_enabled) === "true" || filters.is_enabled === true;
+    }
+    if (filters.is_online !== undefined) {
+      where.isOnline = String(filters.is_online) === "true" || filters.is_online === true;
+    }
+
+    let allItems = [];
+    if (filters.search) {
+      const rows = await prisma.poolAccount.findMany({ where, orderBy: { updatedAt: "desc" } });
+      const keyword = String(filters.search).toLowerCase();
+      allItems = rows
+        .map(projectPoolAccount)
+        .filter((it) =>
+          it.phone.toLowerCase().includes(keyword) ||
+          String(it.remark || "").toLowerCase().includes(keyword) ||
+          String(it.id || "").toLowerCase().includes(keyword) ||
+          (it.corporate_agreements || []).some((corp) => String(corp.name || "").toLowerCase().includes(keyword))
+        );
+    } else {
+      const rows = await prisma.poolAccount.findMany({ where, orderBy: { updatedAt: "desc" } });
+      allItems = rows.map(projectPoolAccount);
+    }
+
+    if (filters.tier) {
+      allItems = allItems.filter((it) => it.tier === filters.tier);
+    }
+
+    const total = allItems.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const normalizedPage = Math.min(page, totalPages);
+    const offset = (normalizedPage - 1) * pageSize;
+    const items = allItems.slice(offset, offset + pageSize);
+    return {
+      items,
+      meta: {
+        total,
+        page: normalizedPage,
+        pageSize,
+        hasMore: offset + items.length < total,
+        totalPages
+      }
+    };
   },
   async getPoolAccount(id) {
     const item = await prisma.poolAccount.findUnique({ where: { id } });
@@ -1140,6 +1192,87 @@ export const prismaStore = {
       splitCount: group.items.length,
       items: group.items.map(projectOrderItem)
     }));
+  },
+  async listOrdersPage(filters = {}) {
+    const where = {};
+    if (filters.creatorId) {
+      where.creatorId = filters.creatorId;
+    }
+    if (filters.status) {
+      where.status = String(filters.status);
+    }
+    if (filters.search) {
+      const keyword = String(filters.search);
+      where.OR = [
+        { bizOrderNo: { contains: keyword, mode: "insensitive" } },
+        { hotelName: { contains: keyword, mode: "insensitive" } },
+        { customerName: { contains: keyword, mode: "insensitive" } },
+        { creatorName: { contains: keyword, mode: "insensitive" } },
+        { chainId: { contains: keyword, mode: "insensitive" } },
+        { contactPhone: { contains: keyword, mode: "insensitive" } }
+      ];
+    }
+
+    const checkInFrom = filters.checkInFrom ? new Date(String(filters.checkInFrom)) : null;
+    const checkInTo = filters.checkInTo ? new Date(String(filters.checkInTo)) : null;
+    if ((checkInFrom && !Number.isNaN(checkInFrom.getTime())) || (checkInTo && !Number.isNaN(checkInTo.getTime()))) {
+      where.checkInDate = {
+        ...(checkInFrom && !Number.isNaN(checkInFrom.getTime()) ? { gte: checkInFrom } : {}),
+        ...(checkInTo && !Number.isNaN(checkInTo.getTime()) ? { lte: checkInTo } : {})
+      };
+    }
+
+    const page = clampPage(filters.page);
+    const pageSize = clampPageSize(filters.pageSize, 200, 20);
+    const skip = (page - 1) * pageSize;
+
+    const [groups, total] = await Promise.all([
+      prisma.orderGroup.findMany({
+        where,
+        include: {
+          items: {
+            orderBy: { splitIndex: "asc" }
+          }
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: pageSize
+      }),
+      prisma.orderGroup.count({ where })
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    return {
+      items: groups.map((group) => ({
+        id: group.id,
+        bizOrderNo: group.bizOrderNo,
+        chainId: group.chainId,
+        hotelName: group.hotelName,
+        customerName: group.customerName,
+        contactPhone: group.contactPhone,
+        checkInDate: group.checkInDate.toISOString().slice(0, 10),
+        checkOutDate: group.checkOutDate.toISOString().slice(0, 10),
+        totalNights: group.totalNights,
+        totalAmount: group.totalAmount,
+        currency: group.currency,
+        status: group.status,
+        paymentStatus: group.paymentStatus,
+        creatorId: group.creatorId,
+        creatorName: group.creatorName,
+        remark: group.remark,
+        createdAt: group.createdAt.toISOString(),
+        updatedAt: group.updatedAt.toISOString(),
+        splitCount: group.items.length,
+        items: group.items.map(projectOrderItem)
+      })),
+      meta: {
+        total,
+        page,
+        pageSize,
+        hasMore: skip + groups.length < total,
+        totalPages
+      }
+    };
   },
   async getOrder(orderGroupId) {
     const group = await prisma.orderGroup.findUnique({
