@@ -4,6 +4,7 @@ import { Sidebar, MENU_ITEMS, UserRole } from './components/Sidebar';
 import { Dashboard } from './views/Dashboard';
 import { Booking } from './views/Booking';
 import { Accounts } from './views/Accounts';
+import { PoolBulkImport } from './views/PoolBulkImport';
 import { PriceMonitor } from './views/PriceMonitor';
 import { AIQuote } from './views/AIQuote';
 import { Invoices } from './views/Invoices';
@@ -174,7 +175,7 @@ const App: React.FC = () => {
       return;
     }
 
-    if (userRole === 'USER' && (id === 'dashboard' || id === 'accounts' || id === 'users' || id === 'settings')) {
+    if (userRole === 'USER' && (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings')) {
         return; // Block access
     }
 
@@ -217,7 +218,7 @@ const App: React.FC = () => {
   const renderComponent = (id: string) => {
     // Role Guard for rendering
     if (userRole === 'USER') {
-        if (id === 'dashboard' || id === 'accounts' || id === 'users' || id === 'settings') {
+        if (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings') {
             return <div className="p-10 text-center text-gray-500">无权访问此页面</div>;
         }
     }
@@ -231,6 +232,7 @@ const App: React.FC = () => {
       case 'booking': return <Booking />;
       case 'orders': return <Orders currentUser={currentUser} />;
       case 'accounts': return <Accounts />;
+      case 'pool-import': return <PoolBulkImport />;
       case 'users': return <UserManagement />;
       case 'monitor': return <PriceMonitor />;
       case 'ai-quote': return <AIQuote />;

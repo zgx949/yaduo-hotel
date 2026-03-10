@@ -47,6 +47,26 @@ const validatePatchPayload = (payload) => {
   return null;
 };
 
+const toCorporateAgreements = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((it, idx) => ({
+        id: String(it?.id || `corp-${idx + 1}`),
+        name: String(it?.name || "").trim(),
+        enabled: it?.enabled !== false
+      }))
+      .filter((it) => it.name);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[;,，、|]/)
+      .map((it) => String(it || "").trim())
+      .filter(Boolean)
+      .map((name, idx) => ({ id: `corp-${idx + 1}`, name, enabled: true }));
+  }
+  return [];
+};
+
 poolRoutes.get("/accounts", requireAuth, async (req, res) => {
   const filters = {
     search: req.query.search,
@@ -94,6 +114,58 @@ poolRoutes.post("/accounts", requireAuth, async (req, res) => {
   } catch (err) {
     return res.status(400).json({ message: err.message || "failed to create pool account" });
   }
+});
+
+poolRoutes.post("/accounts/bulk-import", requireAuth, async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (items.length === 0) {
+    return res.status(400).json({ message: "items is required" });
+  }
+  if (items.length > 2000) {
+    return res.status(400).json({ message: "single import is limited to 2000 items" });
+  }
+
+  const results = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const raw = items[i] || {};
+    const payload = {
+      phone: String(raw.phone || "").trim(),
+      token: String(raw.token || "").trim(),
+      remark: raw.remark ? String(raw.remark) : null,
+      is_enabled: raw.is_enabled !== false,
+      is_online: raw.is_online !== false,
+      is_new_user: Boolean(raw.is_new_user),
+      is_platinum: Boolean(raw.is_platinum),
+      dailyOrdersLeft: Math.max(0, Number(raw.dailyOrdersLeft) || 0),
+      corporate_agreements: toCorporateAgreements(raw.corporate_agreements)
+    };
+
+    const validationError = validateCreatePayload(payload);
+    if (validationError) {
+      results.push({ index: i, ok: false, message: validationError, phone: payload.phone });
+      continue;
+    }
+
+    try {
+      const created = await prismaStore.createPoolAccount(payload);
+      results.push({ index: i, ok: true, id: created.id, phone: created.phone });
+    } catch (err) {
+      results.push({
+        index: i,
+        ok: false,
+        phone: payload.phone,
+        message: err?.message || "failed to create pool account"
+      });
+    }
+  }
+
+  return res.json({
+    ok: true,
+    total: items.length,
+    success: results.filter((it) => it.ok).length,
+    failed: results.filter((it) => !it.ok).length,
+    results
+  });
 });
 
 poolRoutes.patch("/accounts/:id", requireAuth, async (req, res) => {
