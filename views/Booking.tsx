@@ -75,7 +75,7 @@ export const Booking: React.FC = () => {
     breakfast: 1, 
     upgrade: 0,
     lateCheckout: 0,
-    slippers: 1
+    slippers: 0
   });
   const [appliedCoupon, setAppliedCoupon] = useState<{name: string, value: number} | null>(null);
   const [invoiceEnabled, setInvoiceEnabled] = useState(false);

@@ -66,10 +66,16 @@ const resolveTargets = async ({ accountId, requireOnline }) => {
 };
 
 const writeTaskResult = async ({ account, taskKey, message, patch = {} }) => {
+  const nextPatch = { ...patch };
+  const extraLastResult =
+    nextPatch.lastResult && typeof nextPatch.lastResult === "object" && !Array.isArray(nextPatch.lastResult)
+      ? nextPatch.lastResult
+      : {};
+  delete nextPatch.lastResult;
   await prismaStore.updatePoolAccount(account.id, {
-    ...patch,
+    ...nextPatch,
     lastExecution: { [taskKey]: nowIso() },
-    lastResult: { [taskKey]: message }
+    lastResult: { ...extraLastResult, [taskKey]: message }
   });
 };
 
@@ -114,6 +120,28 @@ const fetchCouponWallet = async ({ token, proxy }) => {
   const data = await parseJsonSafe(response);
   return {
     ok: response.ok && Number(data?.retcode) === 0,
+    data
+  };
+};
+
+const fetchUserCenterPersonalInfo = async ({ token, proxy }) => {
+  const body = new URLSearchParams({
+    appVer: String(env.atourAppVersion),
+    channelId: String(env.atourChannelId),
+    deviceId: String(env.atourClientId),
+    platType: String(env.atourPlatformType),
+    token: String(token)
+  });
+
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/user/getUserCenterPersonalInfo`, {
+    method: "POST",
+    headers: buildAtourHeaders(token, "application/x-www-form-urlencoded"),
+    body: body.toString(),
+    timeoutMs: 12000
+  }, proxy);
+  const data = await parseJsonSafe(response);
+  return {
+    ok: response.ok && Number(data?.retcode) === 0 && data?.result && typeof data.result === "object",
     data
   };
 };
@@ -286,31 +314,65 @@ export const runTokenRefreshTask = async ({ payload = {}, proxy }) => {
   for (const target of targets) {
     const { account, token } = target;
     try {
-      const check = await fetchMarketingData({ token, proxy });
-      if (!check.ok) {
+      const profile = await fetchUserCenterPersonalInfo({ token, proxy });
+      if (!profile.ok) {
+        const retmsg = String(profile?.data?.retmsg || "token无效或已过期");
         await writeTaskResult({
           account,
           taskKey: "refresh",
-          message: "token无效或已过期",
-          patch: { is_online: false }
+          message: retmsg,
+          patch: {
+            is_online: false,
+            lastResult: {
+              personalProfile: {
+                vipGrade: null,
+                raw: profile?.data?.result || null,
+                syncedAt: nowIso(),
+                error: retmsg
+              }
+            }
+          }
         });
-        results.push({ accountId: account.id, ok: false, message: "token invalid" });
+        results.push({ accountId: account.id, ok: false, message: retmsg });
         continue;
       }
 
-      const points = Number(check?.data?.result?.pointMallCard?.pointNum) || 0;
+      const vipGrade = String(profile?.data?.result?.vipGrade || "").trim() || null;
+      const pointsScan = await fetchMarketingData({ token, proxy }).catch(() => null);
+      const points = pointsScan?.ok ? Number(pointsScan?.data?.result?.pointMallCard?.pointNum) || 0 : account.points;
       await writeTaskResult({
         account,
         taskKey: "refresh",
-        message: `token有效，积分 ${points}`,
-        patch: { is_online: true, points }
+        message: `账号在线${vipGrade ? `，会员等级 ${vipGrade}` : ""}，积分 ${points}`,
+        patch: {
+          is_online: true,
+          points,
+          lastResult: {
+            personalProfile: {
+              vipGrade,
+              raw: profile.data?.result || null,
+              syncedAt: nowIso()
+            }
+          }
+        }
       });
-      results.push({ accountId: account.id, ok: true, points });
+      results.push({ accountId: account.id, ok: true, points, vipGrade });
     } catch (err) {
       await writeTaskResult({
         account,
         taskKey: "refresh",
-        message: `巡检失败: ${err?.message || "unknown"}`
+        message: `巡检失败: ${err?.message || "unknown"}`,
+        patch: {
+          is_online: false,
+          lastResult: {
+            personalProfile: {
+              vipGrade: null,
+              raw: null,
+              syncedAt: nowIso(),
+              error: err?.message || "failed"
+            }
+          }
+        }
       });
       results.push({ accountId: account.id, ok: false, message: err?.message || "failed" });
     }

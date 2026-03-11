@@ -59,6 +59,19 @@ const couponNeedFromItem = (item = {}) => ({
   slippers: Math.max(0, Number(item.shooseCount) || 0)
 });
 
+const normalizeSplitBenefits = (splits = []) => {
+  const list = Array.isArray(splits) ? splits : [];
+  const hasUpgradeRequest = list.some((it) => (Number(it?.roomLevelUpCount) || 0) > 0);
+
+  return list.map((it, idx) => ({
+    ...it,
+    breakfastCount: Math.max(0, Number(it?.breakfastCount) || 0),
+    delayedCheckOutCount: Math.max(0, Number(it?.delayedCheckOutCount) || 0),
+    shooseCount: Math.max(0, Number(it?.shooseCount) || 0),
+    roomLevelUpCount: hasUpgradeRequest? 1 : 0
+  }));
+};
+
 const hasCouponCapacity = (account = {}, need = {}) => {
   return (
     (Number(account.breakfast_coupons) || 0) >= (Number(need.breakfast) || 0) &&
@@ -107,7 +120,7 @@ const expandNewUserSplitsByNight = (payload = {}) => {
     ...payload,
     checkInDate: baseCheckIn,
     checkOutDate: baseCheckOut,
-    splits: expanded
+    splits: normalizeSplitBenefits(expanded)
   };
 };
 

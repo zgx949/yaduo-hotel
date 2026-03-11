@@ -37,6 +37,7 @@ export interface HotelAccount {
   corporateName?: string; // 企业名称 (仅限 CORPORATE 类型)
   points: number;
   coupons: CouponWallet;
+  vip_grade?: string | null;
   status: AccountStatus;
   dailyOrdersLeft: number;
   lastExecution: {
@@ -68,6 +69,12 @@ export interface HotelAccount {
         discountRule?: string;
       }>;
       scannedAt?: string;
+    };
+    personalProfile?: {
+      vipGrade?: string | null;
+      raw?: unknown;
+      syncedAt?: string;
+      error?: string;
     };
   };
 }

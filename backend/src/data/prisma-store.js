@@ -299,6 +299,11 @@ const projectPoolAccount = (entity) => {
   const tier = deriveTier(entity);
   const status = !entity.isEnabled ? "BLOCKED" : entity.isOnline ? "ACTIVE" : "OFFLINE";
   const corporateNames = entity.corporateAgreements.map((it) => it.name);
+  const personalProfile =
+    entity.lastResult && typeof entity.lastResult === "object" && !Array.isArray(entity.lastResult)
+      ? entity.lastResult.personalProfile
+      : null;
+  const vipGrade = typeof personalProfile?.vipGrade === "string" ? personalProfile.vipGrade : null;
 
   return {
     id: entity.id,
@@ -325,6 +330,7 @@ const projectPoolAccount = (entity) => {
       lateCheckout: entity.lateCheckoutCoupons,
       slippers: entity.slippersCoupons
     },
+    vip_grade: vipGrade,
     dailyOrdersLeft: entity.dailyOrdersLeft,
     lastExecution: entity.lastExecution,
     lastResult: entity.lastResult,
@@ -1126,7 +1132,7 @@ export const prismaStore = {
         rateCodeActivities: payload.rateCodeActivities || null,
         remark: payload.remark || null,
         breakfastCount: Math.max(0, Number(payload.breakfastCount) || 0),
-        roomLevelUpCount: Math.max(0, Number(payload.roomLevelUpCount) || 0),
+        roomLevelUpCount: Math.min(1, Math.max(0, Number(payload.roomLevelUpCount) || 0)),
         delayedCheckOutCount: Math.max(0, Number(payload.delayedCheckOutCount) || 0),
         shooseCount: Math.max(0, Number(payload.shooseCount) || 0),
         roomType: payload.roomType || "标准房型",
@@ -1173,7 +1179,7 @@ export const prismaStore = {
             rateCodeActivities: it.rateCodeActivities ? String(it.rateCodeActivities) : null,
             remark: it.remark ? String(it.remark) : null,
             breakfastCount: Math.max(0, Number(it.breakfastCount) || 0),
-            roomLevelUpCount: Math.max(0, Number(it.roomLevelUpCount) || 0),
+            roomLevelUpCount: Math.min(1, Math.max(0, Number(it.roomLevelUpCount) || 0)),
             delayedCheckOutCount: Math.max(0, Number(it.delayedCheckOutCount) || 0),
             shooseCount: Math.max(0, Number(it.shooseCount) || 0),
             roomType: String(it.roomType || payload.roomType || "标准房型"),
@@ -1426,7 +1432,7 @@ export const prismaStore = {
         rateCodeActivities: hasOwn(patch, "rateCodeActivities") ? (patch.rateCodeActivities ? String(patch.rateCodeActivities) : null) : undefined,
         remark: hasOwn(patch, "remark") ? (patch.remark ? String(patch.remark) : null) : undefined,
         breakfastCount: hasOwn(patch, "breakfastCount") ? Math.max(0, Number(patch.breakfastCount) || 0) : undefined,
-        roomLevelUpCount: hasOwn(patch, "roomLevelUpCount") ? Math.max(0, Number(patch.roomLevelUpCount) || 0) : undefined,
+        roomLevelUpCount: hasOwn(patch, "roomLevelUpCount") ? Math.min(1, Math.max(0, Number(patch.roomLevelUpCount) || 0)) : undefined,
         delayedCheckOutCount: hasOwn(patch, "delayedCheckOutCount") ? Math.max(0, Number(patch.delayedCheckOutCount) || 0) : undefined,
         shooseCount: hasOwn(patch, "shooseCount") ? Math.max(0, Number(patch.shooseCount) || 0) : undefined,
         accountId: hasOwn(patch, "accountId") ? patch.accountId || null : undefined,

@@ -454,7 +454,7 @@ export const Accounts: React.FC = () => {
                   <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
                       <div>
                           <h3 className="font-bold text-lg">{selectedAccount.phone}</h3>
-                          <p className="text-xs text-slate-400">今日执行日报</p>
+                          <p className="text-xs text-slate-400">今日执行日报{selectedAccount.vip_grade ? ` · ${selectedAccount.vip_grade}` : ''}</p>
                       </div>
                       <button onClick={() => setSelectedAccount(null)} className="text-white/50 hover:text-white">✕</button>
                   </div>
@@ -880,6 +880,9 @@ export const Accounts: React.FC = () => {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${tierInfo.color}`}>
                           {tierInfo.label}
                         </span>
+                        {acc.vip_grade && (
+                          <div className="mt-1 text-[11px] text-indigo-700 font-medium">会员等级: {acc.vip_grade}</div>
+                        )}
                         {(acc.corporate_agreements || []).length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
                                 {(acc.corporate_agreements || []).map((corp) => (

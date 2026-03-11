@@ -104,6 +104,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const [notice, setNotice] = useState('');
   const [cancelConfirm, setCancelConfirm] = useState<CancelConfirmState | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [openingPaymentItemId, setOpeningPaymentItemId] = useState('');
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -230,17 +231,25 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   };
 
   const openPaymentLink = async (item: OrderSplitItem) => {
+    setOpeningPaymentItemId(item.id);
+    setError('');
+    setNotice('正在生成支付链接，请稍候...');
     try {
       const data = await fetchWithAuth(`/api/orders/items/${item.id}/payment-link`);
       const link = data.paymentLink || item.paymentLink;
       if (!link || (item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE')) {
         setError('该拆单当前无可用支付链接');
+        setNotice('');
         return;
       }
       const bridgeUrl = `/payment-bridge?payUrl=${encodeURIComponent(link)}`;
       window.open(bridgeUrl, '_blank', 'noopener,noreferrer');
+      setNotice('支付链接已生成并打开新窗口');
     } catch (err) {
+      setNotice('');
       setError(err instanceof Error ? err.message : '获取支付链接失败');
+    } finally {
+      setOpeningPaymentItemId('');
     }
   };
 
@@ -553,11 +562,11 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                                     </button>
                                   )}
                                   <button
-                                    disabled={updatingItemId === item.id || (item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE')}
+                                    disabled={updatingItemId === item.id || openingPaymentItemId === item.id || (item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE')}
                                     onClick={() => openPaymentLink(item)}
                                     className="px-2 py-1 text-xs rounded border border-blue-200 text-blue-700 bg-blue-50 disabled:opacity-50"
                                   >
-                                    支付链接
+                                    {openingPaymentItemId === item.id ? '生成中...' : '支付链接'}
                                   </button>
                                   <button
                                     disabled={item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE'}
