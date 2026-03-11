@@ -851,6 +851,9 @@ export const prismaStore = {
     if (filters.is_online !== undefined) {
       where.isOnline = Boolean(filters.is_online);
     }
+    if (filters.is_new_user !== undefined) {
+      where.isNewUser = Boolean(filters.is_new_user);
+    }
     const tier = filters.tier ? String(filters.tier).toUpperCase() : null;
     if (tier === "NEW_USER") {
       where.isNewUser = true;
@@ -2315,6 +2318,18 @@ export const prismaStore = {
         queueName: "scheduled-accounts",
         enabled: true,
         schedule: "25 */6 * * *",
+        concurrency: 1,
+        attempts: 1,
+        backoffMs: 1000,
+        useProxy: true
+      },
+      {
+        moduleId: "account.new-user-eligibility",
+        name: "新客八折资格巡检",
+        category: "SCHEDULED",
+        queueName: "scheduled-accounts",
+        enabled: true,
+        schedule: "40 6 * * *",
         concurrency: 1,
         attempts: 1,
         backoffMs: 1000,

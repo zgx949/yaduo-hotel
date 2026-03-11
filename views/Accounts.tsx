@@ -273,7 +273,7 @@ export const Accounts: React.FC = () => {
   const activeAccounts = accounts.filter(a => a.status === AccountStatus.ACTIVE).length;
   const todayCheckedIn = accounts.filter(a => isToday(a.lastExecution.checkIn)).length;
 
-  const handleManualAction = (id: string, action: 'checkIn' | 'lottery' | 'scan' | 'refresh') => {
+  const handleManualAction = (id: string, action: 'checkIn' | 'lottery' | 'scan' | 'refresh' | 'new-user-check') => {
     setLoadingAction(`${id}-${action}`);
     fetchWithAuth(`/api/pool/accounts/${id}/actions/${action}/run`, {
       method: 'POST'
@@ -990,6 +990,16 @@ export const Accounts: React.FC = () => {
 
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-3">
+                          {acc.tier === AccountTier.NEW_USER && (
+                            <button
+                                onClick={() => handleManualAction(acc.id, 'new-user-check')}
+                                disabled={loadingAction === `${acc.id}-new-user-check`}
+                                className="text-amber-600 hover:text-amber-800 text-xs font-medium disabled:opacity-50"
+                                title="检测是否仍满足新客首晚8折资格"
+                            >
+                                {loadingAction === `${acc.id}-new-user-check` ? '检测中...' : '新客8折检测'}
+                            </button>
+                          )}
                           <button 
                               onClick={() => setSelectedAccount(acc)}
                               className="text-blue-600 hover:text-blue-800 text-xs font-medium"

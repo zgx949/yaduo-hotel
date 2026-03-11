@@ -46,6 +46,7 @@ export interface HotelAccount {
     scan?: string;     // 上次优惠券扫描时间
     refresh?: string;
     pointsScan?: string;
+    newUserEligibility?: string;
   };
   // New field to store the text result of the last execution
   lastResult: {
@@ -75,6 +76,16 @@ export interface HotelAccount {
       raw?: unknown;
       syncedAt?: string;
       error?: string;
+    };
+    newUserEligibility?: {
+      eligible?: boolean;
+      downgraded?: boolean;
+      checkedAt?: string;
+      chainId?: string;
+      beginDate?: string;
+      endDate?: string;
+      evidence?: string;
+      responseTextSample?: string;
     };
   };
 }

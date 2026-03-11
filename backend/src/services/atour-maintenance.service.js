@@ -4,6 +4,35 @@ import { fetchWithProxy } from "./proxied-fetch.service.js";
 
 const nowIso = () => new Date().toISOString();
 
+const formatDate = (date) => {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const addDays = (date, days) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d;
+};
+
+const appendRemark = (existingRemark, addition) => {
+  const base = String(existingRemark || "").trim();
+  const extra = String(addition || "").trim();
+  if (!extra) {
+    return base || null;
+  }
+  if (!base) {
+    return extra;
+  }
+  if (base.includes(extra)) {
+    return base;
+  }
+  return `${base} | ${extra}`;
+};
+
 const buildAtourHeaders = (token, contentType = "application/json") => ({
   Accept: "*/*",
   "At-Platform-Type": env.atourPlatformType,
@@ -143,6 +172,42 @@ const fetchUserCenterPersonalInfo = async ({ token, proxy }) => {
   return {
     ok: response.ok && Number(data?.retcode) === 0 && data?.result && typeof data.result === "object",
     data
+  };
+};
+
+const checkNewUserFirstNightDiscount = async ({ token, proxy, chainId }) => {
+  const beginDate = formatDate(addDays(new Date(), 1));
+  const endDate = formatDate(addDays(new Date(), 2));
+  const body = new URLSearchParams({
+    channelId: process.env.ATOUR_NEW_USER_CHECK_CHANNEL_ID || "3000001",
+    activitySource: "",
+    activeId: "",
+    platType: process.env.ATOUR_NEW_USER_CHECK_PLAT_TYPE || "5",
+    r: String(Math.random()),
+    token: String(token),
+    beginDate,
+    endDate,
+    chainId: String(chainId || process.env.ATOUR_NEW_USER_CHECK_CHAIN_ID || "3100171"),
+    appVer: process.env.ATOUR_NEW_USER_CHECK_APP_VER || env.atourAppVersion
+  });
+
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/chain/detail`, {
+    method: "POST",
+    headers: buildAtourHeaders(token, "application/x-www-form-urlencoded"),
+    body: body.toString(),
+    timeoutMs: 15000
+  }, proxy);
+
+  const text = await response.text();
+  const matched = String(text || "").includes("新客首晚8折");
+  return {
+    ok: response.ok,
+    eligible: matched,
+    matchedText: matched ? "新客首晚8折" : "",
+    beginDate,
+    endDate,
+    chainId: String(chainId || process.env.ATOUR_NEW_USER_CHECK_CHAIN_ID || "3100171"),
+    responseTextSample: String(text || "").slice(0, 2000)
   };
 };
 
@@ -560,6 +625,101 @@ export const runDailyLotteryTask = async ({ payload = {}, proxy }) => {
         account,
         taskKey: "lottery",
         message: `抽奖失败: ${err?.message || "unknown"}`
+      });
+      results.push({ accountId: account.id, ok: false, message: err?.message || "failed" });
+    }
+  }
+
+  return { ok: true, total: targets.length, results };
+};
+
+export const runNewUserEligibilityTask = async ({ payload = {}, proxy }) => {
+  const accountId = payload.accountId ? String(payload.accountId) : null;
+  let targets = [];
+
+  if (accountId) {
+    const target = await prismaStore.getPoolAccountCredential(accountId);
+    if (!target || !target.account?.is_enabled || !target.token) {
+      return { ok: true, total: 0, results: [] };
+    }
+    targets = [target];
+  } else {
+    targets = await prismaStore.listPoolAccountCredentials({ is_enabled: true, is_new_user: true });
+  }
+
+  const results = [];
+  for (const target of targets) {
+    const { account, token } = target;
+    if (!account?.is_new_user) {
+      results.push({ accountId: account.id, ok: false, message: "账号非新用户类型，跳过" });
+      continue;
+    }
+
+    try {
+      const check = await checkNewUserFirstNightDiscount({ token, proxy, chainId: payload.chainId });
+      if (!check.ok) {
+        await writeTaskResult({
+          account,
+          taskKey: "newUserEligibility",
+          message: "新客资格检测失败（网络或接口异常）"
+        });
+        results.push({ accountId: account.id, ok: false, message: "检测失败" });
+        continue;
+      }
+
+      if (check.eligible) {
+        await writeTaskResult({
+          account,
+          taskKey: "newUserEligibility",
+          message: `新客首晚8折资格有效（${check.beginDate}~${check.endDate}）`,
+          patch: {
+            lastResult: {
+              newUserEligibility: {
+                eligible: true,
+                checkedAt: nowIso(),
+                chainId: check.chainId,
+                beginDate: check.beginDate,
+                endDate: check.endDate,
+                evidence: check.matchedText
+              }
+            }
+          }
+        });
+        results.push({ accountId: account.id, ok: true, eligible: true });
+        continue;
+      }
+
+      const downgradeRemark = appendRemark(
+        account.remark,
+        `[${nowIso()}] 新客账号转为普通账号：未检测到“新客首晚8折”资格`
+      );
+      await writeTaskResult({
+        account,
+        taskKey: "newUserEligibility",
+        message: "新客资格失效，已自动转为普通账号",
+        patch: {
+          is_new_user: false,
+          remark: downgradeRemark,
+          lastResult: {
+            newUserEligibility: {
+              eligible: false,
+              downgraded: true,
+              checkedAt: nowIso(),
+              chainId: check.chainId,
+              beginDate: check.beginDate,
+              endDate: check.endDate,
+              evidence: "not found",
+              responseTextSample: check.responseTextSample
+            }
+          }
+        }
+      });
+      results.push({ accountId: account.id, ok: true, eligible: false, downgraded: true });
+    } catch (err) {
+      await writeTaskResult({
+        account,
+        taskKey: "newUserEligibility",
+        message: `新客资格检测异常: ${err?.message || "unknown"}`
       });
       results.push({ accountId: account.id, ok: false, message: err?.message || "failed" });
     }

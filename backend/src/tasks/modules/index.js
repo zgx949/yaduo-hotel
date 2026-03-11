@@ -3,6 +3,7 @@ import { accountDailyLotteryTask } from "./account-daily-lottery.task.js";
 import { accountCouponScanTask } from "./account-coupon-scan.task.js";
 import { accountPointsScanTask } from "./account-points-scan.task.js";
 import { accountTokenRefreshTask } from "./account-token-refresh.task.js";
+import { accountNewUserEligibilityTask } from "./account-new-user-eligibility.task.js";
 import { orderCancelTask } from "./order-cancel.task.js";
 import { orderPaymentStatusScanTask } from "./order-payment-status-scan.task.js";
 import { orderPaymentLinkTask } from "./order-payment-link.task.js";
@@ -19,5 +20,6 @@ export const builtinTaskModules = {
   "account.daily-checkin": accountDailyCheckinTask,
   "account.daily-lottery": accountDailyLotteryTask,
   "account.points-scan": accountPointsScanTask,
-  "account.coupon-scan": accountCouponScanTask
+  "account.coupon-scan": accountCouponScanTask,
+  "account.new-user-eligibility": accountNewUserEligibilityTask
 };

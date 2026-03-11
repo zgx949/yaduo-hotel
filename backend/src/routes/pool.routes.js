@@ -5,6 +5,7 @@ import {
   runCouponScanTask,
   runDailyCheckinTask,
   runDailyLotteryTask,
+  runNewUserEligibilityTask,
   runPointsScanTask,
   runTokenRefreshTask
 } from "../services/atour-maintenance.service.js";
@@ -217,6 +218,9 @@ const runAccountAction = async ({ action, accountId, proxy }) => {
   if (action === "refresh") {
     return runTokenRefreshTask({ payload: { accountId }, proxy });
   }
+  if (action === "new-user-check") {
+    return runNewUserEligibilityTask({ payload: { accountId }, proxy });
+  }
   throw new Error("unsupported action");
 };
 
@@ -227,6 +231,9 @@ poolRoutes.post("/accounts/:id/actions/:action/run", requireAuth, async (req, re
   }
   if (!account.is_enabled) {
     return res.status(400).json({ message: "账号已禁用，不能执行任务" });
+  }
+  if (req.params.action === "new-user-check" && !account.is_new_user) {
+    return res.status(400).json({ message: "仅新用户类型账号可以执行新客八折检测" });
   }
 
   const proxy = await prismaStore.acquireProxyNode();
