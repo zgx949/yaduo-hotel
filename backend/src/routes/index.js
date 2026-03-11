@@ -8,6 +8,7 @@ import { tasksRoutes } from "./tasks.routes.js";
 import { blacklistRoutes } from "./blacklist.routes.js";
 import { hotelsRoutes } from "./hotels.routes.js";
 import { systemRoutes } from "./system.routes.js";
+import { invoicesRoutes } from "./invoices.routes.js";
 
 export const apiRoutes = Router();
 
@@ -20,3 +21,4 @@ apiRoutes.use("/tasks", tasksRoutes);
 apiRoutes.use("/blacklist", blacklistRoutes);
 apiRoutes.use("/hotels", hotelsRoutes);
 apiRoutes.use("/system", systemRoutes);
+apiRoutes.use("/invoices", invoicesRoutes);

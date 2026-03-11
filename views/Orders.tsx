@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card } from '../components/ui/Card';
-import { OrderGroup, OrderSplitItem, SystemUser } from '../types';
+import { InvoiceTemplate, OrderGroup, OrderSplitItem, SystemUser } from '../types';
 
 interface OrdersProps {
   currentUser?: SystemUser | null;
@@ -22,6 +22,7 @@ const loadOrdersListState = () => {
     return {
       search: typeof parsed.search === 'string' ? parsed.search : '',
       statusFilter: typeof parsed.statusFilter === 'string' ? parsed.statusFilter : 'ALL',
+      invoiceFilter: typeof parsed.invoiceFilter === 'string' ? parsed.invoiceFilter : 'ALL',
       checkInFrom: typeof parsed.checkInFrom === 'string' ? parsed.checkInFrom : '',
       checkInTo: typeof parsed.checkInTo === 'string' ? parsed.checkInTo : '',
       page: Math.max(1, Number(parsed.page) || 1),
@@ -31,6 +32,7 @@ const loadOrdersListState = () => {
     return {
       search: '',
       statusFilter: 'ALL',
+      invoiceFilter: 'ALL',
       checkInFrom: '',
       checkInTo: '',
       page: 1,
@@ -91,6 +93,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const [search, setSearch] = useState(savedState.search);
   const [debouncedSearch, setDebouncedSearch] = useState(savedState.search);
   const [statusFilter, setStatusFilter] = useState(savedState.statusFilter);
+  const [invoiceFilter, setInvoiceFilter] = useState(savedState.invoiceFilter || 'ALL');
   const [checkInFrom, setCheckInFrom] = useState(savedState.checkInFrom);
   const [checkInTo, setCheckInTo] = useState(savedState.checkInTo);
   const [page, setPage] = useState(savedState.page);
@@ -105,6 +108,15 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const [cancelConfirm, setCancelConfirm] = useState<CancelConfirmState | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [openingPaymentItemId, setOpeningPaymentItemId] = useState('');
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [invoiceTemplates, setInvoiceTemplates] = useState<InvoiceTemplate[]>([]);
+  const [invoiceTemplateSearch, setInvoiceTemplateSearch] = useState('');
+  const [loadingInvoiceTemplates, setLoadingInvoiceTemplates] = useState(false);
+  const [invoiceTemplateId, setInvoiceTemplateId] = useState('');
+  const [invoiceEmail, setInvoiceEmail] = useState('');
+  const [issuingInvoices, setIssuingInvoices] = useState(false);
+  const invoiceTemplateFetchSeqRef = useRef(0);
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -140,6 +152,9 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
       if (statusFilter !== 'ALL') {
         params.set('status', statusFilter);
       }
+      if (invoiceFilter !== 'ALL') {
+        params.set('invoiceStatus', invoiceFilter);
+      }
       if (checkInFrom) {
         params.set('checkInFrom', checkInFrom);
       }
@@ -149,6 +164,10 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
 
       const data = await fetchWithAuth(`/api/orders?${params.toString()}`);
       setOrders(Array.isArray(data.items) ? data.items : []);
+      setSelectedItemIds((prev) => {
+        const all = new Set((Array.isArray(data.items) ? data.items : []).flatMap((order: OrderGroup) => (order.items || []).map((it) => it.id)));
+        return prev.filter((id) => all.has(id));
+      });
       const nextMeta = data.meta || {};
       setMeta({
         total: Number(nextMeta.total || 0),
@@ -165,9 +184,38 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     }
   };
 
+  const loadInvoiceTemplates = async (searchKeyword = '') => {
+    const reqSeq = ++invoiceTemplateFetchSeqRef.current;
+    setLoadingInvoiceTemplates(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', '1');
+      params.set('pageSize', '200');
+      const keyword = searchKeyword.trim();
+      if (keyword) {
+        params.set('search', keyword);
+      }
+      const data = await fetchWithAuth(`/api/invoices/templates?${params.toString()}`);
+      if (reqSeq !== invoiceTemplateFetchSeqRef.current) {
+        return;
+      }
+      const items = Array.isArray(data.items) ? data.items : [];
+      setInvoiceTemplates(items);
+      if (items.length === 0) {
+        setInvoiceTemplateId('');
+      } else if (!items.some((it) => it.id === invoiceTemplateId)) {
+        setInvoiceTemplateId(items[0].id);
+      }
+    } finally {
+      if (reqSeq === invoiceTemplateFetchSeqRef.current) {
+        setLoadingInvoiceTemplates(false);
+      }
+    }
+  };
+
   useEffect(() => {
     loadOrders();
-  }, [page, pageSize, debouncedSearch, statusFilter, checkInFrom, checkInTo]);
+  }, [page, pageSize, debouncedSearch, statusFilter, invoiceFilter, checkInFrom, checkInTo]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -181,12 +229,13 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     localStorage.setItem(ORDERS_LIST_STATE_KEY, JSON.stringify({
       search,
       statusFilter,
+      invoiceFilter,
       checkInFrom,
       checkInTo,
       page,
       pageSize
     }));
-  }, [search, statusFilter, checkInFrom, checkInTo, page, pageSize]);
+  }, [search, statusFilter, invoiceFilter, checkInFrom, checkInTo, page, pageSize]);
 
   const updateSplitItem = async (item: OrderSplitItem, patch: Record<string, unknown>) => {
     setUpdatingItemId(item.id);
@@ -359,6 +408,101 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     }
   };
 
+  const canSelectForInvoice = (item: OrderSplitItem) => item.status === 'COMPLETED' && item.invoice?.state !== 'ISSUED';
+
+  const allVisibleSelectableItemIds = orders.flatMap((order) => (order.items || []).filter(canSelectForInvoice).map((it) => it.id));
+  const isAllVisibleSelected = allVisibleSelectableItemIds.length > 0 && allVisibleSelectableItemIds.every((id) => selectedItemIds.includes(id));
+  const isAnyVisibleSelected = allVisibleSelectableItemIds.some((id) => selectedItemIds.includes(id));
+
+  const toggleSelectAllVisible = () => {
+    if (isAllVisibleSelected) {
+      setSelectedItemIds((prev) => prev.filter((id) => !allVisibleSelectableItemIds.includes(id)));
+      return;
+    }
+    setSelectedItemIds((prev) => Array.from(new Set([...prev, ...allVisibleSelectableItemIds])));
+  };
+
+  const isOrderAllSelected = (order: OrderGroup) => {
+    const ids = (order.items || []).filter(canSelectForInvoice).map((it) => it.id);
+    return ids.length > 0 && ids.every((id) => selectedItemIds.includes(id));
+  };
+
+  const isOrderPartiallySelected = (order: OrderGroup) => {
+    const ids = (order.items || []).filter(canSelectForInvoice).map((it) => it.id);
+    if (ids.length === 0) {
+      return false;
+    }
+    const selectedCount = ids.filter((id) => selectedItemIds.includes(id)).length;
+    return selectedCount > 0 && selectedCount < ids.length;
+  };
+
+  const toggleOrderSelection = (order: OrderGroup) => {
+    const ids = (order.items || []).filter(canSelectForInvoice).map((it) => it.id);
+    if (ids.length === 0) {
+      return;
+    }
+    const allSelected = ids.every((id) => selectedItemIds.includes(id));
+    if (allSelected) {
+      setSelectedItemIds((prev) => prev.filter((id) => !ids.includes(id)));
+      return;
+    }
+    setSelectedItemIds((prev) => Array.from(new Set([...prev, ...ids])));
+  };
+
+  const toggleItemSelected = (item: OrderSplitItem) => {
+    if (!canSelectForInvoice(item)) {
+      return;
+    }
+    setSelectedItemIds((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]));
+  };
+
+  const selectedItems = orders.flatMap((order) => order.items || []).filter((item) => selectedItemIds.includes(item.id) && canSelectForInvoice(item));
+
+  const openBatchInvoiceDialog = async () => {
+    setError('');
+    try {
+      setInvoiceTemplateSearch('');
+      await loadInvoiceTemplates();
+      setInvoiceDialogOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载发票模板失败');
+    }
+  };
+
+  const searchInvoiceTemplates = async () => {
+    setError('');
+    try {
+      await loadInvoiceTemplates(invoiceTemplateSearch);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '搜索发票模板失败');
+    }
+  };
+
+  const batchIssueInvoices = async () => {
+    setIssuingInvoices(true);
+    setError('');
+    setNotice('');
+    try {
+      const data = await fetchWithAuth('/api/invoices/batch-issue', {
+        method: 'POST',
+        body: JSON.stringify({
+          itemIds: selectedItems.map((it) => it.id),
+          templateId: invoiceTemplateId,
+          email: invoiceEmail || undefined
+        })
+      });
+      setNotice(`批量开票完成：成功 ${data.success || 0}，失败 ${data.failed || 0}`);
+      setInvoiceDialogOpen(false);
+      setSelectedItemIds([]);
+      setInvoiceEmail('');
+      await loadOrders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '批量开票失败');
+    } finally {
+      setIssuingInvoices(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col gap-4">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -368,16 +512,32 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
             主订单聚合 + 拆单时间线，支持一键刷新、拆单刷新、支付链接、官方详情 iframe 查看。
           </p>
         </div>
-        <button
-          onClick={loadOrders}
-          className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
-        >
-          刷新列表
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openBatchInvoiceDialog}
+            disabled={selectedItems.length === 0}
+            className="px-3 py-2 text-sm rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 disabled:opacity-50"
+          >
+            批量开票 ({selectedItems.length})
+          </button>
+          <button
+            onClick={toggleSelectAllVisible}
+            disabled={allVisibleSelectableItemIds.length === 0}
+            className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            {isAllVisibleSelected ? '取消全选' : '全选可开票拆单'}
+          </button>
+          <button
+            onClick={loadOrders}
+            className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+          >
+            刷新列表
+          </button>
+        </div>
       </div>
 
       <Card>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -399,6 +559,18 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
             <option value="CANCELLED">已取消</option>
             <option value="FAILED">失败</option>
           </select>
+          <select
+            value={invoiceFilter}
+            onChange={(e) => {
+              setInvoiceFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+          >
+            <option value="ALL">全部开票</option>
+            <option value="PENDING">待开票</option>
+            <option value="ISSUED">已开票</option>
+          </select>
           <input
             type="date"
             value={checkInFrom}
@@ -417,8 +589,9 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
             }}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
           />
-          <div className="text-sm text-gray-500 flex items-center justify-end">
+          <div className="text-sm text-gray-500 flex items-center justify-end md:col-span-2">
             共 {meta.total} 个主订单
+            <span className="ml-2">| 已选 {selectedItems.length}/{allVisibleSelectableItemIds.length}</span>
           </div>
         </div>
       </Card>
@@ -454,6 +627,22 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-700"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isOrderAllSelected(order)}
+                          ref={(node) => {
+                            if (node) {
+                              node.indeterminate = isOrderPartiallySelected(order);
+                            }
+                          }}
+                          onChange={() => toggleOrderSelection(order)}
+                        />
+                        本组全选
+                      </label>
                       <span className={`px-2 py-1 rounded border text-xs ${statusClass(order.status)}`}>{statusText(order.status)}</span>
                       <span className={`px-2 py-1 rounded border text-xs ${statusClass(order.paymentStatus)}`}>{statusText(order.paymentStatus)}</span>
                       <span className="px-2 py-1 rounded border text-xs bg-blue-50 text-blue-700 border-blue-200">拆单 {order.splitCount} 条</span>
@@ -507,6 +696,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                       <table className="w-full text-sm bg-white rounded-lg overflow-hidden border border-gray-100">
                         <thead className="bg-gray-100 text-gray-600">
                           <tr>
+                            <th className="px-3 py-2 text-left">勾选</th>
                             <th className="px-3 py-2 text-left">拆单</th>
                             <th className="px-3 py-2 text-left">入住离店</th>
                             <th className="px-3 py-2 text-left">亚朵单号</th>
@@ -516,12 +706,22 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                             <th className="px-3 py-2 text-left">备注</th>
                             <th className="px-3 py-2 text-left">执行状态</th>
                             <th className="px-3 py-2 text-left">支付状态</th>
+                            <th className="px-3 py-2 text-left">开票状态</th>
                             <th className="px-3 py-2 text-right">操作</th>
                           </tr>
                         </thead>
                         <tbody>
                           {order.items.map((item) => (
                             <tr key={item.id} className="border-t border-gray-100">
+                              <td className="px-3 py-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedItemIds.includes(item.id)}
+                                  onChange={() => toggleItemSelected(item)}
+                                  disabled={!canSelectForInvoice(item)}
+                                  className="w-4 h-4"
+                                />
+                              </td>
                               <td className="px-3 py-2">#{item.splitIndex}/{item.splitTotal} {item.roomType} x{item.roomCount}</td>
                               <td className="px-3 py-2 text-xs text-gray-600">{item.checkInDate} ~ {item.checkOutDate}</td>
                               <td className="px-3 py-2 font-mono text-xs">{item.atourOrderId || '-'}</td>
@@ -543,6 +743,17 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                                 </span>
                               </td>
                               <td className="px-3 py-2"><span className={`px-2 py-1 rounded border text-xs ${statusClass(item.paymentStatus)}`}>{statusText(item.paymentStatus)}</span></td>
+                              <td className="px-3 py-2">
+                                {item.invoice ? (
+                                  <span className={`px-2 py-1 rounded border text-xs ${item.invoice.state === 'ISSUED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : item.invoice.state === 'FAILED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                    {item.invoice.state === 'ISSUED' ? '已开票' : item.invoice.state === 'FAILED' ? '开票失败' : '开票中'}
+                                  </span>
+                                ) : (
+                                  <span className={`px-2 py-1 rounded border text-xs ${item.status === 'COMPLETED' ? 'bg-gray-50 text-gray-700 border-gray-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                                    {item.status === 'COMPLETED' ? '可开票' : '未离店'}
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-right">
                                 <div className="flex gap-2 justify-end flex-wrap">
                                   <button
@@ -638,6 +849,82 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
               </button>
             </div>
             <iframe title="官方订单详情" src={iframeUrl} className="w-full flex-1" />
+          </div>
+        </div>
+      )}
+
+      {invoiceDialogOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white border border-gray-200 shadow-xl p-4 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold text-gray-900">批量开票</h3>
+              <p className="text-sm text-gray-600">已选拆单 {selectedItems.length} 条（仅已离店且未开票的拆单会成功）。</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-500">发票模板</label>
+              <div className="flex items-center gap-2">
+                <input
+                  value={invoiceTemplateSearch}
+                  onChange={(e) => setInvoiceTemplateSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      searchInvoiceTemplates();
+                    }
+                  }}
+                  placeholder="搜索模板：抬头/税号/invoiceId"
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={searchInvoiceTemplates}
+                  disabled={loadingInvoiceTemplates}
+                  className="px-3 py-2 text-xs rounded border border-gray-200 bg-white disabled:opacity-50"
+                >
+                  {loadingInvoiceTemplates ? '搜索中...' : '搜索'}
+                </button>
+              </div>
+              <select
+                value={invoiceTemplateId}
+                onChange={(e) => setInvoiceTemplateId(e.target.value)}
+                disabled={loadingInvoiceTemplates || invoiceTemplates.length === 0}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+              >
+                {invoiceTemplates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>{tpl.invoiceName} (invoiceId: {tpl.invoiceId})</option>
+                ))}
+              </select>
+              {!loadingInvoiceTemplates && invoiceTemplates.length === 0 && (
+                <div className="text-xs text-gray-500">没有搜索到匹配模板，请换关键词或先到发票管理新增模板。</div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-500">接收邮箱（可覆盖模板邮箱）</label>
+              <input
+                value={invoiceEmail}
+                onChange={(e) => setInvoiceEmail(e.target.value)}
+                placeholder="不填则使用模板邮箱"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setInvoiceDialogOpen(false)}
+                disabled={issuingInvoices}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={batchIssueInvoices}
+                disabled={issuingInvoices || loadingInvoiceTemplates || !invoiceTemplateId || selectedItems.length === 0}
+                className="px-3 py-1.5 text-sm rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 disabled:opacity-50"
+              >
+                {issuingInvoices ? '开票中...' : '确认开票'}
+              </button>
+            </div>
           </div>
         </div>
       )}

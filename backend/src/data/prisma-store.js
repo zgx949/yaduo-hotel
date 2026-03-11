@@ -198,7 +198,21 @@ const buildPaymentLink = (item) => {
   return `atour://payment/checkout?orderId=${encodeURIComponent(orderId)}`;
 };
 
-const projectOrderItem = (item) => ({
+const projectOrderItem = (item) => {
+  const invoiceRecord = item.invoiceRecord || null;
+  const invoice = invoiceRecord
+    ? {
+      id: invoiceRecord.id,
+      invoiceTemplateId: invoiceRecord.invoiceTemplateId,
+      invoiceId: invoiceRecord.invoiceId,
+      state: invoiceRecord.state,
+      stateDesc: invoiceRecord.stateDesc || null,
+      issuedAt: invoiceRecord.issuedAt ? invoiceRecord.issuedAt.toISOString() : null,
+      createdAt: invoiceRecord.createdAt ? invoiceRecord.createdAt.toISOString() : null
+    }
+    : null;
+
+  return {
   id: item.id,
   groupId: item.groupId,
   atourOrderId: item.atourOrderId,
@@ -228,9 +242,11 @@ const projectOrderItem = (item) => ({
   splitTotal: item.splitTotal,
   paymentLink: buildPaymentLink(item),
   detailUrl: buildOrderDetailUrl(item),
+  invoice,
   createdAt: item.createdAt.toISOString(),
   updatedAt: item.updatedAt.toISOString()
-});
+  };
+};
 
 const aggregateOrderStatuses = (items) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -1196,7 +1212,9 @@ export const prismaStore = {
         }
       },
       include: {
-        items: true
+        items: {
+          include: { invoiceRecord: true }
+        }
       }
     });
 
@@ -1238,11 +1256,32 @@ export const prismaStore = {
         { customerName: { contains: keyword } }
       ];
     }
+    if (String(filters.invoiceStatus || "") === "PENDING") {
+      where.items = {
+        some: {
+          status: "COMPLETED",
+          invoiceRecord: {
+            is: null
+          }
+        }
+      };
+    } else if (String(filters.invoiceStatus || "") === "ISSUED") {
+      where.items = {
+        some: {
+          invoiceRecord: {
+            is: {
+              state: "ISSUED"
+            }
+          }
+        }
+      };
+    }
 
     const groups = await prisma.orderGroup.findMany({
       where,
       include: {
         items: {
+          include: { invoiceRecord: true },
           orderBy: { splitIndex: "asc" }
         }
       },
@@ -1300,6 +1339,26 @@ export const prismaStore = {
         ...(checkInTo && !Number.isNaN(checkInTo.getTime()) ? { lte: checkInTo } : {})
       };
     }
+    if (String(filters.invoiceStatus || "") === "PENDING") {
+      where.items = {
+        some: {
+          status: "COMPLETED",
+          invoiceRecord: {
+            is: null
+          }
+        }
+      };
+    } else if (String(filters.invoiceStatus || "") === "ISSUED") {
+      where.items = {
+        some: {
+          invoiceRecord: {
+            is: {
+              state: "ISSUED"
+            }
+          }
+        }
+      };
+    }
 
     const page = clampPage(filters.page);
     const pageSize = clampPageSize(filters.pageSize, 200, 20);
@@ -1310,6 +1369,7 @@ export const prismaStore = {
         where,
         include: {
           items: {
+            include: { invoiceRecord: true },
             orderBy: { splitIndex: "asc" }
           }
         },
@@ -1358,6 +1418,7 @@ export const prismaStore = {
       where: { id: orderGroupId },
       include: {
         items: {
+          include: { invoiceRecord: true },
           orderBy: { splitIndex: "asc" }
         }
       }
@@ -1531,7 +1592,7 @@ export const prismaStore = {
     return refreshed;
   },
   async getOrderItemById(id) {
-    const item = await prisma.orderItem.findUnique({ where: { id } });
+    const item = await prisma.orderItem.findUnique({ where: { id }, include: { invoiceRecord: true } });
     return item ? projectOrderItem(item) : null;
   },
   async refreshOrderItemStatus(itemId) {
@@ -2411,6 +2472,322 @@ export const prismaStore = {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
     }));
+  },
+  async listInvoiceTemplates(filters = {}) {
+    const where = {};
+    const search = String(filters.search || "").trim();
+    if (search) {
+      const byId = Number(search);
+      where.OR = [
+        { invoiceName: { contains: search, mode: "insensitive" } },
+        { taxNo: { contains: search, mode: "insensitive" } },
+        ...(Number.isFinite(byId) ? [{ invoiceId: byId }] : [])
+      ];
+    }
+    if (filters.isEnabled !== undefined) {
+      where.isEnabled = Boolean(filters.isEnabled);
+    }
+    const page = clampPage(filters.page);
+    const pageSize = clampPageSize(filters.pageSize, 200, 20);
+    const skip = (page - 1) * pageSize;
+
+    const [rows, total] = await Promise.all([
+      prisma.invoiceTemplate.findMany({ where, orderBy: [{ updatedAt: "desc" }], skip, take: pageSize }),
+      prisma.invoiceTemplate.count({ where })
+    ]);
+    return {
+      items: rows.map((it) => ({
+        id: it.id,
+        invoiceId: it.invoiceId,
+        invoiceName: it.invoiceName,
+        invoiceType: it.invoiceType,
+        invoiceTitleType: it.invoiceTitleType,
+        taxNo: it.taxNo,
+        address: it.address,
+        telephone: it.telephone,
+        bank: it.bank,
+        account: it.account,
+        email: it.email,
+        remark: it.remark,
+        isEnabled: it.isEnabled,
+        createdBy: it.createdBy,
+        createdAt: it.createdAt.toISOString(),
+        updatedAt: it.updatedAt.toISOString()
+      })),
+      meta: {
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        hasMore: skip + rows.length < total
+      }
+    };
+  },
+  async getInvoiceTemplateById(id) {
+    if (!id) {
+      return null;
+    }
+    const it = await prisma.invoiceTemplate.findUnique({ where: { id: String(id) } });
+    if (!it) {
+      return null;
+    }
+    return {
+      id: it.id,
+      invoiceId: it.invoiceId,
+      invoiceName: it.invoiceName,
+      invoiceType: it.invoiceType,
+      invoiceTitleType: it.invoiceTitleType,
+      taxNo: it.taxNo,
+      address: it.address,
+      telephone: it.telephone,
+      bank: it.bank,
+      account: it.account,
+      email: it.email,
+      remark: it.remark,
+      isEnabled: it.isEnabled,
+      createdBy: it.createdBy,
+      createdAt: it.createdAt.toISOString(),
+      updatedAt: it.updatedAt.toISOString()
+    };
+  },
+  async createInvoiceTemplate(payload = {}) {
+    const row = await prisma.invoiceTemplate.create({
+      data: {
+        invoiceId: Math.trunc(Number(payload.invoiceId) || 0),
+        invoiceName: String(payload.invoiceName || "").trim(),
+        invoiceType: Math.trunc(Number(payload.invoiceType) || 13),
+        invoiceTitleType: Math.trunc(Number(payload.invoiceTitleType) || 2),
+        taxNo: payload.taxNo ? String(payload.taxNo).trim() : null,
+        address: payload.address ? String(payload.address).trim() : null,
+        telephone: payload.telephone ? String(payload.telephone).trim() : null,
+        bank: payload.bank ? String(payload.bank).trim() : null,
+        account: payload.account ? String(payload.account).trim() : null,
+        email: payload.email ? String(payload.email).trim() : null,
+        remark: payload.remark ? String(payload.remark).trim() : null,
+        createdBy: payload.createdBy ? String(payload.createdBy) : null,
+        isEnabled: payload.isEnabled !== false
+      }
+    });
+    return this.getInvoiceTemplateById(row.id);
+  },
+  async listInvoiceRecordsByOrderGroup(orderGroupId) {
+    if (!orderGroupId) {
+      return [];
+    }
+    const rows = await prisma.invoiceRecord.findMany({
+      where: { orderGroupId: String(orderGroupId) },
+      include: {
+        template: true,
+        orderItem: true
+      },
+      orderBy: [{ createdAt: "desc" }]
+    });
+    return rows.map((it) => ({
+      id: it.id,
+      orderItemId: it.orderItemId,
+      orderGroupId: it.orderGroupId,
+      invoiceTemplateId: it.invoiceTemplateId,
+      invoiceId: it.invoiceId,
+      orderId: it.orderId,
+      chainId: it.chainId,
+      invoiceType: it.invoiceType,
+      invoiceTitleType: it.invoiceTitleType,
+      invoiceName: it.invoiceName,
+      taxNo: it.taxNo,
+      email: it.email,
+      state: it.state,
+      stateDesc: it.stateDesc,
+      submittedPayload: it.submittedPayload,
+      responsePayload: it.responsePayload,
+      errorMessage: it.errorMessage,
+      issuedAt: it.issuedAt ? it.issuedAt.toISOString() : null,
+      createdBy: it.createdBy,
+      createdAt: it.createdAt.toISOString(),
+      updatedAt: it.updatedAt.toISOString(),
+      template: it.template ? {
+        id: it.template.id,
+        invoiceName: it.template.invoiceName,
+        invoiceId: it.template.invoiceId
+      } : null
+    }));
+  },
+  async listInvoiceRecordsPage(filters = {}) {
+    const and = [];
+    const state = String(filters.state || "").trim().toUpperCase();
+    if (state && state !== "ALL") {
+      and.push({ state });
+    }
+    if (filters.creatorId) {
+      and.push({
+        orderItem: {
+          is: {
+            group: {
+              creatorId: String(filters.creatorId)
+            }
+          }
+        }
+      });
+    }
+    const keyword = String(filters.search || "").trim();
+    if (keyword) {
+      and.push({
+        OR: [
+          { invoiceName: { contains: keyword, mode: "insensitive" } },
+          { orderId: { contains: keyword, mode: "insensitive" } },
+          { chainId: { contains: keyword, mode: "insensitive" } },
+          {
+            orderItem: {
+              is: {
+                atourOrderId: { contains: keyword, mode: "insensitive" }
+              }
+            }
+          },
+          {
+            orderItem: {
+              is: {
+                group: {
+                  OR: [
+                    { bizOrderNo: { contains: keyword, mode: "insensitive" } },
+                    { hotelName: { contains: keyword, mode: "insensitive" } },
+                    { customerName: { contains: keyword, mode: "insensitive" } }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      });
+    }
+
+    const where = and.length > 0 ? { AND: and } : {};
+    const page = clampPage(filters.page);
+    const pageSize = clampPageSize(filters.pageSize, 200, 20);
+    const skip = (page - 1) * pageSize;
+
+    const [rows, total] = await Promise.all([
+      prisma.invoiceRecord.findMany({
+        where,
+        include: {
+          template: true,
+          orderItem: {
+            include: {
+              group: true
+            }
+          }
+        },
+        orderBy: [{ createdAt: "desc" }],
+        skip,
+        take: pageSize
+      }),
+      prisma.invoiceRecord.count({ where })
+    ]);
+
+    return {
+      items: rows.map((it) => ({
+        id: it.id,
+        orderItemId: it.orderItemId,
+        orderGroupId: it.orderGroupId,
+        invoiceTemplateId: it.invoiceTemplateId,
+        invoiceId: it.invoiceId,
+        orderId: it.orderId,
+        chainId: it.chainId,
+        invoiceType: it.invoiceType,
+        invoiceTitleType: it.invoiceTitleType,
+        invoiceName: it.invoiceName,
+        taxNo: it.taxNo,
+        email: it.email,
+        state: it.state,
+        stateDesc: it.stateDesc,
+        errorMessage: it.errorMessage,
+        issuedAt: it.issuedAt ? it.issuedAt.toISOString() : null,
+        createdBy: it.createdBy,
+        createdAt: it.createdAt.toISOString(),
+        updatedAt: it.updatedAt.toISOString(),
+        template: it.template ? {
+          id: it.template.id,
+          invoiceName: it.template.invoiceName,
+          invoiceId: it.template.invoiceId
+        } : null,
+        order: it.orderItem?.group ? {
+          id: it.orderItem.group.id,
+          bizOrderNo: it.orderItem.group.bizOrderNo,
+          hotelName: it.orderItem.group.hotelName,
+          customerName: it.orderItem.group.customerName,
+          checkInDate: it.orderItem.group.checkInDate.toISOString().slice(0, 10),
+          checkOutDate: it.orderItem.group.checkOutDate.toISOString().slice(0, 10),
+          totalAmount: it.orderItem.group.totalAmount,
+          currency: it.orderItem.group.currency
+        } : null,
+        splitItem: it.orderItem ? {
+          id: it.orderItem.id,
+          atourOrderId: it.orderItem.atourOrderId,
+          amount: it.orderItem.amount,
+          roomType: it.orderItem.roomType,
+          splitIndex: it.orderItem.splitIndex,
+          splitTotal: it.orderItem.splitTotal
+        } : null
+      })),
+      meta: {
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        hasMore: skip + rows.length < total
+      }
+    };
+  },
+  async createInvoiceRecord(payload = {}) {
+    return prisma.$transaction(async (tx) => {
+      const item = await tx.orderItem.findUnique({ where: { id: String(payload.orderItemId) } });
+      if (!item) {
+        throw new Error("order item not found");
+      }
+      const existed = await tx.invoiceRecord.findUnique({ where: { orderItemId: String(payload.orderItemId) } });
+      if (existed) {
+        throw new Error("该拆单已开票，禁止重复开票");
+      }
+      const row = await tx.invoiceRecord.create({
+        data: {
+          orderItemId: String(payload.orderItemId),
+          orderGroupId: String(payload.orderGroupId || item.groupId),
+          invoiceTemplateId: String(payload.invoiceTemplateId),
+          invoiceId: Math.trunc(Number(payload.invoiceId) || 0),
+          orderId: payload.orderId ? String(payload.orderId) : null,
+          chainId: String(payload.chainId || ""),
+          invoiceType: Math.trunc(Number(payload.invoiceType) || 13),
+          invoiceTitleType: Math.trunc(Number(payload.invoiceTitleType) || 2),
+          invoiceName: String(payload.invoiceName || "").trim(),
+          taxNo: payload.taxNo ? String(payload.taxNo).trim() : null,
+          email: payload.email ? String(payload.email).trim() : null,
+          state: String(payload.state || "PENDING"),
+          stateDesc: payload.stateDesc ? String(payload.stateDesc) : null,
+          submittedPayload: payload.submittedPayload || undefined,
+          responsePayload: payload.responsePayload || undefined,
+          errorMessage: payload.errorMessage ? String(payload.errorMessage) : null,
+          issuedAt: payload.issuedAt ? new Date(payload.issuedAt) : null,
+          createdBy: payload.createdBy ? String(payload.createdBy) : null
+        }
+      });
+      return row;
+    });
+  },
+  async updateInvoiceRecordByOrderItemId(orderItemId, patch = {}) {
+    const existed = await prisma.invoiceRecord.findUnique({ where: { orderItemId: String(orderItemId) } });
+    if (!existed) {
+      return null;
+    }
+    const row = await prisma.invoiceRecord.update({
+      where: { orderItemId: String(orderItemId) },
+      data: {
+        state: hasOwn(patch, "state") ? String(patch.state || existed.state) : undefined,
+        stateDesc: hasOwn(patch, "stateDesc") ? (patch.stateDesc ? String(patch.stateDesc) : null) : undefined,
+        responsePayload: hasOwn(patch, "responsePayload") ? patch.responsePayload : undefined,
+        submittedPayload: hasOwn(patch, "submittedPayload") ? patch.submittedPayload : undefined,
+        errorMessage: hasOwn(patch, "errorMessage") ? (patch.errorMessage ? String(patch.errorMessage) : null) : undefined,
+        issuedAt: hasOwn(patch, "issuedAt") ? (patch.issuedAt ? new Date(patch.issuedAt) : null) : undefined
+      }
+    });
+    return row;
   },
   async listLlmModels() {
     await ensureSystemConfig();

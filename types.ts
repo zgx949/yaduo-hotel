@@ -160,10 +160,86 @@ export interface OrderSplitItem {
   executionStatus: string;
   paymentLink?: string | null;
   detailUrl?: string | null;
+  invoice?: {
+    id: string;
+    invoiceTemplateId: string;
+    invoiceId: number;
+    state: string;
+    stateDesc?: string | null;
+    issuedAt?: string | null;
+    createdAt?: string | null;
+  } | null;
   splitIndex: number;
   splitTotal: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InvoiceTemplate {
+  id: string;
+  invoiceId: number;
+  invoiceName: string;
+  invoiceType: number;
+  invoiceTitleType: number;
+  taxNo?: string | null;
+  address?: string | null;
+  telephone?: string | null;
+  bank?: string | null;
+  account?: string | null;
+  email?: string | null;
+  remark?: string | null;
+  isEnabled: boolean;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceRecord {
+  id: string;
+  orderItemId: string;
+  orderGroupId: string;
+  invoiceTemplateId: string;
+  invoiceId: number;
+  orderId?: string | null;
+  chainId: string;
+  invoiceType: number;
+  invoiceTitleType: number;
+  invoiceName: string;
+  taxNo?: string | null;
+  email?: string | null;
+  state: string;
+  stateDesc?: string | null;
+  errorMessage?: string | null;
+  issuedAt?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceRecordListItem extends InvoiceRecord {
+  template?: {
+    id: string;
+    invoiceName: string;
+    invoiceId: number;
+  } | null;
+  order?: {
+    id: string;
+    bizOrderNo: string;
+    hotelName: string;
+    customerName: string;
+    checkInDate: string;
+    checkOutDate: string;
+    totalAmount: number;
+    currency: string;
+  } | null;
+  splitItem?: {
+    id: string;
+    atourOrderId?: string | null;
+    amount: number;
+    roomType: string;
+    splitIndex: number;
+    splitTotal: number;
+  } | null;
 }
 
 export interface OrderGroup {

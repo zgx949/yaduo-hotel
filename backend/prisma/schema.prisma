@@ -114,10 +114,64 @@ model OrderItem {
   account            PoolAccount? @relation(fields: [accountId], references: [id])
   group              OrderGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
   tasks              Task[]
+  invoiceRecord      InvoiceRecord?
 
   @@index([groupId, splitIndex])
   @@index([accountId])
   @@index([status, paymentStatus])
+}
+
+model InvoiceTemplate {
+  id               String   @id @default(cuid())
+  invoiceId        Int      @unique
+  invoiceName      String
+  invoiceType      Int      @default(13)
+  invoiceTitleType Int      @default(2)
+  taxNo            String?
+  address          String?
+  telephone        String?
+  bank             String?
+  account          String?
+  email            String?
+  remark           String?
+  isEnabled        Boolean  @default(true)
+  createdBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  records          InvoiceRecord[]
+
+  @@index([invoiceName])
+  @@index([createdAt])
+}
+
+model InvoiceRecord {
+  id               String          @id @default(cuid())
+  orderItemId      String          @unique
+  orderGroupId     String
+  invoiceTemplateId String
+  invoiceId        Int
+  orderId          String?
+  chainId          String
+  invoiceType      Int
+  invoiceTitleType Int
+  invoiceName      String
+  taxNo            String?
+  email            String?
+  state            String          @default("PENDING")
+  stateDesc        String?
+  submittedPayload Json?
+  responsePayload  Json?
+  errorMessage     String?
+  issuedAt         DateTime?
+  createdBy        String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  orderItem        OrderItem       @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  template         InvoiceTemplate @relation(fields: [invoiceTemplateId], references: [id], onDelete: Restrict)
+
+  @@index([orderGroupId, createdAt])
+  @@index([invoiceTemplateId])
+  @@index([state])
 }
 
 model Task {

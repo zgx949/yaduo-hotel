@@ -8,6 +8,7 @@ import { fetchWithProxy } from "./proxied-fetch.service.js";
 const ALIPAY_APP_ID = "2021003121605466";
 const ALIPAY_APP_BRIDGE_ID = "20000067";
 const NEW_GUEST_API_BASE = "https://miniapp.yaduo.com/atourlife";
+const ENC_API_URL = "http://81.68.144.211:5002/yaduoapi/get_enc_str";
 
 const idCardWeights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
 const idCardCheckMap = ["1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"];
@@ -117,6 +118,147 @@ const parseAtourResponse = async (response, fallbackMessage) => {
     throw new Error(`${fallbackMessage} (${details})`);
   }
   return data;
+};
+
+const parseMiniappResponse = async (response, fallbackMessage) => {
+  const rawText = await response.text();
+  let data = {};
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok || Number(data?.retcode) !== 0) {
+    throw new Error(`${fallbackMessage} (status=${response.status} retcode=${data?.retcode ?? "unknown"} retmsg=${data?.retmsg || ""})`);
+  }
+  return data;
+};
+
+export const encryptPlainTextForAtour = async ({ text }) => {
+  const plain = String(text || "").trim();
+  if (!plain) {
+    return "";
+  }
+  if (plain.startsWith("enc(")) {
+    return plain;
+  }
+  const response = await fetch(`${ENC_API_URL}?text=${encodeURIComponent(plain)}`);
+  const data = await response.json().catch(() => ({}));
+  const encrypted = String(data?.data || "").trim();
+  if (!response.ok || !encrypted.startsWith("enc(")) {
+    throw new Error("email enc encryption failed");
+  }
+  return encrypted;
+};
+
+export const getInvoiceLikeTitleOrNumber = async ({ token, proxy, titleOrNumber }) => {
+  const query = new URLSearchParams({
+    token: String(token || ""),
+    platType: String(env.atourPlatformType),
+    appVer: String(env.atourAppVersion),
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activityId: "",
+    activeId: "",
+    clientId: String(env.atourClientId)
+  });
+  const body = new URLSearchParams({ titleOrNumber: String(titleOrNumber || "") });
+
+  const response = await fetchWithProxy(`${NEW_GUEST_API_BASE}/miniapp/invoice/getInvoiceLikeTitleOrNumber?${query.toString()}`, {
+    method: "POST",
+    headers: {
+      ...buildAtourHeaders(token),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: body.toString(),
+    timeoutMs: 12000
+  }, proxy);
+  const data = await parseMiniappResponse(response, "getInvoiceLikeTitleOrNumber failed");
+  return Array.isArray(data?.result) ? data.result : [];
+};
+
+export const addMiniAppInvoiceInfoV2 = async ({ token, proxy, payload }) => {
+  const query = new URLSearchParams({
+    token: String(token || ""),
+    platType: String(env.atourPlatformType),
+    appVer: String(env.atourAppVersion),
+    channelId: String(env.atourChannelId),
+    activitySource: "",
+    activityId: "",
+    activeId: "",
+    clientId: String(env.atourClientId)
+  });
+
+  const response = await fetchWithProxy(`${NEW_GUEST_API_BASE}/miniapp/invoice/addMiniAppInvoiceInfoV2?${query.toString()}`, {
+    method: "POST",
+    headers: buildAtourHeaders(token),
+    body: JSON.stringify(payload || {}),
+    timeoutMs: 12000
+  }, proxy);
+  const data = await parseMiniappResponse(response, "addMiniAppInvoiceInfoV2 failed");
+  return data?.result || {};
+};
+
+export const issueEinvoiceV2 = async ({ token, proxy, payload }) => {
+  const query = new URLSearchParams({
+    activeId: "",
+    "At-Client-Id": String(env.atourClientId),
+    activitySource: "",
+    channelId: String(env.atourChannelId),
+    "At-App-Version": String(env.atourAppVersion),
+    platType: String(env.atourPlatformType),
+    "At-Channel-Id": String(env.atourChannelId),
+    inactiveId: "",
+    appVer: String(env.atourAppVersion),
+    deviceId: String(env.atourClientId),
+    token: String(token || ""),
+    "At-Platform-Type": String(env.atourPlatformType)
+  });
+
+  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/invoice/issueEinvoiceV2?${query.toString()}`, {
+    method: "POST",
+    headers: buildAtourHeaders(token),
+    body: JSON.stringify(payload || {}),
+    timeoutMs: 12000
+  }, proxy);
+  const data = await parseAtourResponse(response, "issueEinvoiceV2 failed");
+  return data?.result || {};
+};
+
+export const getInvoiceInfoByOrder = async ({ token, proxy, chainId, orderId }) => {
+  const query = new URLSearchParams({
+    r: String(Math.random()),
+    token: String(token || ""),
+    platType: String(env.atourPlatformType),
+    appVer: String(env.atourAppVersion),
+    channelId: String(env.atourChannelId),
+    chainId: String(chainId || ""),
+    orderId: String(orderId || "")
+  });
+
+  const response = await fetchWithProxy(`${NEW_GUEST_API_BASE}/miniapp/invoice/getInvoiceInfoByOrder?${query.toString()}`, {
+    method: "GET",
+    headers: {
+      ...buildAtourHeaders(token),
+      Accept: "application/json, text/plain, */*"
+    },
+    timeoutMs: 12000
+  }, proxy);
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {};
+  }
+  if (!response.ok) {
+    throw new Error(`getInvoiceInfoByOrder failed (status=${response.status})`);
+  }
+  if (Number(data?.retcode) === 0) {
+    return { found: true, result: data?.result || null };
+  }
+  return { found: false, result: null, retcode: Number(data?.retcode) || -1, retmsg: String(data?.retmsg || "") };
 };
 
 export const calculateOrderV2 = async ({ token, payload, proxy }) => {

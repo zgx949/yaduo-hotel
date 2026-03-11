@@ -68,7 +68,7 @@ const normalizeSplitBenefits = (splits = []) => {
     breakfastCount: Math.max(0, Number(it?.breakfastCount) || 0),
     delayedCheckOutCount: Math.max(0, Number(it?.delayedCheckOutCount) || 0),
     shooseCount: Math.max(0, Number(it?.shooseCount) || 0),
-    roomLevelUpCount: hasUpgradeRequest? 1 : 0
+    roomLevelUpCount: hasUpgradeRequest ? 1 : 0
   }));
 };
 
@@ -424,6 +424,7 @@ ordersRoutes.get("/", requireAuth, async (req, res) => {
   const filters = {
     search: req.query.search,
     status: req.query.status,
+    invoiceStatus: req.query.invoiceStatus,
     checkInFrom: req.query.checkInFrom,
     checkInTo: req.query.checkInTo,
     page: req.query.page,
