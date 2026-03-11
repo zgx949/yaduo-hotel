@@ -90,18 +90,10 @@ poolRoutes.get("/accounts/:id", requireAuth, async (req, res) => {
 });
 
 poolRoutes.get("/corporate-agreements", requireAuth, async (req, res) => {
-  const accounts = await prismaStore.listPoolAccounts();
-  const names = new Set();
-  accounts.forEach((account) => {
-    (account.corporate_agreements || []).forEach((corp) => {
-      if (corp?.name) {
-        names.add(corp.name);
-      }
-    });
-  });
+  const names = await prismaStore.listCorporateAgreementNames();
 
   return res.json({
-    items: Array.from(names).map((name) => ({ id: name, name }))
+    items: names.map((name) => ({ id: name, name }))
   });
 });
 

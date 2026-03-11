@@ -184,8 +184,17 @@ export const Accounts: React.FC = () => {
 
   useEffect(() => {
     loadAccounts();
-    loadCorporateOptions();
   }, [page, pageSize, debouncedSearch, filterType]);
+
+  useEffect(() => {
+    loadCorporateOptions();
+  }, []);
+
+  useEffect(() => {
+    if (isFormOpen) {
+      loadCorporateOptions();
+    }
+  }, [isFormOpen]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

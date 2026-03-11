@@ -670,6 +670,23 @@ export const prismaStore = {
     }
     return items;
   },
+  async listCorporateAgreementNames() {
+    const rows = await prisma.poolAccount.findMany({
+      select: { corporateAgreements: true }
+    });
+
+    const names = new Set();
+    rows.forEach((row) => {
+      const agreements = Array.isArray(row.corporateAgreements) ? row.corporateAgreements : [];
+      agreements.forEach((corp) => {
+        const name = String(corp?.name || "").trim();
+        if (name) {
+          names.add(name);
+        }
+      });
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  },
   async listPoolAccountsPage(filters = {}) {
     const page = clampPage(filters.page);
     const pageSize = clampPageSize(filters.pageSize, 200, 20);
@@ -682,32 +699,53 @@ export const prismaStore = {
       where.isOnline = String(filters.is_online) === "true" || filters.is_online === true;
     }
 
-    let allItems = [];
+    const tier = filters.tier ? String(filters.tier).toUpperCase() : "";
+    if (tier === "NEW_USER") {
+      where.isNewUser = true;
+    } else if (tier === "PLATINUM") {
+      where.isPlatinum = true;
+    } else if (tier === "CORPORATE") {
+      where.corporateAgreements = { not: [] };
+    } else if (tier === "NORMAL") {
+      where.isNewUser = false;
+      where.isPlatinum = false;
+      where.corporateAgreements = { equals: [] };
+    } else if (tier && tier !== "ALL") {
+      return {
+        items: [],
+        meta: {
+          total: 0,
+          page,
+          pageSize,
+          hasMore: false,
+          totalPages: 1
+        }
+      };
+    }
+
     if (filters.search) {
-      const rows = await prisma.poolAccount.findMany({ where, orderBy: { updatedAt: "desc" } });
-      const keyword = String(filters.search).toLowerCase();
-      allItems = rows
-        .map(projectPoolAccount)
-        .filter((it) =>
-          it.phone.toLowerCase().includes(keyword) ||
-          String(it.remark || "").toLowerCase().includes(keyword) ||
-          String(it.id || "").toLowerCase().includes(keyword) ||
-          (it.corporate_agreements || []).some((corp) => String(corp.name || "").toLowerCase().includes(keyword))
-        );
-    } else {
-      const rows = await prisma.poolAccount.findMany({ where, orderBy: { updatedAt: "desc" } });
-      allItems = rows.map(projectPoolAccount);
+      const keyword = String(filters.search).trim();
+      if (keyword) {
+        where.OR = [
+          { phone: { contains: keyword, mode: "insensitive" } },
+          { remark: { contains: keyword, mode: "insensitive" } },
+          { id: { contains: keyword, mode: "insensitive" } }
+        ];
+      }
     }
 
-    if (filters.tier) {
-      allItems = allItems.filter((it) => it.tier === filters.tier);
-    }
-
-    const total = allItems.length;
+    const total = await prisma.poolAccount.count({ where });
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const normalizedPage = Math.min(page, totalPages);
     const offset = (normalizedPage - 1) * pageSize;
-    const items = allItems.slice(offset, offset + pageSize);
+
+    const rows = await prisma.poolAccount.findMany({
+      where,
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      skip: offset,
+      take: pageSize
+    });
+    const items = rows.map(projectPoolAccount);
     return {
       items,
       meta: {
