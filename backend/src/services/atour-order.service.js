@@ -50,6 +50,27 @@ const buildAtourQuery = (token) => {
   return params.toString();
 };
 
+const buildAddOrderQuery = (token) => {
+  const params = new URLSearchParams({
+    appVer: String(env.atourAppVersion),
+    "At-App-Version": String(env.atourAppVersion),
+    channelId: String(env.atourChannelId),
+    deviceId: String(env.atourClientId),
+    "At-Channel-Id": String(env.atourChannelId),
+    "At-Platform-Type": String(env.atourPlatformType),
+    platType: String(env.atourPlatformType),
+    token: String(token || ""),
+    activitySource: "",
+    activeId: "",
+    inactiveId: ""
+  });
+  const clientCode = String(process.env.ATOUR_CLIENT_CODE || "").trim();
+  if (clientCode) {
+    params.set("at-client-code", clientCode);
+  }
+  return params.toString();
+};
+
 const buildAtourHeaders = (token) => ({
   Accept: "*/*",
   "At-Platform-Type": env.atourPlatformType,
@@ -150,6 +171,57 @@ export const encryptPlainTextForAtour = async ({ text }) => {
     throw new Error("email enc encryption failed");
   }
   return encrypted;
+};
+
+const normalizeGuestListEnc = async (guestList = [], fallbackName = "") => {
+  const source = Array.isArray(guestList) && guestList.length > 0
+    ? guestList
+    : [{ name: fallbackName, room: 1 }];
+  const output = [];
+  for (const item of source) {
+    const nameRaw = String(item?.name || fallbackName || "").trim();
+    if (!nameRaw) {
+      continue;
+    }
+    output.push({
+      ...item,
+      name: await encryptPlainTextForAtour({ text: nameRaw }),
+      room: Math.max(1, Number(item?.room) || 1)
+    });
+  }
+  return output;
+};
+
+const normalizeMobileEnc = async (mobileText = "") => {
+  const raw = String(mobileText || "").trim();
+  if (!raw) {
+    return "";
+  }
+  return encryptPlainTextForAtour({ text: raw });
+};
+
+const normalizeAddOrderPayload = async ({ payload = {}, token = "" }) => {
+  const next = { ...(payload || {}) };
+
+  next.mobile = await normalizeMobileEnc(next.mobile || "");
+  next.guestList = await normalizeGuestListEnc(next.guestList, next.checkInPersons || "");
+  next.selectedPoint = Math.max(0, Math.floor(Number(next.selectedPoint) || 0));
+  next.isPointPayAppChannel = String(next.isPointPayAppChannel || "1");
+
+  next.appVer = String(next.appVer || env.atourAppVersion);
+  next.deviceId = String(next.deviceId || env.atourClientId);
+  next.channelId = String(next.channelId || env.atourChannelId);
+  next.platType = String(next.platType || env.atourPlatformType);
+  next["At-Client-Id"] = String(next["At-Client-Id"] || env.atourClientId);
+  next["At-App-Version"] = String(next["At-App-Version"] || env.atourAppVersion);
+  next["At-Channel-Id"] = String(next["At-Channel-Id"] || env.atourChannelId);
+  next["At-Platform-Type"] = String(next["At-Platform-Type"] || env.atourPlatformType);
+  next.token = String(next.token || token || "");
+  next.invoiceTitleType = Number(next.invoiceTitleType ?? 2);
+  next.guaranteed = Boolean(false);
+  next.confirmNoGuarantee = Boolean(next.confirmNoGuarantee ?? false);
+
+  return next;
 };
 
 export const getInvoiceLikeTitleOrNumber = async ({ token, proxy, titleOrNumber }) => {
@@ -277,11 +349,12 @@ export const calculateOrderV2 = async ({ token, payload, proxy }) => {
 };
 
 export const addAppOrder = async ({ token, payload, proxy }) => {
-  const query = buildAtourQuery(token);
+  const query = buildAddOrderQuery(token);
+  const normalizedPayload = await normalizeAddOrderPayload({ payload, token });
   const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/addAppOrder?${query}`, {
     method: "POST",
     headers: buildAtourHeaders(token),
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(normalizedPayload || {}),
     timeoutMs: 12000
   }, proxy);
   const data = await parseAtourResponse(response, "addAppOrder failed");
@@ -605,22 +678,66 @@ const buildCalculatePayloadFromItem = ({ order, item, customerName, customerPhon
   };
 };
 
-const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, customerName, customerPhone, orderItem, coupons }) => {
+const resolveSelectedPoint = ({ accountPoints, orderAmount, calculateResult, requestedPoint }) => {
+  const maxByRule = 3000;
+  const maxByAmount = Math.max(0, Math.floor(Number(orderAmount) || 0));
+  const maxByAccount = Math.max(0, Math.floor(Number(accountPoints) || 0));
+  const calcPointCapRaw = Number(calculateResult?.pointPayMaxPoint ?? calculateResult?.maxPoint ?? Number.POSITIVE_INFINITY);
+  const maxByCalculate = Number.isFinite(calcPointCapRaw)
+    ? Math.max(0, Math.floor(calcPointCapRaw))
+    : Number.POSITIVE_INFINITY;
+  const base = requestedPoint !== undefined && requestedPoint !== null
+    ? Math.max(0, Math.floor(Number(requestedPoint) || 0))
+    : maxByAccount;
+  return Math.max(0, Math.min(base, maxByRule, maxByAmount, maxByAccount, maxByCalculate));
+};
+
+const buildAddOrderPayloadFromItem = async ({
+  calculateResult,
+  calculatePayload,
+  customerName,
+  customerPhone,
+  orderItem,
+  coupons,
+  accountPoints,
+  requestedPoint
+}) => {
   const itemRemark = orderItem?.remark ? String(orderItem.remark) : "";
   const breakfastCount = Math.max(0, Number(orderItem?.breakfastCount) || 0);
   const roomLevelUpCount = Math.max(0, Number(orderItem?.roomLevelUpCount) || 0);
   const delayedCheckOutCount = Math.max(0, Number(orderItem?.delayedCheckOutCount) || 0);
   const shooseCount = Math.max(0, Number(orderItem?.shooseCount) || 0);
+  const orderAmount = Number(calculateResult.defaultAmount || calculateResult.amount || 0);
+  const selectedPoint = resolveSelectedPoint({
+    accountPoints,
+    orderAmount,
+    calculateResult,
+    requestedPoint
+  });
+
+  const encryptedMobile = await normalizeMobileEnc(customerPhone || "");
+  const encryptedGuestList = await normalizeGuestListEnc([], customerName || "");
 
   return {
     inactiveId: "", // 发票信息id
     activeId: "",
     repeatToken: String(calculateResult.repeatToken || ""),
 
+    appVer: String(env.atourAppVersion),
+    deviceId: String(env.atourClientId),
+    channelId: String(env.atourChannelId),
+    platType: String(env.atourPlatformType),
+    "At-Client-Id": String(env.atourClientId),
+    "At-App-Version": String(env.atourAppVersion),
+    "At-Channel-Id": String(env.atourChannelId),
+    "At-Platform-Type": String(env.atourPlatformType),
+    token: "",
+
     invoiceId: "",
     invoiceType: "",
     invoiceEmail: "",
     invoiceRemark: "",
+    invoiceTitleType: 2,
 
     remark: itemRemark,
     mergeInvoice: "",
@@ -633,9 +750,12 @@ const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, custo
     customerNeedList: [],
     expectArrivalTime: "",
     getType: "0",
+    accommodationType: String(calculateResult.accommodationType || calculatePayload.accommodationType || "40,39,41,42"),
+    accommodationCount: String(calculateResult.accommodationCount || calculatePayload.accommodationCount || "2,0,0,0"),
     rpActivityId: calculatePayload.rpActivityId,
     checkInPersons: customerName || "",
     isPointPayAppChannel: "1",
+    selectedPoint,
     end: calculatePayload.end,
     breakfastCount,
     roomLevelUpCount,
@@ -644,10 +764,17 @@ const buildAddOrderPayloadFromItem = ({ calculateResult, calculatePayload, custo
     coupons: String(coupons || ""),
     delegatorId: "",
     mailAddr: "",
-    orderAmount: Number(calculateResult.defaultAmount || calculateResult.amount || 0),
+    orderAmount,
     roomTypeId: Number(calculatePayload.roomTypeId),
-    mobile: customerPhone || "",
+    mobile: encryptedMobile,
     customerNeeds: [],
+    guestList: encryptedGuestList,
+    aplusParam: calculateResult.aplusParam || {
+      usePoint: selectedPoint > 0,
+      aplusParamList: []
+    },
+    guaranteed: false,
+    confirmNoGuarantee: false,
     chainId: Number(calculatePayload.chainId),
     rateCodeActivities: calculatePayload.rateCodeActivities || ""
   };
@@ -667,13 +794,15 @@ export const runAtourOrderWorkflow = async ({ token, proxy, calculatePayload }) 
     roomTypeId: calculatePayload.roomTypeId
   });
   const addPayload = {
-    ...buildAddOrderPayloadFromItem({
+    ...await buildAddOrderPayloadFromItem({
       calculateResult,
       calculatePayload,
       customerName: createPayload.customerName,
       customerPhone: createPayload.customerPhone,
       orderItem: createPayload.orderItem || null,
-      coupons: couponCodes
+      coupons: couponCodes,
+      accountPoints: createPayload.accountPoints,
+      requestedPoint: createPayload.selectedPoint
     }),
     ...(createPayload.overrideAddPayload || {})
   };
@@ -751,6 +880,8 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     }
 
     const scanAccountId = resourceCtx.tokenAccountId || item.accountId || null;
+    const accountInfo = scanAccountId ? await prismaStore.getPoolAccount(scanAccountId).catch(() => null) : null;
+    const accountPoints = Math.max(0, Number(accountInfo?.points) || 0);
     if (scanAccountId) {
       await runCouponScanTask({
         payload: { accountId: scanAccountId, chainId: order.chainId },
@@ -776,6 +907,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
           createPayload: {
             customerName: order.customerName,
             customerPhone: resourceCtx.tokenAccountPhone || item.accountPhone || order.contactPhone,
+            accountPoints,
             orderItem: {
               remark: item.remark || order.remark || "",
               breakfastCount: Number(item.breakfastCount) || 0,
