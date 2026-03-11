@@ -12,6 +12,7 @@ interface BookingDetailViewProps {
   copyMessage: string | null;
   onBack: () => void;
   onCopyHotelQuote: () => void;
+  onAddBlacklist: () => void;
   onOpenDatePicker: () => void;
   getDisplayDate: (dateStr: string) => string;
   getNightCount: () => number;
@@ -33,6 +34,7 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
   copyMessage,
   onBack,
   onCopyHotelQuote,
+  onAddBlacklist,
   onOpenDatePicker,
   getDisplayDate,
   getNightCount,
@@ -71,8 +73,15 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
           <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0 text-lg">⚠️</div>
           <div className="flex-1">
             <p className="text-xs font-bold text-red-800">避雷警报：{selectedHotel.blacklistCount} 位代理已拉黑此酒店</p>
-            <p className="text-[10px] text-red-600">存在售后风险，建议谨慎预订。</p>
+            <p className="text-[10px] text-red-600">存在售后风险，建议谨慎预订。{selectedHotel.blacklistSummary?.latestReason ? `近期原因：${selectedHotel.blacklistSummary.latestReason}` : ''}</p>
           </div>
+          <button
+            type="button"
+            onClick={onAddBlacklist}
+            className="px-2 py-1 text-[10px] rounded border border-red-200 bg-white text-red-700 hover:bg-red-100"
+          >
+            去拉黑
+          </button>
         </div>
       )}
 
@@ -117,6 +126,14 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
           >
             <span className="text-xl mb-1">📋</span>
             <span className="text-[10px] font-bold">整店报价</span>
+          </button>
+          <button
+            onClick={onAddBlacklist}
+            className="flex flex-col items-center justify-center bg-red-50 hover:bg-red-100 text-red-600 p-2 rounded-lg transition-colors border border-red-100 active:scale-95"
+            title="拉黑该酒店"
+          >
+            <span className="text-xl mb-1">🚫</span>
+            <span className="text-[10px] font-bold">拉黑酒店</span>
           </button>
         </div>
 

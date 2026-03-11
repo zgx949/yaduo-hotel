@@ -166,6 +166,26 @@ const App: React.FC = () => {
       });
   }, []);
 
+  useEffect(() => {
+    const onNavigate = (event: Event) => {
+      const custom = event as CustomEvent<{ tabId?: string; payload?: unknown }>;
+      const tabId = String(custom?.detail?.tabId || '').trim();
+      if (!tabId) {
+        return;
+      }
+      if (custom?.detail?.payload) {
+        localStorage.setItem('skyagent_blacklist_prefill', JSON.stringify(custom.detail.payload));
+        window.dispatchEvent(new CustomEvent('skyagent:blacklist-prefill'));
+      }
+      handleMenuClick(tabId);
+    };
+
+    window.addEventListener('skyagent:navigate', onNavigate as EventListener);
+    return () => {
+      window.removeEventListener('skyagent:navigate', onNavigate as EventListener);
+    };
+  }, [openTabs, userRole]);
+
   // --- Navigation Handlers ---
 
   const handleMenuClick = (id: string) => {
@@ -237,7 +257,7 @@ const App: React.FC = () => {
       case 'monitor': return <PriceMonitor />;
       case 'ai-quote': return <AIQuote />;
       case 'invoices': return <Invoices />;
-      case 'blacklist': return <Blacklist />;
+      case 'blacklist': return <Blacklist currentUser={currentUser} />;
       case 'settings': return <SystemSettings />;
       case 'crypto-lab': return <CryptoLab />;
       default: return <div className="p-10">页面不存在</div>;

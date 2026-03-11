@@ -3,6 +3,15 @@ import { Card } from '../components/ui/Card';
 import { MOCK_BLACKLIST } from '../constants';
 import { BlacklistRecord } from '../types';
 
+interface CurrentUserLike {
+  id: string;
+  role: 'ADMIN' | 'USER';
+}
+
+interface BlacklistProps {
+  currentUser?: CurrentUserLike | null;
+}
+
 interface AggregatedHotel {
   key: string;
   chainId: string;
@@ -18,9 +27,12 @@ type Severity = 'HIGH' | 'MEDIUM' | 'LOW';
 
 const severityWeight: Record<Severity, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
 
-export const Blacklist: React.FC = () => {
+export const Blacklist: React.FC<BlacklistProps> = ({ currentUser }) => {
   const TOKEN_KEY = 'skyhotel_auth_token';
   const [query, setQuery] = useState('');
+  const [severityFilter, setSeverityFilter] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'RESOLVED'>('ALL');
+  const [mineOnly, setMineOnly] = useState(false);
   const [records, setRecords] = useState<BlacklistRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -37,6 +49,35 @@ export const Blacklist: React.FC = () => {
     tagsText: '',
     status: 'ACTIVE' as 'ACTIVE' | 'RESOLVED'
   });
+
+  const NAV_PREFILL_KEY = 'skyagent_blacklist_prefill';
+
+  const applyNavPrefill = () => {
+    try {
+      const raw = localStorage.getItem(NAV_PREFILL_KEY);
+      if (!raw) {
+        return;
+      }
+      const prefill = JSON.parse(raw) as { chainId?: string; hotelName?: string };
+      if (!prefill || (!prefill.chainId && !prefill.hotelName)) {
+        return;
+      }
+      setEditingRecord(null);
+      setFormError('');
+      setForm({
+        chainId: String(prefill.chainId || '').trim(),
+        hotelName: String(prefill.hotelName || '').trim(),
+        severity: 'MEDIUM',
+        reason: '',
+        tagsText: '',
+        status: 'ACTIVE'
+      });
+      setIsFormOpen(true);
+    } catch {
+    } finally {
+      localStorage.removeItem(NAV_PREFILL_KEY);
+    }
+  };
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -67,7 +108,20 @@ export const Blacklist: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const data = await fetchWithAuth(`/api/blacklist/records${query.trim() ? `?search=${encodeURIComponent(query.trim())}` : ''}`);
+      const params = new URLSearchParams();
+      if (query.trim()) {
+        params.set('search', query.trim());
+      }
+      if (severityFilter !== 'ALL') {
+        params.set('severity', severityFilter);
+      }
+      if (statusFilter !== 'ALL') {
+        params.set('status', statusFilter);
+      }
+      if (mineOnly) {
+        params.set('mine', 'true');
+      }
+      const data = await fetchWithAuth(`/api/blacklist/records${params.toString() ? `?${params.toString()}` : ''}`);
       setRecords(data.items || []);
     } catch (err: any) {
       setError(err.message || '加载黑名单失败，已回退到本地数据');
@@ -79,6 +133,15 @@ export const Blacklist: React.FC = () => {
 
   useEffect(() => {
     loadRecords();
+  }, [severityFilter, statusFilter, mineOnly]);
+
+  useEffect(() => {
+    applyNavPrefill();
+    const handler = () => applyNavPrefill();
+    window.addEventListener('skyagent:blacklist-prefill', handler);
+    return () => {
+      window.removeEventListener('skyagent:blacklist-prefill', handler);
+    };
   }, []);
 
   const aggregatedData = useMemo(() => {
@@ -227,6 +290,13 @@ export const Blacklist: React.FC = () => {
     }
   };
 
+  const canDeleteRecord = (record: BlacklistRecord) => {
+    if (!currentUser) {
+      return false;
+    }
+    return currentUser.role === 'ADMIN' || record.reporterId === currentUser.id;
+  };
+
   const resolveRecord = async (record: BlacklistRecord) => {
     try {
       const updated = await fetchWithAuth(`/api/blacklist/records/${record.id}`, {
@@ -251,7 +321,7 @@ export const Blacklist: React.FC = () => {
         <p className="text-gray-500 text-sm">核心标识：chainId + 酒店名。可供其他模块按条件查询调用。</p>
       </div>
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-3">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-3">
         <div className="flex-1 relative">
           <span className="absolute left-3 top-3 text-gray-400">🔍</span>
           <input
@@ -265,6 +335,21 @@ export const Blacklist: React.FC = () => {
         <button onClick={loadRecords} className="bg-gray-800 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-gray-900 shadow-sm">
           查询
         </button>
+        <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value as 'ALL' | 'HIGH' | 'MEDIUM' | 'LOW')} className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white">
+          <option value="ALL">全部风险等级</option>
+          <option value="HIGH">HIGH</option>
+          <option value="MEDIUM">MEDIUM</option>
+          <option value="LOW">LOW</option>
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'RESOLVED')} className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white">
+          <option value="ALL">全部状态</option>
+          <option value="ACTIVE">生效中</option>
+          <option value="RESOLVED">已处理</option>
+        </select>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-600 px-3 py-2.5 border border-gray-200 rounded-lg bg-white">
+          <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
+          仅看我创建
+        </label>
         <button onClick={openCreate} className="bg-red-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-red-700 shadow-sm">
           + 新增黑名单
         </button>
@@ -368,7 +453,11 @@ export const Blacklist: React.FC = () => {
                         {record.status === 'RESOLVED' ? '恢复生效' : '标记已处理'}
                       </button>
                       <button onClick={() => openEdit(record)} className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50">编辑</button>
-                      <button onClick={() => deleteRecord(record)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-700 hover:bg-red-50">删除</button>
+                      {canDeleteRecord(record) ? (
+                        <button onClick={() => deleteRecord(record)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-700 hover:bg-red-50">删除</button>
+                      ) : (
+                        <span className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-400">仅本人可删</span>
+                      )}
                     </div>
                   </div>
                 </div>

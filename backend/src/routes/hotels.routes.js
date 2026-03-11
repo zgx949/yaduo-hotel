@@ -101,7 +101,14 @@ const normalizeHotels = async (raw) => {
         toNumber(item.showPriceV2, NaN) ||
         0,
       rooms: buildFallbackRooms(item),
-      blacklistCount: risk.count || 0
+      blacklistCount: risk.count || 0,
+      blacklistSummary: {
+        blacklisted: Boolean(risk.blacklisted),
+        maxSeverity: risk.maxSeverity || "LOW",
+        latestDate: risk.latestDate || "",
+        latestReason: risk.latestReason || "",
+        latestTags: Array.isArray(risk.latestTags) ? risk.latestTags : []
+      }
     };
   }));
 
@@ -337,7 +344,14 @@ const normalizeChainDetail = async (raw, fallback = {}, sourceMeta = {}) => {
       : [],
     minPrice,
     rooms,
-    blacklistCount: risk.count || 0
+    blacklistCount: risk.count || 0,
+    blacklistSummary: {
+      blacklisted: Boolean(risk.blacklisted),
+      maxSeverity: risk.maxSeverity || "LOW",
+      latestDate: risk.latestDate || "",
+      latestReason: risk.latestReason || "",
+      latestTags: Array.isArray(risk.latestTags) ? risk.latestTags : []
+    }
   };
 };
 

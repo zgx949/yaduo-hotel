@@ -402,6 +402,13 @@ export interface Hotel {
   minPrice: number;
   rooms: Room[];
   blacklistCount?: number; // How many agents marked this as bad
+  blacklistSummary?: {
+    blacklisted?: boolean;
+    maxSeverity?: 'HIGH' | 'MEDIUM' | 'LOW';
+    latestDate?: string;
+    latestReason?: string;
+    latestTags?: string[];
+  };
 }
 
 // --- PRICE MONITOR TYPES ---
@@ -452,6 +459,7 @@ export interface BlacklistRecord {
   severity: 'HIGH' | 'MEDIUM' | 'LOW'; // HIGH: 严重避雷(诈骗/安全), MEDIUM: 体验差, LOW: 吐槽
   tags: string[]; // e.g. "卫生差", "乱收费", "态度恶劣"
   reportedBy: string; // Agent Name/ID
+  reporterId?: string;
   date: string;
   status?: 'ACTIVE' | 'RESOLVED';
   source?: string;

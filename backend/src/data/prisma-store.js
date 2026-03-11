@@ -1879,6 +1879,9 @@ export const prismaStore = {
     if (filters.status) {
       where.status = String(filters.status);
     }
+    if (filters.reporterId) {
+      where.reporterId = String(filters.reporterId);
+    }
     const rows = await prisma.blacklistRecord.findMany({ where, orderBy: { date: "desc" } });
     let items = rows.map((it) => ({
       ...it,
@@ -1919,7 +1922,7 @@ export const prismaStore = {
           ? Array.from(new Set(payload.tags.map((it) => String(it).trim()).filter(Boolean)))
           : [],
         status: payload.status || "ACTIVE",
-        reportedBy: payload.reportedBy || reporter.name,
+        reportedBy: reporter.name,
         reporterId: reporter.id,
         source: payload.source || "manual",
         date: payload.date || now().slice(0, 10)
@@ -2013,10 +2016,17 @@ export const prismaStore = {
       "LOW"
     );
 
+    const latest = matched.length > 0
+      ? [...matched].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+      : null;
+
     return {
       blacklisted: matched.length > 0,
       count: matched.length,
       maxSeverity,
+      latestReason: latest ? String(latest.reason || "") : "",
+      latestDate: latest ? String(latest.date || "") : "",
+      latestTags: latest && Array.isArray(latest.tags) ? latest.tags : [],
       records: matched.map((it) => ({
         ...it,
         createdAt: it.createdAt.toISOString(),

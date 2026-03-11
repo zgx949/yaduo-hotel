@@ -119,6 +119,18 @@ export const Booking: React.FC = () => {
       return response.json();
   };
 
+  const jumpToBlacklistAdd = (chainId: string, hotelName: string) => {
+    window.dispatchEvent(new CustomEvent('skyagent:navigate', {
+      detail: {
+        tabId: 'blacklist',
+        payload: {
+          chainId: String(chainId || '').trim(),
+          hotelName: String(hotelName || '').trim()
+        }
+      }
+    }));
+  };
+
   const clearPaymentPoll = () => {
     if (paymentPollTimerRef.current) {
       window.clearTimeout(paymentPollTimerRef.current);
@@ -583,6 +595,14 @@ export const Booking: React.FC = () => {
           return;
         }
       }
+      if (submitNow && Number(selectedHotel.blacklistCount || 0) > 0) {
+        const riskMessage = selectedHotel.blacklistSummary?.latestReason
+          ? `近期拉黑原因：${selectedHotel.blacklistSummary.latestReason}`
+          : `该酒店近期已被拉黑 ${selectedHotel.blacklistCount} 次`;
+        if (!window.confirm(`黑名单预警：${riskMessage}。是否仍继续下单？`)) {
+          return;
+        }
+      }
       setIsLoading(true);
       setSearchError('');
       try {
@@ -835,6 +855,7 @@ export const Booking: React.FC = () => {
         copyMessage={copyMessage}
         onBack={() => setStep('SEARCH')}
         onCopyHotelQuote={() => handleCopyText(generateHotelQuote(selectedHotel), '整店文案已复制')}
+        onAddBlacklist={() => jumpToBlacklistAdd(selectedHotel.chainId || selectedHotel.id, selectedHotel.name)}
         onOpenDatePicker={() => setShowDatePicker(true)}
         getDisplayDate={getDisplayDate}
         getNightCount={getNightCount}

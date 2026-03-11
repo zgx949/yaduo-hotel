@@ -503,6 +503,18 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     }
   };
 
+  const jumpToBlacklistAdd = (chainId: string, hotelName: string) => {
+    window.dispatchEvent(new CustomEvent('skyagent:navigate', {
+      detail: {
+        tabId: 'blacklist',
+        payload: {
+          chainId: String(chainId || '').trim(),
+          hotelName: String(hotelName || '').trim()
+        }
+      }
+    }));
+  };
+
   return (
     <div className="h-full flex flex-col gap-4">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -681,6 +693,16 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                         className="px-2 py-1 rounded border border-red-200 text-xs bg-red-50 text-red-700 disabled:opacity-50"
                       >
                         {cancellingOrderId === order.id ? '取消中...' : '一键取消'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          jumpToBlacklistAdd(order.chainId, order.hotelName);
+                        }}
+                        className="px-2 py-1 rounded border border-red-200 text-xs bg-red-50 text-red-700"
+                      >
+                        拉黑酒店
                       </button>
                     </div>
                   </div>

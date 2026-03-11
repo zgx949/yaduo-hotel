@@ -40,6 +40,9 @@ const validatePatchPayload = (payload) => {
   if (Object.keys(payload).length === 0) {
     return "patch body cannot be empty";
   }
+  if (payload.reporterId !== undefined || payload.reportedBy !== undefined) {
+    return "reporter fields are immutable";
+  }
   if (payload.severity && !VALID_SEVERITY.has(payload.severity)) {
     return "severity must be HIGH, MEDIUM or LOW";
   }
@@ -54,7 +57,8 @@ blacklistRoutes.get("/records", requireAuth, async (req, res) => {
     search: req.query.search,
     chainId: req.query.chainId,
     severity: req.query.severity,
-    status: req.query.status
+    status: req.query.status,
+    reporterId: req.query.mine === "true" ? req.auth.user.id : undefined
   });
   return res.json({ items });
 });
@@ -97,6 +101,14 @@ blacklistRoutes.patch("/records/:id", requireAuth, async (req, res) => {
 });
 
 blacklistRoutes.delete("/records/:id", requireAuth, async (req, res) => {
+  const record = await prismaStore.getBlacklistRecord(req.params.id);
+  if (!record) {
+    return res.status(404).json({ message: "Blacklist record not found" });
+  }
+  const canDelete = req.auth.user.role === "ADMIN" || record.reporterId === req.auth.user.id;
+  if (!canDelete) {
+    return res.status(403).json({ message: "你只能删除自己创建的黑名单记录" });
+  }
   const ok = await prismaStore.deleteBlacklistRecord(req.params.id);
   if (!ok) {
     return res.status(404).json({ message: "Blacklist record not found" });
