@@ -564,11 +564,18 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
   }
 
   const bookingChannel = parseBookingTier(item.bookingTier || undefined);
+  const minCouponWallet = {
+    breakfast: Math.max(0, Number(item.breakfastCount) || 0),
+    upgrade: Math.max(0, Number(item.roomLevelUpCount) || 0),
+    lateCheckout: Math.max(0, Number(item.delayedCheckOutCount) || 0),
+    slippers: Math.max(0, Number(item.shooseCount) || 0)
+  };
   const resourceCtx = await getInternalRequestContext({
     tier: bookingChannel.tier,
     corporateName: bookingChannel.corporateName,
     preferredAccountId: item.accountId || undefined,
-    minDailyOrdersLeft: item.accountId ? 0 : 1
+    minDailyOrdersLeft: item.accountId ? 0 : 1,
+    minCouponWallet
   });
   if (!resourceCtx.token) {
     throw new Error("余额不足：该下单渠道暂无可用账号");

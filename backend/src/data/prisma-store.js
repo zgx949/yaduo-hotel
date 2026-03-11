@@ -136,6 +136,23 @@ const canUseTier = (account, tier, corporateName = null) => {
   return true;
 };
 
+const normalizeCouponNeed = (raw = {}) => ({
+  breakfast: Math.max(0, Number(raw.breakfast) || 0),
+  upgrade: Math.max(0, Number(raw.upgrade) || 0),
+  lateCheckout: Math.max(0, Number(raw.lateCheckout) || 0),
+  slippers: Math.max(0, Number(raw.slippers) || 0)
+});
+
+const hasSufficientCouponWallet = (account, minCouponWallet = {}) => {
+  const need = normalizeCouponNeed(minCouponWallet);
+  return (
+    (Number(account.breakfastCoupons) || 0) >= need.breakfast &&
+    (Number(account.roomUpgradeCoupons) || 0) >= need.upgrade &&
+    (Number(account.lateCheckoutCoupons) || 0) >= need.lateCheckout &&
+    (Number(account.slippersCoupons) || 0) >= need.slippers
+  );
+};
+
 const taskStateToExecution = (taskState) => {
   const normalized = String(taskState || "").toLowerCase();
   if (normalized === "waiting") {
@@ -878,9 +895,14 @@ export const prismaStore = {
     const tier = options.tier ? String(options.tier).toUpperCase() : null;
     const corporateName = options.corporateName ? String(options.corporateName).trim() : null;
     const minDailyOrdersLeft = Math.max(0, Number(options.minDailyOrdersLeft || 0));
+    const minCouponWallet = normalizeCouponNeed(options.minCouponWallet || {});
     const preferredAccountId = options.preferredAccountId ? String(options.preferredAccountId) : null;
     const rows = await prisma.poolAccount.findMany({ where: { isOnline: true, isEnabled: true } });
-    const candidates = rows.filter((it) => canUseTier(it, tier, corporateName) && (Number(it.dailyOrdersLeft) || 0) >= minDailyOrdersLeft);
+    const candidates = rows.filter((it) =>
+      canUseTier(it, tier, corporateName) &&
+      (Number(it.dailyOrdersLeft) || 0) >= minDailyOrdersLeft &&
+      hasSufficientCouponWallet(it, minCouponWallet)
+    );
 
     if (preferredAccountId) {
       const preferred = candidates.find((it) => it.id === preferredAccountId);
@@ -1667,6 +1689,44 @@ export const prismaStore = {
       updatedAt: task.updatedAt.toISOString()
     };
   },
+  async getLatestOrderItemFailure(orderItemId) {
+    if (!orderItemId) {
+      return null;
+    }
+
+    const run = await prisma.taskRun.findFirst({
+      where: {
+        orderItemId: String(orderItemId),
+        state: "failed",
+        error: { not: null }
+      },
+      orderBy: { updatedAt: "desc" }
+    });
+    if (run?.error) {
+      return {
+        source: "taskRun",
+        message: String(run.error),
+        updatedAt: run.updatedAt.toISOString()
+      };
+    }
+
+    const legacy = await prisma.task.findFirst({
+      where: {
+        orderItemId: String(orderItemId),
+        state: "failed",
+        error: { not: null }
+      },
+      orderBy: { updatedAt: "desc" }
+    });
+    if (!legacy?.error) {
+      return null;
+    }
+    return {
+      source: "task",
+      message: String(legacy.error),
+      updatedAt: legacy.updatedAt.toISOString()
+    };
+  },
   async updateTask(id, patch = {}) {
     const existed = await prisma.task.findUnique({ where: { id } });
     if (!existed) {
@@ -2029,7 +2089,7 @@ export const prismaStore = {
         queueName: "realtime-orders",
         enabled: true,
         schedule: null,
-        concurrency: 4,
+        concurrency: 8,
         attempts: 3,
         backoffMs: 2000,
         useProxy: true

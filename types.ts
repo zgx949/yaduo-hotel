@@ -210,7 +210,7 @@ export interface OrderPaymentPrepareSplit extends OrderPaymentDecisionSplit {
   payOrgMerId?: string;
   channelType?: string;
   payInfo?: string;
-  linkState: 'READY' | 'PENDING_ORDER_SUBMIT' | 'LINK_FAILED';
+  linkState: 'READY' | 'PENDING_ORDER_SUBMIT' | 'LINK_FAILED' | 'SUBMIT_FAILED';
   error?: string;
 }
 

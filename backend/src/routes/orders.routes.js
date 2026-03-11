@@ -52,6 +52,22 @@ const splitAmountByNights = (amount, nights) => {
   return list;
 };
 
+const couponNeedFromItem = (item = {}) => ({
+  breakfast: Math.max(0, Number(item.breakfastCount) || 0),
+  upgrade: Math.max(0, Number(item.roomLevelUpCount) || 0),
+  lateCheckout: Math.max(0, Number(item.delayedCheckOutCount) || 0),
+  slippers: Math.max(0, Number(item.shooseCount) || 0)
+});
+
+const hasCouponCapacity = (account = {}, need = {}) => {
+  return (
+    (Number(account.breakfast_coupons) || 0) >= (Number(need.breakfast) || 0) &&
+    (Number(account.room_upgrade_coupons) || 0) >= (Number(need.upgrade) || 0) &&
+    (Number(account.late_checkout_coupons) || 0) >= (Number(need.lateCheckout) || 0) &&
+    (Number(account.coupons?.slippers) || 0) >= (Number(need.slippers) || 0)
+  );
+};
+
 const expandNewUserSplitsByNight = (payload = {}) => {
   const baseCheckIn = toDateOnly(payload.checkInDate);
   const baseCheckOut = toDateOnly(payload.checkOutDate);
@@ -107,13 +123,24 @@ const reserveNewUserAccounts = async (payload = {}) => {
     .filter((it) => it?.token && it?.account?.is_new_user && (Number(it?.account?.dailyOrdersLeft) || 0) >= 1)
     .sort((a, b) => (Number(b.account.dailyOrdersLeft) || 0) - (Number(a.account.dailyOrdersLeft) || 0));
 
-  if (candidates.length < targetItems.length) {
-    throw new Error(`新客账号不足：需要 ${targetItems.length} 个可用账号，当前仅 ${candidates.length} 个`);
+  const used = new Set();
+  const selected = [];
+  for (const item of targetItems) {
+    const nights = Math.max(1, calcNights(item.checkInDate, item.checkOutDate));
+    const need = couponNeedFromItem(item);
+    const picked = candidates.find((it) =>
+      !used.has(it.account.id) &&
+      (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
+      hasCouponCapacity(it.account, need)
+    );
+    if (!picked) {
+      throw new Error(`新客账号不足：存在间夜券库存不满足（早餐/升房/延迟/拖鞋）或间夜余额不足`);
+    }
+    used.add(picked.account.id);
+    selected.push(picked);
   }
 
-  const selected = candidates.slice(0, targetItems.length);
-  const reserveIds = selected.map((it) => String(it.account.id));
-  const check = await prismaStore.checkPoolAccountsAvailability(reserveIds);
+  const check = await prismaStore.checkPoolAccountsAvailability(selected.map((it) => String(it.account.id)));
   if (!check.ok) {
     throw new Error(`新客账号不足：需要 ${check.total} 个可用账号，当前仅 ${check.available} 个`);
   }
@@ -152,22 +179,29 @@ const reserveNewUserAccountsForItems = async (items = []) => {
     .filter((it) => it?.token && it?.account?.is_new_user && (Number(it?.account?.dailyOrdersLeft) || 0) >= 1)
     .sort((a, b) => (Number(b.account.dailyOrdersLeft) || 0) - (Number(a.account.dailyOrdersLeft) || 0));
 
-  if (candidates.length < targets.length) {
-    throw new Error(`新客账号不足：需要 ${targets.length} 个可用账号，当前仅 ${candidates.length} 个`);
-  }
-
   const used = new Set();
   const assignments = [];
   for (const item of targets) {
+    const nights = Math.max(1, calcNights(item.checkInDate, item.checkOutDate));
+    const need = couponNeedFromItem(item);
     let selected = null;
     if (item.accountId) {
-      selected = candidates.find((it) => it.account.id === item.accountId && !used.has(it.account.id)) || null;
+      selected = candidates.find((it) =>
+        it.account.id === item.accountId &&
+        !used.has(it.account.id) &&
+        (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
+        hasCouponCapacity(it.account, need)
+      ) || null;
     }
     if (!selected) {
-      selected = candidates.find((it) => !used.has(it.account.id)) || null;
+      selected = candidates.find((it) =>
+        !used.has(it.account.id) &&
+        (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
+        hasCouponCapacity(it.account, need)
+      ) || null;
     }
     if (!selected) {
-      throw new Error("新客账号不足：无法完成账号分配");
+      throw new Error("新客账号不足：无法完成账号分配（券库存或可下间夜不足）");
     }
     used.add(selected.account.id);
     assignments.push({
@@ -225,6 +259,10 @@ const waitForPaymentReady = async (orderId, timeoutMs = 20000, intervalMs = 600)
   while (latest) {
     const activeItems = latest.items.filter((it) => it.status !== "CANCELLED");
     const unpaidItems = activeItems.filter((it) => it.paymentStatus !== "PAID");
+    const hasSubmitFailed = unpaidItems.some((it) => it.executionStatus === "FAILED");
+    if (hasSubmitFailed) {
+      return { order: latest, ready: false, timeout: false };
+    }
     const allReady = unpaidItems.every((it) => PAYMENT_READY_STATES.has(it.executionStatus));
     if (allReady) {
       return { order: latest, ready: true, timeout: false };
@@ -478,11 +516,26 @@ ordersRoutes.post("/:id/payment/prepare", requireAuth, async (req, res) => {
 
   const paymentSplits = [];
   for (const item of payableItems) {
+    const latestFailure = item.executionStatus === "FAILED"
+      ? await prismaStore.getLatestOrderItemFailure(item.id)
+      : null;
+
+    if (item.executionStatus === "FAILED") {
+      paymentSplits.push({
+        ...toPaymentSplitView(item),
+        paymentLink: null,
+        linkState: "SUBMIT_FAILED",
+        error: latestFailure?.message || "拆单下单失败"
+      });
+      continue;
+    }
+
     if (!PAYMENT_READY_STATES.has(item.executionStatus)) {
       paymentSplits.push({
         ...toPaymentSplitView(item),
         paymentLink: null,
-        linkState: "PENDING_ORDER_SUBMIT"
+        linkState: "PENDING_ORDER_SUBMIT",
+        error: latestFailure?.message || undefined
       });
       continue;
     }

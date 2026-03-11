@@ -164,6 +164,9 @@ export const Booking: React.FC = () => {
   const hasPendingSplit = (splits: OrderPaymentPrepareSplit[]) =>
     splits.some((it) => it.linkState === 'PENDING_ORDER_SUBMIT');
 
+  const hasFailedSubmitSplit = (splits: OrderPaymentPrepareSplit[]) =>
+    splits.some((it) => it.linkState === 'SUBMIT_FAILED');
+
   const applyPreparedPaymentData = (data: any) => {
     const nextDecision = data?.paymentDecision as OrderPaymentDecision | undefined;
     const nextSplits = Array.isArray(data?.paymentSplits)
@@ -225,6 +228,8 @@ export const Booking: React.FC = () => {
       if (hasPendingSplit(nextSplits)) {
         setPaymentFlowMessage('部分拆单仍在下单处理中，系统会自动刷新支付状态。');
         schedulePaymentPoll(orderId, 1);
+      } else if (hasFailedSubmitSplit(nextSplits)) {
+        setPaymentFlowMessage('存在拆单下单失败，请查看失败原因并重试下单。');
       } else {
         setPaymentFlowMessage('');
       }
@@ -258,6 +263,8 @@ export const Booking: React.FC = () => {
       if (hasPendingSplit(nextSplits)) {
         setPaymentFlowMessage('仍有拆单处理中，正在自动刷新支付状态。');
         schedulePaymentPoll(activeOrderId, 1);
+      } else if (hasFailedSubmitSplit(nextSplits)) {
+        setPaymentFlowMessage('存在拆单下单失败，请重试失败拆单。');
       } else {
         setPaymentFlowMessage('支付状态已更新，请继续完成剩余拆单支付。');
       }
@@ -293,6 +300,22 @@ export const Booking: React.FC = () => {
       return;
     }
     await syncPayments([item.itemId]);
+  };
+
+  const retrySubmitSplit = async (item: OrderPaymentPrepareSplit) => {
+    if (!activeOrderId) {
+      return;
+    }
+    setPayingItemId(item.itemId);
+    setPaymentFlowMessage('正在重试拆单下单...');
+    try {
+      await fetchWithAuth(`/api/orders/items/${item.itemId}/confirm-submit`, { method: 'POST' });
+      await preparePayments(activeOrderId, false);
+    } catch (err) {
+      setPaymentFlowMessage(err instanceof Error ? err.message : '重试下单失败');
+    } finally {
+      setPayingItemId('');
+    }
   };
 
   useEffect(() => {
@@ -960,7 +983,7 @@ export const Booking: React.FC = () => {
                       <div className="text-xs text-gray-500">金额: {item.amount} · 状态: {item.paymentStatus} · 执行: {item.executionStatus}</div>
                     </div>
                     <div className="text-xs px-2 py-1 rounded border bg-gray-50 text-gray-700 border-gray-200">
-                      {item.linkState}
+                      {item.linkState === 'PENDING_ORDER_SUBMIT' ? '等待下单' : item.linkState === 'SUBMIT_FAILED' ? '下单失败' : item.linkState}
                     </div>
                   </div>
 
@@ -1002,6 +1025,17 @@ export const Booking: React.FC = () => {
                         <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
                         等待拆单下单完成
                       </span>
+                    )}
+
+                    {item.linkState === 'SUBMIT_FAILED' && (
+                      <button
+                        type="button"
+                        disabled={actionDisabled}
+                        onClick={() => retrySubmitSplit(item)}
+                        className="px-3 py-1.5 rounded border border-red-300 text-red-700 text-xs bg-red-50 disabled:opacity-50"
+                      >
+                        {payingItemId === item.itemId ? '重试中...' : '重试下单'}
+                      </button>
                     )}
                   </div>
                 </div>
