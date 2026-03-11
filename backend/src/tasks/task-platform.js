@@ -45,6 +45,7 @@ const pickProxyIfNeeded = async (moduleConfig) => {
 class TaskPlatform {
   constructor() {
     this.enabled = env.taskSystemEnabled;
+    this.consumeEnabled = true;
     this.connection = null;
     this.queues = new Map();
     this.queueEvents = new Map();
@@ -66,7 +67,7 @@ class TaskPlatform {
   }
 
   startMaintenanceLoop() {
-    if (this.maintenanceTimer || !this.started) {
+    if (this.maintenanceTimer || !this.started || !this.consumeEnabled) {
       return;
     }
     const intervalMs = Math.max(1000, Number(env.taskPollIntervalMs) || 5000);
@@ -80,24 +81,31 @@ class TaskPlatform {
     this.maintenanceTimer.unref?.();
   }
 
-  async start() {
+  async start(options = {}) {
     if (!this.enabled || this.started) {
       return;
     }
+    this.consumeEnabled = options.consume !== false;
     try {
       this.connection = buildRedisConnection();
       await this.connection.connect();
       await this.connection.ping();
       await this.syncModulesSafe();
       this.started = true;
-      this.startMaintenanceLoop();
+      if (this.consumeEnabled) {
+        this.startMaintenanceLoop();
+      }
     } catch (err) {
+      const strictMode = options.strict === true;
       this.enabled = false;
       if (this.connection) {
         await this.connection.quit().catch(() => undefined);
         this.connection = null;
       }
       console.warn("[task-platform] disabled because redis is unavailable:", err?.message || err);
+      if (strictMode) {
+        throw err;
+      }
     }
   }
 
@@ -150,10 +158,16 @@ class TaskPlatform {
     for (const queueName of queueNames) {
       if (!this.queues.has(queueName)) {
         const queue = new Queue(queueName, { connection: this.connection });
-        const events = new QueueEvents(queueName, { connection: this.connection });
         this.queues.set(queueName, queue);
-        this.queueEvents.set(queueName, events);
+        if (this.consumeEnabled && !this.queueEvents.has(queueName)) {
+          const events = new QueueEvents(queueName, { connection: this.connection });
+          this.queueEvents.set(queueName, events);
+        }
       }
+    }
+
+    if (!this.consumeEnabled) {
+      return;
     }
 
     for (const [queueName, queue] of this.queues.entries()) {
@@ -269,7 +283,8 @@ class TaskPlatform {
       throw new Error(`module disabled: ${moduleId}`);
     }
     const queueName = normalizeQueueName(moduleConfig.queueName);
-    if (!this.queues.has(queueName) || !this.workers.has(queueName)) {
+    const needSync = !this.queues.has(queueName) || (this.consumeEnabled && !this.workers.has(queueName));
+    if (needSync) {
       await this.syncModulesSafe();
     }
     const queue = this.queues.get(queueName);

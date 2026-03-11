@@ -4,7 +4,7 @@ import { taskPlatform } from "./tasks/task-platform.js";
 
 const boot = async () => {
   if (env.taskSystemEnabled) {
-    await taskPlatform.start();
+    await taskPlatform.start({ consume: false });
   }
 
   const server = app.listen(env.port, () => {
