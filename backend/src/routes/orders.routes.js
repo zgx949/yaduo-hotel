@@ -118,7 +118,13 @@ const reserveNewUserAccounts = async (payload = {}) => {
     return payload;
   }
 
-  const credentials = await prismaStore.listPoolAccountCredentials({ is_enabled: true, is_online: true });
+  const credentials = await prismaStore.listPoolAccountCredentials({
+    is_enabled: true,
+    is_online: true,
+    tier: "NEW_USER",
+    minDailyOrdersLeft: 1,
+    candidateLimit: Math.max(50, Math.min(2000, targetItems.length * 12))
+  });
   const candidates = credentials
     .filter((it) => it?.token && it?.account?.is_new_user && (Number(it?.account?.dailyOrdersLeft) || 0) >= 1)
     .sort((a, b) => (Number(b.account.dailyOrdersLeft) || 0) - (Number(a.account.dailyOrdersLeft) || 0));
@@ -174,7 +180,13 @@ const reserveNewUserAccountsForItems = async (items = []) => {
     return { assignments: [] };
   }
 
-  const credentials = await prismaStore.listPoolAccountCredentials({ is_enabled: true, is_online: true });
+  const credentials = await prismaStore.listPoolAccountCredentials({
+    is_enabled: true,
+    is_online: true,
+    tier: "NEW_USER",
+    minDailyOrdersLeft: 1,
+    candidateLimit: Math.max(50, Math.min(2000, targets.length * 12))
+  });
   const candidates = credentials
     .filter((it) => it?.token && it?.account?.is_new_user && (Number(it?.account?.dailyOrdersLeft) || 0) >= 1)
     .sort((a, b) => (Number(b.account.dailyOrdersLeft) || 0) - (Number(a.account.dailyOrdersLeft) || 0));
@@ -461,9 +473,10 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
   let tasks = [];
   try {
     order = await prismaStore.createOrder(payloadWithReservations, req.auth.user);
-    tasks = await Promise.all(order.items
-      .filter((it) => it.executionStatus === "QUEUED")
-      .map((item) => enqueueOrderItemTask(item)));
+    for (const item of order.items.filter((it) => it.executionStatus === "QUEUED").sort((a, b) => a.splitIndex - b.splitIndex)) {
+      const task = await enqueueOrderItemTask(item);
+      tasks.push(task);
+    }
   } catch (err) {
     return res.status(400).json({ message: err?.message || "create order failed" });
   }
@@ -742,16 +755,14 @@ ordersRoutes.post("/:id/submit", requireAuth, async (req, res) => {
   }
 
   const result = await prismaStore.submitOrder(order.id);
-  const taskResults = await Promise.all(result.items
-    .filter((it) => it.executionStatus === "QUEUED")
-    .map(async (item) => {
-      const existingTask = await prismaStore.findTaskByOrderItem(item.id);
-      if (existingTask && ["waiting", "active"].includes(existingTask.state)) {
-        return null;
-      }
-      return enqueueOrderItemTask(item);
-    }));
-  const tasks = taskResults.filter(Boolean);
+  const tasks = [];
+  for (const item of result.items.filter((it) => it.executionStatus === "QUEUED").sort((a, b) => a.splitIndex - b.splitIndex)) {
+    const existingTask = await prismaStore.findTaskByOrderItem(item.id);
+    if (existingTask && ["waiting", "active"].includes(existingTask.state)) {
+      continue;
+    }
+    tasks.push(await enqueueOrderItemTask(item));
+  }
   return res.json({
     order: result.order,
     tasks,

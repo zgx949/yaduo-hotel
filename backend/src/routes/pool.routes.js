@@ -258,10 +258,21 @@ poolRoutes.post("/actions/:action/run", requireAuth, async (req, res) => {
   const baseFilters = req.params.action === "refresh"
     ? { is_enabled: true }
     : { is_enabled: true, is_online: true };
-  let targets = await prismaStore.listPoolAccounts(baseFilters);
+  let targets = [];
   if (accountIds.length > 0) {
-    const idSet = new Set(accountIds);
-    targets = targets.filter((it) => idSet.has(it.id));
+    const uniqueIds = Array.from(new Set(accountIds));
+    const items = await Promise.all(uniqueIds.map((id) => prismaStore.getPoolAccount(id)));
+    targets = items.filter(Boolean).filter((it) => {
+      if (!it.is_enabled) {
+        return false;
+      }
+      if (req.params.action !== "refresh" && !it.is_online) {
+        return false;
+      }
+      return true;
+    });
+  } else {
+    targets = await prismaStore.listPoolAccounts(baseFilters);
   }
 
   const results = [];

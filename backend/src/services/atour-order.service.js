@@ -27,6 +27,15 @@ const buildMockIdCardNumber = () => {
   return `${base}${idCardCheckMap[sum % 11]}`;
 };
 
+const calcNights = (checkInDate, checkOutDate) => {
+  const start = new Date(String(checkInDate)).getTime();
+  const end = new Date(String(checkOutDate)).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return 1;
+  }
+  return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
+};
+
 const buildAtourQuery = (token) => {
   const params = new URLSearchParams({
     platType: env.atourPlatformType,
@@ -564,28 +573,13 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
   }
 
   const bookingChannel = parseBookingTier(item.bookingTier || undefined);
+  const nights = calcNights(item.checkInDate, item.checkOutDate);
   const minCouponWallet = {
     breakfast: Math.max(0, Number(item.breakfastCount) || 0),
     upgrade: Math.max(0, Number(item.roomLevelUpCount) || 0),
     lateCheckout: Math.max(0, Number(item.delayedCheckOutCount) || 0),
     slippers: Math.max(0, Number(item.shooseCount) || 0)
   };
-  const resourceCtx = await getInternalRequestContext({
-    tier: bookingChannel.tier,
-    corporateName: bookingChannel.corporateName,
-    preferredAccountId: item.accountId || undefined,
-    minDailyOrdersLeft: item.accountId ? 0 : 1,
-    minCouponWallet
-  });
-  if (!resourceCtx.token) {
-    throw new Error("余额不足：该下单渠道暂无可用账号");
-  }
-  if (!resourceCtx.proxy) {
-    throw new Error("暂无可用代理节点");
-  }
-
-  // TODO: 如果当前账号 dailyOrdersLeft 不足，后续应自动拆单并继续路由到下一可用账号。
-
   const calculatePayload = buildCalculatePayloadFromItem({
     order,
     item,
@@ -593,64 +587,102 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     customerPhone: order.contactPhone
   });
 
-  if (bookingChannel.tier === "NEW_USER") {
-    await runNewGuestIdentityUpdate({
-      token: resourceCtx.token,
-      proxy: resourceCtx.proxy,
-      chainId: order.chainId,
-      realName: order.customerName || "刘三"
+  const excludedAccountIds = new Set();
+  const maxAttempts = Math.max(1, Number(env.orderSubmitRetryTimes || 3));
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const resourceCtx = await getInternalRequestContext({
+      tier: bookingChannel.tier,
+      corporateName: bookingChannel.corporateName,
+      preferredAccountId: attempt === 1 ? (item.accountId || undefined) : undefined,
+      excludeAccountIds: Array.from(excludedAccountIds),
+      minDailyOrdersLeft: Math.max(1, nights),
+      minCouponWallet,
+      candidateLimit: 120
     });
-  }
+    if (!resourceCtx.token) {
+      throw new Error("余额不足：该下单渠道暂无可用账号");
+    }
+    if (!resourceCtx.proxy) {
+      throw new Error("暂无可用代理节点");
+    }
 
-  const scanAccountId = resourceCtx.tokenAccountId || item.accountId || null;
-  if (scanAccountId) {
-    await runCouponScanTask({
-      payload: { accountId: scanAccountId, chainId: order.chainId },
-      proxy: resourceCtx.proxy
-    }).catch(() => undefined);
-  }
+    const scanAccountId = resourceCtx.tokenAccountId || item.accountId || null;
+    if (scanAccountId) {
+      await runCouponScanTask({
+        payload: { accountId: scanAccountId, chainId: order.chainId },
+        proxy: resourceCtx.proxy
+      }).catch(() => undefined);
+    }
 
-  const workflow = await runAtourOrderWorkflow({
-    token: resourceCtx.token,
-    proxy: resourceCtx.proxy,
-    calculatePayload: {
-      ...calculatePayload,
-      createPayload: {
-        customerName: order.customerName,
-        customerPhone: item.accountPhone,
-        orderItem: {
-          remark: item.remark || order.remark || "",
-          breakfastCount: Number(item.breakfastCount) || 0,
-          roomLevelUpCount: Number(item.roomLevelUpCount) || 0,
-          delayedCheckOutCount: Number(item.delayedCheckOutCount) || 0,
-          shooseCount: Number(item.shooseCount) || 0
+    try {
+      if (bookingChannel.tier === "NEW_USER") {
+        await runNewGuestIdentityUpdate({
+          token: resourceCtx.token,
+          proxy: resourceCtx.proxy,
+          chainId: order.chainId,
+          realName: order.customerName || "刘三"
+        });
+      }
+
+      const workflow = await runAtourOrderWorkflow({
+        token: resourceCtx.token,
+        proxy: resourceCtx.proxy,
+        calculatePayload: {
+          ...calculatePayload,
+          createPayload: {
+            customerName: order.customerName,
+            customerPhone: resourceCtx.tokenAccountPhone || item.accountPhone || order.contactPhone,
+            orderItem: {
+              remark: item.remark || order.remark || "",
+              breakfastCount: Number(item.breakfastCount) || 0,
+              roomLevelUpCount: Number(item.roomLevelUpCount) || 0,
+              delayedCheckOutCount: Number(item.delayedCheckOutCount) || 0,
+              shooseCount: Number(item.shooseCount) || 0
+            }
+          }
         }
+      });
+
+      await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
+        atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
+        accountId: resourceCtx.tokenAccountId || item.accountId || null,
+        accountPhone: resourceCtx.tokenAccountPhone || item.accountPhone || null,
+        status: "CONFIRMED",
+        executionStatus: "ORDERED"
+      });
+      await prismaStore.refreshOrderStatus(item.groupId);
+
+      if (scanAccountId) {
+        await runCouponScanTask({
+          payload: { accountId: scanAccountId, chainId: order.chainId },
+          proxy: resourceCtx.proxy
+        }).catch(() => undefined);
+      }
+
+      return {
+        tokenSource: resourceCtx.tokenSource,
+        tokenAccountId: resourceCtx.tokenAccountId,
+        proxyId: resourceCtx.proxy?.id || null,
+        ...workflow
+      };
+    } catch (err) {
+      lastError = err;
+      if (resourceCtx.tokenAccountId) {
+        excludedAccountIds.add(String(resourceCtx.tokenAccountId));
+      }
+
+      if (scanAccountId) {
+        await runCouponScanTask({
+          payload: { accountId: scanAccountId, chainId: order.chainId },
+          proxy: resourceCtx.proxy
+        }).catch(() => undefined);
       }
     }
-  });
-
-  await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
-    atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
-    accountId: resourceCtx.tokenAccountId || item.accountId || null,
-    accountPhone: resourceCtx.tokenAccountPhone || item.accountPhone || null,
-    status: "CONFIRMED",
-    executionStatus: "ORDERED"
-  });
-  await prismaStore.refreshOrderStatus(item.groupId);
-
-  if (scanAccountId) {
-    await runCouponScanTask({
-      payload: { accountId: scanAccountId, chainId: order.chainId },
-      proxy: resourceCtx.proxy
-    }).catch(() => undefined);
   }
 
-  return {
-    tokenSource: resourceCtx.tokenSource,
-    tokenAccountId: resourceCtx.tokenAccountId,
-    proxyId: resourceCtx.proxy?.id || null,
-    ...workflow
-  };
+  throw lastError || new Error("下单失败：可用账号重试耗尽");
 };
 
 const buildAlipayDeepLink = ({ paymentOrderNo, payOrgMerId }) => {

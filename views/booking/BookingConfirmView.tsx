@@ -153,7 +153,7 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
                 { key: 'breakfast', label: '双人早餐券', total: 2 },
                 { key: 'upgrade', label: '升级房型券', total: 1, tag: '视房态安排' },
                 { key: 'lateCheckout', label: '延时退房券', total: 2 },
-                { key: 'slippers', label: '专属拖鞋', total: 3 }
+                { key: 'slippers', label: '专属拖鞋', total: 0 }
               ].map(benefit => (
                 <div key={benefit.key} className="bg-orange-50/50 rounded-lg p-2 flex flex-col items-center justify-between h-28 relative">
                   {benefit.tag && <span className="absolute -top-1.5 bg-amber-200 text-amber-800 text-[8px] px-1 rounded">{benefit.tag}</span>}

@@ -109,19 +109,26 @@ export const canUserUseBookingTier = ({ user, channel, systemChannels }) => {
 export const buildSearchChannelsForUser = ({ user, systemChannels, poolAccounts }) => {
   const channels = [];
   const accounts = asArray(poolAccounts);
+  const hasPoolSnapshot = accounts.length > 0;
 
-  const onlineNewUser = accounts.some((it) => it.is_online && it.is_enabled !== false && it.is_new_user);
-  const onlinePlatinum = accounts.some((it) => it.is_online && it.is_enabled !== false && it.is_platinum);
-  const onlineCorporateNames = Array.from(
-    new Set(
-      accounts
-        .filter((it) => it.is_online && it.is_enabled !== false)
-        .flatMap((it) => asArray(it.corporate_agreements))
-        .filter((it) => it?.enabled)
-        .map((it) => String(it.name || "").trim())
-        .filter(Boolean)
+  const onlineNewUser = hasPoolSnapshot
+    ? accounts.some((it) => it.is_online && it.is_enabled !== false && it.is_new_user)
+    : true;
+  const onlinePlatinum = hasPoolSnapshot
+    ? accounts.some((it) => it.is_online && it.is_enabled !== false && it.is_platinum)
+    : true;
+  const onlineCorporateNames = hasPoolSnapshot
+    ? Array.from(
+      new Set(
+        accounts
+          .filter((it) => it.is_online && it.is_enabled !== false)
+          .flatMap((it) => asArray(it.corporate_agreements))
+          .filter((it) => it?.enabled)
+          .map((it) => String(it.name || "").trim())
+          .filter(Boolean)
+      )
     )
-  );
+    : [];
 
   const addChannel = (channel) => {
     const allowed = canUserUseBookingTier({ user, channel, systemChannels });
@@ -168,6 +175,30 @@ export const buildSearchChannelsForUser = ({ user, systemChannels, poolAccounts 
             label: `企业:${corpName}`
           });
         });
+      }
+    }
+  } else {
+    const genericCorporate = { tier: "CORPORATE", channelKey: "CORPORATE", label: "企业(全部)" };
+    const allowedGeneric = canUserUseBookingTier({ user, channel: genericCorporate, systemChannels });
+    if (allowedGeneric.ok) {
+      if (user?.role === "ADMIN") {
+        channels.push(genericCorporate);
+      } else {
+        const blocked = new Set(asArray(systemChannels?.disabledCorporateNames).map((it) => String(it)));
+        const permissionNames = asArray(user?.permissions?.allowedCorporateNames).map((it) => String(it));
+        const targetNames = permissionNames.filter((name) => !blocked.has(name));
+        if (targetNames.length > 0) {
+          targetNames.forEach((corpName) => {
+            addChannel({
+              tier: "CORPORATE",
+              corporateName: corpName,
+              channelKey: `CORPORATE:${corpName}`,
+              label: `企业:${corpName}`
+            });
+          });
+        } else {
+          channels.push(genericCorporate);
+        }
       }
     }
   }

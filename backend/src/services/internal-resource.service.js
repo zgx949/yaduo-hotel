@@ -6,8 +6,10 @@ export const pickPoolTokenForInternal = async (options = {}) => {
     tier: options.tier,
     corporateName: options.corporateName,
     preferredAccountId: options.preferredAccountId,
+    excludeAccountIds: options.excludeAccountIds,
     minDailyOrdersLeft: options.minDailyOrdersLeft,
-    minCouponWallet: options.minCouponWallet
+    minCouponWallet: options.minCouponWallet,
+    candidateLimit: options.candidateLimit
   });
   if (!picked) {
     return null;

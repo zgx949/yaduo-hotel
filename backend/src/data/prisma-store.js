@@ -829,12 +829,35 @@ export const prismaStore = {
     if (filters.is_online !== undefined) {
       where.isOnline = Boolean(filters.is_online);
     }
+    const tier = filters.tier ? String(filters.tier).toUpperCase() : null;
+    if (tier === "NEW_USER") {
+      where.isNewUser = true;
+    }
+    if (tier === "PLATINUM") {
+      where.isPlatinum = true;
+    }
+    const minDailyOrdersLeft = Math.max(0, Number(filters.minDailyOrdersLeft || 0));
+    if (minDailyOrdersLeft > 0) {
+      where.dailyOrdersLeft = { gte: minDailyOrdersLeft };
+    }
+    const candidateLimitRaw = Number(filters.candidateLimit);
+    const candidateLimit = Number.isFinite(candidateLimitRaw) && candidateLimitRaw > 0
+      ? Math.max(1, Math.min(2000, candidateLimitRaw))
+      : null;
+    const corporateName = filters.corporateName ? String(filters.corporateName).trim() : null;
+    const minCouponWallet = normalizeCouponNeed(filters.minCouponWallet || {});
 
-    const rows = await prisma.poolAccount.findMany({ where, orderBy: { updatedAt: "desc" } });
-    return rows.map((row) => ({
-      account: projectPoolAccount(row),
-      token: row.loginTokenCipher ? decryptPoolTokenSafe(row.loginTokenCipher) : null
-    }));
+    const rows = await prisma.poolAccount.findMany({
+      where,
+      orderBy: [{ dailyOrdersLeft: "desc" }, { updatedAt: "desc" }],
+      ...(candidateLimit ? { take: candidateLimit } : {})
+    });
+    return rows
+      .filter((row) => canUseTier(row, tier, corporateName) && hasSufficientCouponWallet(row, minCouponWallet))
+      .map((row) => ({
+        account: projectPoolAccount(row),
+        token: row.loginTokenCipher ? decryptPoolTokenSafe(row.loginTokenCipher) : null
+      }));
   },
   async getPoolAccountCredential(id) {
     const row = await prisma.poolAccount.findUnique({ where: { id } });
@@ -896,32 +919,60 @@ export const prismaStore = {
     const corporateName = options.corporateName ? String(options.corporateName).trim() : null;
     const minDailyOrdersLeft = Math.max(0, Number(options.minDailyOrdersLeft || 0));
     const minCouponWallet = normalizeCouponNeed(options.minCouponWallet || {});
+    const candidateLimit = Math.max(1, Math.min(500, Number(options.candidateLimit) || 120));
     const preferredAccountId = options.preferredAccountId ? String(options.preferredAccountId) : null;
-    const rows = await prisma.poolAccount.findMany({ where: { isOnline: true, isEnabled: true } });
-    const candidates = rows.filter((it) =>
-      canUseTier(it, tier, corporateName) &&
-      (Number(it.dailyOrdersLeft) || 0) >= minDailyOrdersLeft &&
-      hasSufficientCouponWallet(it, minCouponWallet)
+    const excludedAccountIds = new Set(
+      Array.isArray(options.excludeAccountIds)
+        ? options.excludeAccountIds.map((it) => String(it)).filter(Boolean)
+        : []
     );
 
     if (preferredAccountId) {
-      const preferred = candidates.find((it) => it.id === preferredAccountId);
-      if (preferred?.loginTokenCipher) {
-        const token = decryptPoolTokenSafe(preferred.loginTokenCipher);
+      const preferred = await prisma.poolAccount.findFirst({
+        where: {
+          id: preferredAccountId,
+          isOnline: true,
+          isEnabled: true,
+          dailyOrdersLeft: { gte: minDailyOrdersLeft }
+        }
+      });
+      const preferredValid = preferred && canUseTier(preferred, tier, corporateName) && hasSufficientCouponWallet(preferred, minCouponWallet);
+      if (preferredValid?.loginTokenCipher) {
+        const token = decryptPoolTokenSafe(preferredValid.loginTokenCipher);
         if (token) {
           return {
             token,
-            accountId: preferred.id,
-            accountPhone: preferred.phone,
-            dailyOrdersLeft: Number(preferred.dailyOrdersLeft) || 0
+            accountId: preferredValid.id,
+            accountPhone: preferredValid.phone,
+            dailyOrdersLeft: Number(preferredValid.dailyOrdersLeft) || 0
           };
         }
       }
     }
 
+    const where = {
+      isOnline: true,
+      isEnabled: true,
+      dailyOrdersLeft: { gte: minDailyOrdersLeft },
+      ...(tier === "NEW_USER" ? { isNewUser: true } : {}),
+      ...(tier === "PLATINUM" ? { isPlatinum: true } : {}),
+      ...(excludedAccountIds.size > 0 ? { id: { notIn: Array.from(excludedAccountIds) } } : {})
+    };
+
+    const rows = await prisma.poolAccount.findMany({
+      where,
+      orderBy: [{ dailyOrdersLeft: "desc" }, { updatedAt: "desc" }],
+      take: candidateLimit
+    });
+    const candidates = rows.filter((it) =>
+      canUseTier(it, tier, corporateName) &&
+      hasSufficientCouponWallet(it, minCouponWallet)
+    );
+
     if (candidates.length === 0) {
       return null;
     }
+
     const shuffled = [...candidates].sort(() => Math.random() - 0.5);
     for (const item of shuffled) {
       const cipher = item.loginTokenCipher;
@@ -2089,7 +2140,7 @@ export const prismaStore = {
         queueName: "realtime-orders",
         enabled: true,
         schedule: null,
-        concurrency: 8,
+        concurrency: 1,
         attempts: 3,
         backoffMs: 2000,
         useProxy: true

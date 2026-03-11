@@ -127,6 +127,27 @@ const normalizePlaces = (raw) => {
   }));
 };
 
+const pickRandomChannelsByTier = (channels = []) => {
+  const groups = new Map();
+  for (const channel of channels) {
+    const key = String(channel?.tier || "NORMAL");
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(channel);
+  }
+
+  const picked = [];
+  for (const bucket of groups.values()) {
+    if (!Array.isArray(bucket) || bucket.length === 0) {
+      continue;
+    }
+    const randomIndex = Math.floor(Math.random() * bucket.length);
+    picked.push(bucket[randomIndex]);
+  }
+  return picked;
+};
+
 const atourApiOrigin = (() => {
   try {
     return new URL(env.atourPlaceSearchBaseUrl).origin;
@@ -321,11 +342,8 @@ const normalizeChainDetail = async (raw, fallback = {}, sourceMeta = {}) => {
 };
 
 hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
-  const resourceCtx = await getInternalRequestContext();
-  if (!resourceCtx.token) {
-    return res.status(400).json({ message: "No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN." });
-  }
-  if (!resourceCtx.proxy) {
+  const proxy = await prismaStore.acquireProxyNode();
+  if (!proxy) {
     return res.status(400).json({ message: "No available proxy from proxy pool." });
   }
 
@@ -352,9 +370,12 @@ hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
     latitude: "",
     longitude: "",
     platType: env.atourPlatformType,
-    token: resourceCtx.token,
     version: "2.0"
   });
+
+  if (env.atourAccessToken) {
+    query.set("token", String(env.atourAccessToken));
+  }
 
   const headers = {
     Accept: "*/*",
@@ -368,7 +389,7 @@ hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
       method: "GET",
       headers,
       timeoutMs: 12000
-    }, resourceCtx.proxy);
+    }, proxy);
 
     const raw = await response.json();
     if (!response.ok || raw?.retcode !== 0) {
@@ -384,9 +405,9 @@ hotelsRoutes.get("/place-search", requireAuth, async (req, res) => {
       meta: {
         retcode: raw?.retcode,
         retmsg: raw?.retmsg,
-        tokenSource: resourceCtx.tokenSource,
-        tokenAccountId: resourceCtx.tokenAccountId,
-        proxyId: resourceCtx.proxy?.id || null
+        tokenSource: env.atourAccessToken ? "env" : "none",
+        tokenAccountId: null,
+        proxyId: proxy?.id || null
       }
     });
   } catch (err) {
@@ -416,21 +437,21 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
   const finishDate = endDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const systemConfig = await prismaStore.getSystemConfig();
-  const poolAccounts = await prismaStore.listPoolAccounts({ is_enabled: true, is_online: true });
   const candidateChannels = buildSearchChannelsForUser({
     user: req.auth.user,
-    systemChannels: systemConfig.channels,
-    poolAccounts
+    systemChannels: systemConfig.channels
   });
+  const pickedChannels = pickRandomChannelsByTier(candidateChannels);
 
-  if (candidateChannels.length === 0) {
+  if (pickedChannels.length === 0) {
     return res.status(403).json({ message: "当前账号无可用查询渠道或配额" });
   }
 
-  const channelContexts = await Promise.all(candidateChannels.map(async (channel) => {
+  const channelContexts = await Promise.all(pickedChannels.map(async (channel) => {
     const ctx = await getInternalRequestContext({
       tier: channel.tier,
-      corporateName: channel.corporateName || undefined
+      corporateName: channel.corporateName || undefined,
+      candidateLimit: 80
     });
     if (!ctx.token || !ctx.proxy) {
       return null;
