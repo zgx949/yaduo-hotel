@@ -245,13 +245,13 @@ const runNewUserPopupCheck = async ({ token, proxy, chainId }) => {
   };
 };
 
-const normalizeChainDetail = async (raw, fallback = {}, sourceMeta = {}) => {
+const normalizeChainDetail = async (raw, fallback = {}, sourceMeta = {}, preloadedRisk = null) => {
   const result = raw?.result || {};
   const priceResponse = result.priceResponse || {};
   const roomList = Array.isArray(priceResponse.chainRoomList) ? priceResponse.chainRoomList : [];
   const chainId = String(priceResponse.chainId || fallback.chainId || "");
   const name = String(result.chainName || priceResponse.chainName || fallback.name || "未命名酒店");
-  const risk = await prismaStore.checkBlacklistedHotel(chainId, name);
+  const risk = preloadedRisk || await prismaStore.checkBlacklistedHotel(chainId, name);
 
   const rooms = roomList.map((roomItem, index) => {
     const roomInfo = roomItem.roomTypeInfoResponse || {};
@@ -449,6 +449,7 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
 
   const startDate = beginDate || new Date().toISOString().slice(0, 10);
   const finishDate = endDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const preloadedRisk = await prismaStore.checkBlacklistedHotel(hotelChainId, name);
 
   const systemConfig = await prismaStore.getSystemConfig();
   const candidateChannels = buildSearchChannelsForUser({
@@ -518,6 +519,18 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
         corporationId: ""
       };
 
+      const popupPromise = channel.tier === "NEW_USER"
+        ? runNewUserPopupCheck({
+          token: channel.token,
+          proxy: channel.proxy,
+          chainId: hotelChainId
+        }).catch((err) => ({
+          status: "UNKNOWN",
+          warning: false,
+          message: err instanceof Error ? err.message : "新客弹窗检测失败"
+        }))
+        : Promise.resolve({ status: "NONE", warning: false, message: "" });
+
       const response = await fetchWithProxy(`${atourApiOrigin}/atourlife/chain/chainDetailQuote?${query.toString()}`, {
         method: "POST",
         headers,
@@ -530,26 +543,16 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
         throw new Error(raw?.retmsg || `渠道 ${channel.label} 查询失败`);
       }
 
-      let newUserPopup = {
-        status: "NONE",
-        warning: false,
-        message: ""
-      };
-      if (channel.tier === "NEW_USER") {
-        try {
-          newUserPopup = await runNewUserPopupCheck({
-            token: channel.token,
-            proxy: channel.proxy,
-            chainId: hotelChainId
-          });
-        } catch (err) {
-          newUserPopup = {
+      const newUserPopup = await Promise.race([
+        popupPromise,
+        new Promise((resolve) => {
+          setTimeout(() => resolve({
             status: "UNKNOWN",
             warning: false,
-            message: err instanceof Error ? err.message : "新客弹窗检测失败"
-          };
-        }
-      }
+            message: "新客弹窗检测超时"
+          }), 1800);
+        })
+      ]);
 
       const hotel = await normalizeChainDetail(raw, {
         chainId: hotelChainId,
@@ -563,7 +566,7 @@ hotelsRoutes.post("/detail", requireAuth, async (req, res) => {
         tokenAccountId: channel.tokenAccountId,
         newUserPopupStatus: newUserPopup.status,
         newUserPopupWarning: newUserPopup.warning
-      });
+      }, preloadedRisk);
 
       return {
         channel,

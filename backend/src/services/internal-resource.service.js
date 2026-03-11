@@ -23,15 +23,16 @@ export const pickPoolTokenForInternal = async (options = {}) => {
 };
 
 export const getInternalRequestContext = async (options = {}) => {
-  const poolTokenContext = await pickPoolTokenForInternal(options);
+  const [poolTokenContext, proxy] = await Promise.all([
+    pickPoolTokenForInternal(options),
+    prismaStore.acquireProxyNode({ type: options.proxyType })
+  ]);
   const tokenContext = poolTokenContext || (options.allowEnvFallback ? {
     token: env.atourAccessToken,
     source: "env",
     accountId: null,
     accountPhone: null
   } : null);
-
-  const proxy = await prismaStore.acquireProxyNode({ type: options.proxyType });
 
   return {
     token: tokenContext?.token || "",

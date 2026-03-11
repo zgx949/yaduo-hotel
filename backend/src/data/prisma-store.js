@@ -2004,11 +2004,32 @@ export const prismaStore = {
   async checkBlacklistedHotel(chainId, hotelName) {
     const chain = String(chainId || "").toLowerCase();
     const name = String(hotelName || "").toLowerCase();
-    const activeRecords = await prisma.blacklistRecord.findMany({ where: { status: "ACTIVE" } });
-    const matched = activeRecords.filter(
-      (it) =>
-        ((chain && it.chainId.toLowerCase() === chain) || (name && it.hotelName.toLowerCase() === name))
-    );
+    const conditions = [];
+    if (chain) {
+      conditions.push({ chainId: { equals: chain, mode: "insensitive" } });
+    }
+    if (name) {
+      conditions.push({ hotelName: { equals: name, mode: "insensitive" } });
+    }
+
+    if (conditions.length === 0) {
+      return {
+        blacklisted: false,
+        count: 0,
+        maxSeverity: "LOW",
+        latestReason: "",
+        latestDate: "",
+        latestTags: [],
+        records: []
+      };
+    }
+
+    const matched = await prisma.blacklistRecord.findMany({
+      where: {
+        status: "ACTIVE",
+        OR: conditions
+      }
+    });
 
     const severityWeight = { HIGH: 3, MEDIUM: 2, LOW: 1 };
     const maxSeverity = matched.reduce(
