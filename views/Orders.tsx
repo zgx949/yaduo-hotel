@@ -859,8 +859,8 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
       </Card>
 
       {iframeUrl && (
-        <div className="fixed inset-0 bg-black/60 z-50 p-4">
-          <div className="h-full w-full bg-white rounded-xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/60 p-3 sm:p-4 flex items-center justify-center">
+          <div className="w-full max-w-[min(1280px,calc(100vw-1.5rem))] h-[min(88vh,900px)] max-h-[calc(100vh-1.5rem)] bg-white rounded-xl overflow-hidden flex flex-col shadow-2xl">
             <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
               <div className="text-sm font-medium text-gray-700">官方订单详情</div>
               <button
@@ -870,14 +870,14 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                 关闭
               </button>
             </div>
-            <iframe title="官方订单详情" src={iframeUrl} className="w-full flex-1" />
+            <iframe title="官方订单详情" src={iframeUrl} className="w-full flex-1 min-h-0" />
           </div>
         </div>
       )}
 
       {invoiceDialogOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white border border-gray-200 shadow-xl p-4 space-y-4">
+          <div className="w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-xl p-4 space-y-4">
             <div className="space-y-1">
               <h3 className="text-base font-semibold text-gray-900">批量开票</h3>
               <p className="text-sm text-gray-600">已选拆单 {selectedItems.length} 条（仅已离店且未开票的拆单会成功）。</p>
@@ -953,7 +953,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
 
       {cancelConfirm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white border border-gray-200 shadow-xl p-4 space-y-4">
+          <div className="w-full max-w-sm max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-xl p-4 space-y-4">
             <div className="space-y-1">
               <h3 className="text-base font-semibold text-gray-900">确认取消</h3>
               <p className="text-sm text-gray-600">

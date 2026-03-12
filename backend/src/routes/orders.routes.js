@@ -1059,5 +1059,23 @@ ordersRoutes.get("/items/:itemId/detail-link", requireAuth, async (req, res) => 
   }
 
   const links = await prismaStore.getOrderItemLinks(req.params.itemId);
-  return res.json({ detailUrl: links.detailUrl });
+  const accountCredential = item.accountId
+    ? await prismaStore.getPoolAccountCredential(item.accountId)
+    : null;
+  const matchedToken = String(accountCredential?.token || "").trim();
+
+  if (item.atourOrderId && matchedToken) {
+    const detailUrl = `https://wechat.yaduo.com/atour/order/detail?${new URLSearchParams({
+      chainId: String(order.chainId || ""),
+      folioId: String(item.atourOrderId || ""),
+      token: matchedToken
+    }).toString()}`;
+    return res.json({ detailUrl });
+  }
+
+  if (item.atourOrderId && !matchedToken) {
+    return res.status(409).json({ message: "该拆单缺少下单账号token，无法生成官方详情链接" });
+  }
+
+  return res.json({ detailUrl: links?.detailUrl || null });
 });

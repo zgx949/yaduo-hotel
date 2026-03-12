@@ -47,8 +47,28 @@ export const PaymentBridge: React.FC = () => {
     }
   };
 
+  const closeBridge = () => {
+    window.close();
+    window.setTimeout(() => {
+      if (!window.closed) {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.href = '/';
+        }
+      }
+    }, 120);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-sky-50 text-gray-900 p-4 md:p-8">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-white to-sky-50 text-gray-900 p-4 md:p-8">
+      <button
+        type="button"
+        onClick={closeBridge}
+        className="fixed right-4 top-4 z-10 rounded-full border border-gray-300 bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm backdrop-blur hover:bg-gray-50"
+      >
+        关闭页面
+      </button>
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 md:p-8">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">支付信息转接</h1>

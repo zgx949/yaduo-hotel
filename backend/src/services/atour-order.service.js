@@ -704,6 +704,22 @@ const toAtourDate = (input) => {
   return new Date(input).toISOString().slice(0, 10);
 };
 
+const buildAccommodationPayloadFromItem = (item = {}) => {
+  const breakfastCount = Math.max(0, Number(item?.breakfastCount) || 0);
+  const roomLevelUpCount = Math.max(0, Number(item?.roomLevelUpCount) || 0);
+  const delayedCheckOutCount = Math.max(0, Number(item?.delayedCheckOutCount) || 0);
+  const shooseCount = Math.max(0, Number(item?.shooseCount) || 0);
+
+  return {
+    breakfastCount,
+    roomLevelUpCount,
+    delayedCheckOutCount,
+    shooseCount,
+    accommodationType: "40,39,41,42",
+    accommodationCount: `${breakfastCount},${roomLevelUpCount},${delayedCheckOutCount},${shooseCount}`
+  };
+};
+
 const buildCalculatePayloadFromItem = ({ order, item, customerName, customerPhone }) => {
   const resolvedRpActivityId = item.rpActivityId || item.rateCodeId;
   if (!item.rateCode || !resolvedRpActivityId || !item.roomTypeId) {
@@ -711,9 +727,10 @@ const buildCalculatePayloadFromItem = ({ order, item, customerName, customerPhon
   }
   const start = toAtourDate(item.checkInDate);
   const end = toAtourDate(item.checkOutDate);
+  const accommodation = buildAccommodationPayloadFromItem(item);
   return {
-    accommodationType: "",
-    accommodationCount: "",
+    accommodationType: accommodation.accommodationType,
+    accommodationCount: accommodation.accommodationCount,
     chainId: String(order.chainId),
     roomTypeId: String(item.roomTypeId),
     marketCode: "ABR",
@@ -761,10 +778,11 @@ const buildAddOrderPayloadFromItem = async ({
   requestedPoint
 }) => {
   const itemRemark = orderItem?.remark ? String(orderItem.remark) : "";
-  const breakfastCount = Math.max(0, Number(orderItem?.breakfastCount) || 0);
-  const roomLevelUpCount = Math.max(0, Number(orderItem?.roomLevelUpCount) || 0);
-  const delayedCheckOutCount = Math.max(0, Number(orderItem?.delayedCheckOutCount) || 0);
-  const shooseCount = Math.max(0, Number(orderItem?.shooseCount) || 0);
+  const accommodation = buildAccommodationPayloadFromItem(orderItem || {});
+  const breakfastCount = accommodation.breakfastCount;
+  const roomLevelUpCount = accommodation.roomLevelUpCount;
+  const delayedCheckOutCount = accommodation.delayedCheckOutCount;
+  const shooseCount = accommodation.shooseCount;
   const orderAmount = Number(calculateResult.defaultAmount || calculateResult.amount || 0);
   const selectedPoint = resolveSelectedPoint({
     accountPoints,
@@ -808,8 +826,8 @@ const buildAddOrderPayloadFromItem = async ({
     customerNeedList: [],
     expectArrivalTime: "",
     getType: "0",
-    accommodationType: String(calculatePayload.accommodationType || "40,39,41,42"),
-    accommodationCount: String(calculatePayload.accommodationCount || "0,0,0,0"),
+    accommodationType: String(accommodation.accommodationType),
+    accommodationCount: String(accommodation.accommodationCount),
     rpActivityId: calculatePayload.rpActivityId,
     checkInPersons: customerName || "",
     isPointPayAppChannel: "1",
