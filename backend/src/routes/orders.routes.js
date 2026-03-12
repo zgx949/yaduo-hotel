@@ -81,6 +81,23 @@ const hasCouponCapacity = (account = {}, need = {}) => {
   );
 };
 
+const isSilverVipGrade = (vipGrade) => {
+  const text = String(vipGrade || "").trim();
+  if (!text) {
+    return false;
+  }
+  return text.includes("银会员") || text.includes("识君") || text.toUpperCase().includes("SILVER");
+};
+
+const isSilverRequiredNewUserRate = (item = {}, payload = {}) => {
+  const tier = parseBookingTier(item?.bookingTier || payload?.bookingTier || "NORMAL");
+  if (tier.tier !== "NEW_USER") {
+    return false;
+  }
+  const rateCode = String(item?.rateCode || payload?.rateCode || "").trim().toUpperCase();
+  return rateCode === "PREPAIDSILV";
+};
+
 const expandNewUserSplitsByNight = (payload = {}) => {
   const baseCheckIn = toDateOnly(payload.checkInDate);
   const baseCheckOut = toDateOnly(payload.checkOutDate);
@@ -147,13 +164,21 @@ const reserveNewUserAccounts = async (payload = {}) => {
   for (const item of targetItems) {
     const nights = Math.max(1, calcNights(item.checkInDate, item.checkOutDate));
     const need = couponNeedFromItem(item);
-    const picked = candidates.find((it) =>
+    const needSilver = isSilverRequiredNewUserRate(item, payload);
+    const selectable = candidates.filter((it) =>
       !used.has(it.account.id) &&
       (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
-      hasCouponCapacity(it.account, need)
+      hasCouponCapacity(it.account, need) &&
+      (!needSilver || isSilverVipGrade(it.account.vip_grade))
     );
+    const nonSilver = selectable.filter((it) => !isSilverVipGrade(it.account.vip_grade));
+    const picked = needSilver
+      ? (selectable[0] || null)
+      : ((nonSilver[0] || selectable[0]) || null);
     if (!picked) {
-      throw new Error(`新客账号不足：存在间夜券库存不满足（早餐/升房/延迟/拖鞋）或间夜余额不足`);
+      throw new Error(needSilver
+        ? "新客账号不足：该房型要求银会员新客号（PREPAIDSILV），当前无可用银卡新客账号"
+        : "新客账号不足：存在间夜券库存不满足（早餐/升房/延迟/拖鞋）或间夜余额不足");
     }
     used.add(picked.account.id);
     selected.push(picked);
@@ -209,24 +234,33 @@ const reserveNewUserAccountsForItems = async (items = []) => {
   for (const item of targets) {
     const nights = Math.max(1, calcNights(item.checkInDate, item.checkOutDate));
     const need = couponNeedFromItem(item);
+    const needSilver = isSilverRequiredNewUserRate(item);
     let selected = null;
     if (item.accountId) {
       selected = candidates.find((it) =>
         it.account.id === item.accountId &&
         !used.has(it.account.id) &&
         (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
-        hasCouponCapacity(it.account, need)
+        hasCouponCapacity(it.account, need) &&
+        (!needSilver || isSilverVipGrade(it.account.vip_grade))
       ) || null;
     }
     if (!selected) {
-      selected = candidates.find((it) =>
+      const selectable = candidates.filter((it) =>
         !used.has(it.account.id) &&
         (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
-        hasCouponCapacity(it.account, need)
-      ) || null;
+        hasCouponCapacity(it.account, need) &&
+        (!needSilver || isSilverVipGrade(it.account.vip_grade))
+      );
+      const nonSilver = selectable.filter((it) => !isSilverVipGrade(it.account.vip_grade));
+      selected = needSilver
+        ? (selectable[0] || null)
+        : ((nonSilver[0] || selectable[0]) || null);
     }
     if (!selected) {
-      throw new Error("新客账号不足：无法完成账号分配（券库存或可下间夜不足）");
+      throw new Error(needSilver
+        ? "新客账号不足：该房型要求银会员新客号（PREPAIDSILV），当前无可用银卡新客账号"
+        : "新客账号不足：无法完成账号分配（券库存或可下间夜不足）");
     }
     used.add(selected.account.id);
     assignments.push({

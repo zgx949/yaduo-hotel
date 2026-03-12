@@ -37,6 +37,15 @@ const calcNights = (checkInDate, checkOutDate) => {
   return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
 };
 
+const isSilverRequiredNewUserRate = (item = {}) => {
+  const tier = parseBookingTier(item?.bookingTier || "NORMAL");
+  if (tier.tier !== "NEW_USER") {
+    return false;
+  }
+  const rateCode = String(item?.rateCode || "").trim().toUpperCase();
+  return rateCode === "PREPAIDSILV";
+};
+
 const buildAtourQuery = (token) => {
   const params = new URLSearchParams({
     platType: env.atourPlatformType,
@@ -335,10 +344,15 @@ export const getInvoiceInfoByOrder = async ({ token, proxy, chainId, orderId }) 
 
 export const calculateOrderV2 = async ({ token, payload, proxy }) => {
   const query = buildAtourQuery(token);
+  const newPayload = {...payload};
+  newPayload.mobile = "";
+  newPayload.checkInPersons = "";
+  delete newPayload.createPayload;
+  // 银卡下单强制转为新用户
   const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/calculateOrderV2?${query}`, {
     method: "POST",
     headers: buildAtourHeaders(token),
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(newPayload || {}),
     timeoutMs: 12000
   }, proxy);
   const data = await parseAtourResponse(response, "calculateOrderV2 failed");
@@ -863,6 +877,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const needSilverNewUser = isSilverRequiredNewUserRate(item);
     const resourceCtx = await getInternalRequestContext({
       tier: bookingChannel.tier,
       corporateName: bookingChannel.corporateName,
@@ -870,10 +885,14 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
       excludeAccountIds: Array.from(excludedAccountIds),
       minDailyOrdersLeft: Math.max(1, nights),
       minCouponWallet,
-      candidateLimit: 120
+      candidateLimit: 120,
+      requiredSilverNewUser: needSilverNewUser,
+      preferNonSilverNewUser: bookingChannel.tier === "NEW_USER" && !needSilverNewUser
     });
     if (!resourceCtx.token) {
-      throw new Error("余额不足：该下单渠道暂无可用账号");
+      throw new Error(needSilverNewUser
+        ? "余额不足：该房型需银会员新客号（PREPAIDSILV），当前无可用银卡新客账号"
+        : "余额不足：该下单渠道暂无可用账号");
     }
     if (!resourceCtx.proxy) {
       throw new Error("暂无可用代理节点");
@@ -948,6 +967,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
       }
 
       if (scanAccountId) {
+        // TODO：异步执行更新券数量的任务
         await runCouponScanTask({
           payload: { accountId: scanAccountId, chainId: order.chainId },
           proxy: resourceCtx.proxy

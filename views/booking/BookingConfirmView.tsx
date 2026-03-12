@@ -66,6 +66,7 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
     ? (selectedRate.breakfastCount > 0 ? `${selectedRate.breakfastCount}份早餐` : '无早餐')
     : '早餐以酒店确认为准';
   const stockHint = selectedRate.stock ?? selectedRoom.stock;
+  const isSilverRequiredRate = selectedRate.type === BookingType.NEW_USER && String(selectedRate.rateCode || '').trim().toUpperCase() === 'PREPAIDSILV';
 
   return (
     <div className="bg-gray-50 min-h-full flex flex-col pb-32">
@@ -107,6 +108,11 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
           {selectedRate.type === BookingType.NEW_USER && selectedRate.newUserPopupStatus === 'UNKNOWN' && (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
               新客弹窗检测未完成，建议谨慎下单。
+            </div>
+          )}
+          {isSilverRequiredRate && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              该房价为银卡新客准入（PREPAIDSILV），提交下单将优先占用银会员「识君」新客账号。
             </div>
           )}
         </div>

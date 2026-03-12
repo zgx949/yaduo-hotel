@@ -45,6 +45,8 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
   onSelectRate,
   errorMessage
 }) => {
+  const isSilverRequiredRate = (rate: RatePlan) => String(rate.rateCode || '').trim().toUpperCase() === 'PREPAIDSILV';
+
   return (
     <div className="bg-gray-50 min-h-full pb-20 relative">
       <DateRangePicker
@@ -264,6 +266,9 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
                             {rate.type === BookingType.NEW_USER && rate.newUserPopupStatus === 'ALERT' && (
                               <span className="text-[10px] bg-red-100 text-red-700 px-1 rounded">新客弹窗</span>
                             )}
+                            {rate.type === BookingType.NEW_USER && isSilverRequiredRate(rate) && (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 px-1 rounded">银卡准入</span>
+                            )}
                             {effectiveStock !== undefined && effectiveStock > 0 && (
                               <span className={`text-[10px] px-1 rounded ${effectiveStock <= 3 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                 余{effectiveStock}间
@@ -279,6 +284,9 @@ export const BookingDetailView: React.FC<BookingDetailViewProps> = ({
                             {rate.tags.map(tag => (
                               <span key={tag} className="text-[10px] text-amber-600 border border-amber-100 px-1 rounded bg-white">{tag}</span>
                             ))}
+                            {rate.type === BookingType.NEW_USER && isSilverRequiredRate(rate) && (
+                              <span className="text-[10px] text-amber-700 border border-amber-200 px-1 rounded bg-amber-50">仅银会员新客号可住</span>
+                            )}
                           </div>
                           {rate.cancelTips && (
                             <p className="text-[10px] text-gray-500 mt-1">{rate.cancelTips}</p>

@@ -153,6 +153,28 @@ const hasSufficientCouponWallet = (account, minCouponWallet = {}) => {
   );
 };
 
+const extractVipGrade = (account) => {
+  const lastResult = account?.lastResult;
+  if (!lastResult || typeof lastResult !== "object" || Array.isArray(lastResult)) {
+    return "";
+  }
+  const profile = lastResult.personalProfile;
+  const vipGrade = profile && typeof profile === "object" ? profile.vipGrade : "";
+  return String(vipGrade || "").trim();
+};
+
+const isSilverVipGrade = (vipGrade) => {
+  const text = String(vipGrade || "").trim();
+  if (!text) {
+    return false;
+  }
+  return text.includes("银会员") || text.includes("识君") || text.toUpperCase().includes("SILVER");
+};
+
+const isSilverNewUserAccount = (account) => {
+  return Boolean(account?.isNewUser) && isSilverVipGrade(extractVipGrade(account));
+};
+
 const taskStateToExecution = (taskState) => {
   const normalized = String(taskState || "").toLowerCase();
   if (normalized === "waiting") {
@@ -909,14 +931,27 @@ export const prismaStore = {
       : null;
     const corporateName = filters.corporateName ? String(filters.corporateName).trim() : null;
     const minCouponWallet = normalizeCouponNeed(filters.minCouponWallet || {});
+    const requiredSilverNewUser = Boolean(filters.requiredSilverNewUser);
+    const preferNonSilverNewUser = Boolean(filters.preferNonSilverNewUser);
 
     const rows = await prisma.poolAccount.findMany({
       where,
       orderBy: [{ dailyOrdersLeft: "desc" }, { updatedAt: "desc" }],
       ...(candidateLimit ? { take: candidateLimit } : {})
     });
-    return rows
-      .filter((row) => canUseTier(row, tier, corporateName) && hasSufficientCouponWallet(row, minCouponWallet))
+    let filteredRows = rows
+      .filter((row) => canUseTier(row, tier, corporateName) && hasSufficientCouponWallet(row, minCouponWallet));
+
+    if (tier === "NEW_USER" && requiredSilverNewUser) {
+      filteredRows = filteredRows.filter((row) => isSilverNewUserAccount(row));
+    }
+
+    if (tier === "NEW_USER" && preferNonSilverNewUser) {
+      const nonSilver = filteredRows.filter((row) => !isSilverNewUserAccount(row));
+      filteredRows = nonSilver.length > 0 ? nonSilver : filteredRows;
+    }
+
+    return filteredRows
       .map((row) => ({
         account: projectPoolAccount(row),
         token: row.loginTokenCipher ? decryptPoolTokenSafe(row.loginTokenCipher) : null
@@ -989,6 +1024,8 @@ export const prismaStore = {
         ? options.excludeAccountIds.map((it) => String(it)).filter(Boolean)
         : []
     );
+    const requiredSilverNewUser = Boolean(options.requiredSilverNewUser);
+    const preferNonSilverNewUser = Boolean(options.preferNonSilverNewUser);
 
     if (preferredAccountId) {
       const preferred = await prisma.poolAccount.findFirst({
@@ -1000,7 +1037,11 @@ export const prismaStore = {
         }
       });
       const preferredValid = preferred && canUseTier(preferred, tier, corporateName) && hasSufficientCouponWallet(preferred, minCouponWallet);
-      if (preferredValid?.loginTokenCipher) {
+      const preferredTierCompatible =
+        !preferredValid
+          ? false
+          : !(tier === "NEW_USER" && requiredSilverNewUser && !isSilverNewUserAccount(preferredValid));
+      if (preferredTierCompatible && preferredValid?.loginTokenCipher) {
         const token = decryptPoolTokenSafe(preferredValid.loginTokenCipher);
         if (token) {
           return {
@@ -1032,11 +1073,24 @@ export const prismaStore = {
       hasSufficientCouponWallet(it, minCouponWallet)
     );
 
-    if (candidates.length === 0) {
+    const silverFiltered =
+      tier === "NEW_USER" && requiredSilverNewUser
+        ? candidates.filter((it) => isSilverNewUserAccount(it))
+        : candidates;
+
+    const finalCandidates =
+      tier === "NEW_USER" && preferNonSilverNewUser
+        ? (() => {
+          const nonSilver = silverFiltered.filter((it) => !isSilverNewUserAccount(it));
+          return nonSilver.length > 0 ? nonSilver : silverFiltered;
+        })()
+        : silverFiltered;
+
+    if (finalCandidates.length === 0) {
       return null;
     }
 
-    const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+    const shuffled = [...finalCandidates].sort(() => Math.random() - 0.5);
     for (const item of shuffled) {
       const cipher = item.loginTokenCipher;
       if (!cipher) {
