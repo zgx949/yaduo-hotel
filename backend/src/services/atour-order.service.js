@@ -80,15 +80,15 @@ const buildAddOrderQuery = (token) => {
   return params.toString();
 };
 
-const buildAtourHeaders = (token) => ({
+const buildAtourHeaders = (token, overrides = {}) => ({
   Accept: "*/*",
-  "At-Platform-Type": env.atourPlatformType,
+  "At-Platform-Type": String(overrides.platformType || env.atourPlatformType),
   "At-Client-Id": env.atourClientId,
-  "At-App-Version": env.atourAppVersion,
+  "At-App-Version": String(overrides.appVersion || env.atourAppVersion),
   "Content-Type": "application/json",
   "User-Agent": env.atourUserAgent,
   "At-Access-Token": token,
-  "At-Channel-Id": env.atourChannelId,
+  "At-Channel-Id": String(overrides.channelId || env.atourChannelId),
   ...(env.atourCookie ? { Cookie: env.atourCookie } : {})
 });
 
@@ -148,6 +148,11 @@ const parseAtourResponse = async (response, fallbackMessage) => {
     throw new Error(`${fallbackMessage} (${details})`);
   }
   return data;
+};
+
+const isAtourSemanticNotFoundError = (err) => {
+  const message = String(err?.message || "");
+  return /订单不存在|order\s*not\s*exist|ORDER_NOT_EXIST/i.test(message);
 };
 
 const parseMiniappResponse = async (response, fallbackMessage) => {
@@ -587,30 +592,69 @@ export const getAtourOrderDetail = async ({ token, proxy, chainId, folioId }) =>
     throw new Error("getOrderDetail failed (missing chainId or folioId)");
   }
 
-  const payload = new URLSearchParams({
-    channelId: String(env.atourChannelId),
-    activitySource: "",
-    activeId: "",
-    platType: String(env.atourPlatformType),
-    r: String(Math.random()),
-    token: String(token),
-    chainId: String(chainId),
-    folioId: String(folioId),
-    appVer: String(env.atourAppVersion)
-  });
-
-  const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/getOrderDetail`, {
-    method: "POST",
-    headers: {
-      ...buildAtourHeaders(token),
-      "Content-Type": "application/x-www-form-urlencoded"
+  const requestVariants = [
+    {
+      channelId: String(env.atourChannelId),
+      platType: String(env.atourPlatformType),
+      appVer: String(env.atourAppVersion)
     },
-    body: payload.toString(),
-    timeoutMs: 12000
-  }, proxy);
+    {
+      channelId: "3000001",
+      platType: String(env.atourPlatformType),
+      appVer: String(env.atourAppVersion)
+    },
+    {
+      channelId: String(env.atourChannelId),
+      platType: "5",
+      appVer: String(env.atourAppVersion)
+    },
+    {
+      channelId: "3000001",
+      platType: "5",
+      appVer: "3.31.0"
+    }
+  ].filter((it, idx, arr) => arr.findIndex((x) => `${x.channelId}|${x.platType}|${x.appVer}` === `${it.channelId}|${it.platType}|${it.appVer}`) === idx);
 
-  const data = await parseAtourResponse(response, "getOrderDetail failed");
-  return data.result || {};
+  let lastError = null;
+  for (const variant of requestVariants) {
+    const payload = new URLSearchParams({
+      channelId: variant.channelId,
+      activitySource: "",
+      activeId: "",
+      platType: variant.platType,
+      r: String(Math.random()),
+      token: String(token),
+      chainId: String(chainId),
+      folioId: String(folioId),
+      appVer: variant.appVer
+    });
+
+    const response = await fetchWithProxy(`${env.atourOrderApiBaseUrl}/order/getOrderDetail`, {
+      method: "POST",
+      headers: {
+        ...buildAtourHeaders(token, {
+          channelId: variant.channelId,
+          platformType: variant.platType,
+          appVersion: variant.appVer
+        }),
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: payload.toString(),
+      timeoutMs: 12000
+    }, proxy);
+
+    try {
+      const data = await parseAtourResponse(response, "getOrderDetail failed");
+      return data.result || {};
+    } catch (err) {
+      lastError = err;
+      if (!isAtourSemanticNotFoundError(err)) {
+        throw err;
+      }
+    }
+  }
+
+  throw lastError || new Error("getOrderDetail failed");
 };
 
 export const createPayOrder = async ({ token, payload, proxy }) => {

@@ -2,6 +2,7 @@ import { prismaStore } from "../data/prisma-store.js";
 import { getAtourOrderDetail } from "./atour-order.service.js";
 import { parseBookingTier } from "./booking-channel.service.js";
 import { getInternalRequestContext } from "./internal-resource.service.js";
+import { env } from "../config/env.js";
 
 const mapAtourOrderDetailToPatch = (detail = {}, currentItem = null) => {
   const orderState = Number(detail?.orderState);
@@ -72,18 +73,111 @@ const pickTokenContext = async (item) => {
   return ctx;
 };
 
+const isAtourNotFoundError = (err) => {
+  const message = String(err?.message || "");
+  return /订单不存在|order\s*not\s*exist|ORDER_NOT_EXIST/i.test(message);
+};
+
+const buildFolioCandidates = (folioId) => {
+  const raw = String(folioId || "").trim();
+  if (!raw) {
+    return [];
+  }
+  const candidates = [raw];
+  const digitsOnly = raw.replace(/\D+/g, "");
+  const canTryDigitsOnly = /^[\d\s_-]+$/.test(raw) && digitsOnly && digitsOnly !== raw;
+  if (canTryDigitsOnly) {
+    candidates.push(digitsOnly);
+  }
+  return Array.from(new Set(candidates));
+};
+
+const buildFallbackTokenContexts = async (item, primaryToken, primaryProxy) => {
+  const contexts = [];
+  const seenTokens = new Set([String(primaryToken || "")]);
+
+  if (item?.accountId) {
+    const credential = await prismaStore.getPoolAccountCredential(item.accountId).catch(() => null);
+    const token = String(credential?.token || "").trim();
+    if (token && !seenTokens.has(token)) {
+      const proxy = await prismaStore.acquireProxyNode().catch(() => null) || primaryProxy || null;
+      if (proxy) {
+        contexts.push({ token, proxy, tokenSource: "item-account-credential" });
+        seenTokens.add(token);
+      }
+    }
+  }
+
+  const envToken = String(env.atourAccessToken || "").trim();
+  if (envToken && !seenTokens.has(envToken)) {
+    const proxy = await prismaStore.acquireProxyNode().catch(() => null) || primaryProxy || null;
+    if (proxy) {
+      contexts.push({ token: envToken, proxy, tokenSource: "env" });
+      seenTokens.add(envToken);
+    }
+  }
+
+  return contexts;
+};
+
 const syncSingleOrderItem = async (order, item, source) => {
   if (!item?.atourOrderId) {
     return { itemId: item?.id || "", ok: false, skipped: true, reason: "NO_ATOUR_ORDER" };
   }
 
   const tokenCtx = await pickTokenContext(item);
-  const detail = await getAtourOrderDetail({
-    token: tokenCtx.token,
-    proxy: tokenCtx.proxy,
-    chainId: order.chainId,
-    folioId: item.atourOrderId
-  });
+  const folioCandidates = buildFolioCandidates(item.atourOrderId);
+  const tokenContexts = [
+    tokenCtx,
+    ...(await buildFallbackTokenContexts(item, tokenCtx.token, tokenCtx.proxy))
+  ];
+  const maxAttempts = 8;
+  let attemptCount = 0;
+
+  let detail = null;
+  let lastError = null;
+
+  for (const folioId of folioCandidates) {
+    for (const ctx of tokenContexts) {
+      attemptCount += 1;
+      if (attemptCount > maxAttempts) {
+        break;
+      }
+      try {
+        detail = await getAtourOrderDetail({
+          token: ctx.token,
+          proxy: ctx.proxy,
+          chainId: order.chainId,
+          folioId
+        });
+        break;
+      } catch (err) {
+        lastError = err;
+        if (!isAtourNotFoundError(err)) {
+          throw err;
+        }
+      }
+    }
+    if (attemptCount > maxAttempts) {
+      break;
+    }
+    if (detail) {
+      break;
+    }
+  }
+
+  if (!detail) {
+    if (isAtourNotFoundError(lastError)) {
+      return {
+        itemId: item.id,
+        ok: false,
+        skipped: true,
+        reason: "ATOUR_NOT_FOUND",
+        message: "第三方返回订单不存在，已保留本地状态（可稍后重试）"
+      };
+    }
+    throw lastError || new Error("refresh failed");
+  }
 
   const patch = mapAtourOrderDetailToPatch(detail, item);
   if (Object.keys(patch).length === 0) {
