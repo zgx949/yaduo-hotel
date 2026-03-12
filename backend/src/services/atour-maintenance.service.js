@@ -372,6 +372,60 @@ const summarizeCouponCounts = (resultList = []) => {
   return summary;
 };
 
+const toNumberSafe = (value) => {
+  const text = String(value || "").trim();
+  if (!text) {
+    return 0;
+  }
+  const matched = text.match(/-?\d+(?:\.\d+)?/);
+  const normalized = matched ? matched[0] : "";
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const isGenericThirtyCoupon = (coupon = {}) => {
+  const couponState = String(coupon?.couponState || "").trim().toUpperCase();
+  if (couponState && couponState !== "AVAILABLE") {
+    return false;
+  }
+
+  const value = toNumberSafe(coupon?.valueDesc);
+  const couponDesc = String(coupon?.couponDesc || "").trim();
+  const discountRule = String(coupon?.discountRule || "").trim();
+  const merged = `${couponDesc}\n${discountRule}`;
+
+  const isThirty = value === 30 || /(减|立减)?\s*30\s*元?|30\s*元\s*(抵用券|优惠券)?/.test(merged);
+  if (!isThirty) {
+    return false;
+  }
+
+  const hasBlacklistRule = /不适用于以下门店/.test(discountRule) || /除.+外(均)?可/.test(discountRule);
+  const hasUniversalKeyword = /(全国通用|全场通用|门店通用|亚朵门店通用|所有门店)/.test(merged);
+  const hasWhitelistRule = /适用于以下门店/.test(discountRule) && !/不适用于以下门店/.test(discountRule);
+
+  if (hasWhitelistRule) {
+    return false;
+  }
+
+  return hasBlacklistRule || hasUniversalKeyword;
+};
+
+const summarizeExpectedOrdersByCouponAssets = ({ account, discountCouponAssets }) => {
+  const assets = Array.isArray(discountCouponAssets) ? discountCouponAssets : [];
+  const genericThirtyCoupons = assets.filter((it) => isGenericThirtyCoupon(it)).length;
+  if (Boolean(account?.is_new_user)) {
+    const base = Math.max(0, Number(account?.dailyOrdersLeft) || 0);
+    return {
+      genericThirtyCoupons,
+      expectedDailyOrdersLeft: Math.min(base, 1)
+    };
+  }
+  return {
+    genericThirtyCoupons,
+    expectedDailyOrdersLeft: genericThirtyCoupons
+  };
+};
+
 export const runTokenRefreshTask = async ({ payload = {}, proxy }) => {
   const targets = await resolveTargets({ accountId: payload.accountId, requireOnline: false });
   const results = [];
@@ -514,19 +568,30 @@ export const runCouponScanTask = async ({ payload = {}, proxy }) => {
       }
 
       const summary = summarizeCouponCounts(Array.isArray(res?.data?.result) ? res.data.result : []);
-      const discountCouponAssets = await queryAllDiscountCouponAssets({ token, proxy }).catch(() => []);
+      let fetchedAssets = null;
+      try {
+        fetchedAssets = await queryAllDiscountCouponAssets({ token, proxy });
+      } catch {
+        fetchedAssets = null;
+      }
+      const hasFreshDiscountAssets = Array.isArray(fetchedAssets);
+      const discountCouponAssets = hasFreshDiscountAssets
+        ? fetchedAssets
+        : (Array.isArray(account.discount_coupon_assets) ? account.discount_coupon_assets : []);
       const discountCouponCount = discountCouponAssets.length;
+      const expectedByCoupon = summarizeExpectedOrdersByCouponAssets({ account, discountCouponAssets });
 
       await writeTaskResult({
         account,
         taskKey: "scan",
-        message: `礼遇券同步（早${summary.breakfast}/升${summary.upgrade}/延${summary.lateCheckout}/鞋${summary.slippers}）；满减优惠券资产 ${discountCouponCount} 张`,
+        message: `礼遇券同步（早${summary.breakfast}/升${summary.upgrade}/延${summary.lateCheckout}/鞋${summary.slippers}）；满减优惠券资产 ${discountCouponCount} 张${hasFreshDiscountAssets ? "" : "（使用上次资产快照）"}；通用30券 ${expectedByCoupon.genericThirtyCoupons} 张；预计剩余可下 ${expectedByCoupon.expectedDailyOrdersLeft} 间夜${account.is_new_user ? "（新客账号不按30元券折算）" : ""}`,
         patch: {
           breakfast_coupons: summary.breakfast,
           room_upgrade_coupons: summary.upgrade,
           late_checkout_coupons: summary.lateCheckout,
           slippers_coupons: summary.slippers,
-          discount_coupon_assets: discountCouponAssets,
+          dailyOrdersLeft: expectedByCoupon.expectedDailyOrdersLeft,
+          ...(hasFreshDiscountAssets ? { discount_coupon_assets: discountCouponAssets } : {}),
           lastResult: {
             couponAssets: {
               discountCoupons: discountCouponCount,
@@ -542,6 +607,7 @@ export const runCouponScanTask = async ({ payload = {}, proxy }) => {
         ok: true,
         chainId: resolvedChainId || null,
         discountCoupons: discountCouponCount,
+        expectedDailyOrdersLeft: expectedByCoupon.expectedDailyOrdersLeft,
         discountCouponAssets,
         ...summary
       });
