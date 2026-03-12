@@ -1,7 +1,6 @@
 import { env } from "../config/env.js";
 import { prismaStore } from "../data/prisma-store.js";
 import { parseBookingTier } from "./booking-channel.service.js";
-import { getInternalRequestContext } from "./internal-resource.service.js";
 import { runCouponScanTask } from "./atour-maintenance.service.js";
 import { fetchWithProxy } from "./proxied-fetch.service.js";
 
@@ -26,15 +25,6 @@ const buildMockIdCardNumber = () => {
     sum += Number(base[i]) * idCardWeights[i];
   }
   return `${base}${idCardCheckMap[sum % 11]}`;
-};
-
-const calcNights = (checkInDate, checkOutDate) => {
-  const start = new Date(String(checkInDate)).getTime();
-  const end = new Date(String(checkOutDate)).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return 1;
-  }
-  return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
 };
 
 const isSilverRequiredNewUserRate = (item = {}) => {
@@ -919,14 +909,6 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     throw new Error("order not found");
   }
 
-  const bookingChannel = parseBookingTier(item.bookingTier || undefined);
-  const nights = calcNights(item.checkInDate, item.checkOutDate);
-  const minCouponWallet = {
-    breakfast: Math.max(0, Number(item.breakfastCount) || 0),
-    upgrade: Math.max(0, Number(item.roomLevelUpCount) || 0),
-    lateCheckout: Math.max(0, Number(item.delayedCheckOutCount) || 0),
-    slippers: Math.max(0, Number(item.shooseCount) || 0)
-  };
   const calculatePayload = buildCalculatePayloadFromItem({
     order,
     item,
@@ -934,111 +916,79 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     customerPhone: order.contactPhone
   });
 
-  const excludedAccountIds = new Set();
-  const maxAttempts = Math.max(1, Number(env.orderSubmitRetryTimes || 3));
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const needSilverNewUser = isSilverRequiredNewUserRate(item);
-    const resourceCtx = await getInternalRequestContext({
-      tier: bookingChannel.tier,
-      corporateName: bookingChannel.corporateName,
-      preferredAccountId: attempt === 1 ? (item.accountId || undefined) : undefined,
-      excludeAccountIds: Array.from(excludedAccountIds),
-      minDailyOrdersLeft: Math.max(1, nights),
-      minCouponWallet,
-      candidateLimit: 120,
-      requiredSilverNewUser: needSilverNewUser,
-      preferNonSilverNewUser: bookingChannel.tier === "NEW_USER" && !needSilverNewUser
-    });
-    if (!resourceCtx.token) {
-      throw new Error(needSilverNewUser
-        ? "余额不足：该房型需银会员新客号（PREPAIDSILV），当前无可用银卡新客账号"
-        : "余额不足：该下单渠道暂无可用账号");
-    }
-    if (!resourceCtx.proxy) {
-      throw new Error("暂无可用代理节点");
-    }
-
-    const scanAccountId = resourceCtx.tokenAccountId || item.accountId || null;
-    const accountInfo = scanAccountId ? await prismaStore.getPoolAccount(scanAccountId).catch(() => null) : null;
-    const accountPoints = Math.max(0, Number(accountInfo?.points) || 0);
-    if (scanAccountId) {
-      await runCouponScanTask({
-        payload: { accountId: scanAccountId, chainId: order.chainId },
-        proxy: resourceCtx.proxy
-      }).catch(() => undefined);
-    }
-
-    try {
-      if (bookingChannel.tier === "NEW_USER") {
-        await runNewGuestIdentityUpdate({
-          token: resourceCtx.token,
-          proxy: resourceCtx.proxy,
-          chainId: order.chainId,
-          realName: order.customerName || "刘三"
-        });
-      }
-
-      const workflow = await runAtourOrderWorkflow({
-        token: resourceCtx.token,
-        proxy: resourceCtx.proxy,
-        calculatePayload: {
-          ...calculatePayload,
-          createPayload: {
-            customerName: order.customerName,
-            customerPhone: resourceCtx.tokenAccountPhone || item.accountPhone || order.contactPhone,
-            accountPoints,
-            orderItem: {
-              remark: item.remark || order.remark || "",
-              breakfastCount: Number(item.breakfastCount) || 0,
-              roomLevelUpCount: Number(item.roomLevelUpCount) || 0,
-              delayedCheckOutCount: Number(item.delayedCheckOutCount) || 0,
-              shooseCount: Number(item.shooseCount) || 0
-            }
-          }
-        }
-      });
-
-      await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
-        atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
-        accountId: resourceCtx.tokenAccountId || item.accountId || null,
-        accountPhone: resourceCtx.tokenAccountPhone || item.accountPhone || null,
-        status: "CONFIRMED",
-        executionStatus: "ORDERED"
-      });
-      await prismaStore.refreshOrderStatus(item.groupId);
-
-      if (scanAccountId) {
-        await runCouponScanTask({
-          payload: { accountId: scanAccountId, chainId: order.chainId },
-          proxy: resourceCtx.proxy
-        }).catch(() => undefined);
-      }
-
-      return {
-        tokenSource: resourceCtx.tokenSource,
-        tokenAccountId: resourceCtx.tokenAccountId,
-        proxyId: resourceCtx.proxy?.id || null,
-        ...workflow
-      };
-    } catch (err) {
-      lastError = err;
-      if (resourceCtx.tokenAccountId) {
-        excludedAccountIds.add(String(resourceCtx.tokenAccountId));
-      }
-
-      if (scanAccountId) {
-        // TODO：异步执行更新券数量的任务
-        await runCouponScanTask({
-          payload: { accountId: scanAccountId, chainId: order.chainId },
-          proxy: resourceCtx.proxy
-        }).catch(() => undefined);
-      }
-    }
+  if (!item.accountId) {
+    throw new Error("拆单未绑定下单账号，无法提交到亚朵");
   }
 
-  throw lastError || new Error("下单失败：可用账号重试耗尽");
+  const credential = await prismaStore.getPoolAccountCredential(item.accountId);
+  const boundToken = String(credential?.token || "").trim();
+  if (!boundToken) {
+    throw new Error("拆单绑定账号token缺失，无法提交到亚朵");
+  }
+
+  const proxy = await prismaStore.acquireProxyNode();
+  if (!proxy) {
+    throw new Error("暂无可用代理节点");
+  }
+
+  const bookingChannel = parseBookingTier(item.bookingTier || undefined);
+  const accountInfo = await prismaStore.getPoolAccount(item.accountId).catch(() => null);
+  const accountPoints = Math.max(0, Number(accountInfo?.points) || 0);
+
+  await runCouponScanTask({
+    payload: { accountId: item.accountId, chainId: order.chainId },
+    proxy
+  }).catch(() => undefined);
+
+  if (bookingChannel.tier === "NEW_USER") {
+    await runNewGuestIdentityUpdate({
+      token: boundToken,
+      proxy,
+      chainId: order.chainId,
+      realName: order.customerName || "刘三"
+    });
+  }
+
+  const workflow = await runAtourOrderWorkflow({
+    token: boundToken,
+    proxy,
+    calculatePayload: {
+      ...calculatePayload,
+      createPayload: {
+        customerName: order.customerName,
+        customerPhone: credential?.account?.phone || item.accountPhone || order.contactPhone,
+        accountPoints,
+        orderItem: {
+          remark: item.remark || order.remark || "",
+          breakfastCount: Number(item.breakfastCount) || 0,
+          roomLevelUpCount: Number(item.roomLevelUpCount) || 0,
+          delayedCheckOutCount: Number(item.delayedCheckOutCount) || 0,
+          shooseCount: Number(item.shooseCount) || 0
+        }
+      }
+    }
+  });
+
+  await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
+    atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
+    accountId: item.accountId,
+    accountPhone: credential?.account?.phone || item.accountPhone || null,
+    status: "CONFIRMED",
+    executionStatus: "ORDERED"
+  });
+  await prismaStore.refreshOrderStatus(item.groupId);
+
+  await runCouponScanTask({
+    payload: { accountId: item.accountId, chainId: order.chainId },
+    proxy
+  }).catch(() => undefined);
+
+  return {
+    tokenSource: "bound-account",
+    tokenAccountId: item.accountId,
+    proxyId: proxy?.id || null,
+    ...workflow
+  };
 };
 
 const buildAlipayDeepLink = ({ paymentOrderNo, payOrgMerId }) => {
@@ -1067,29 +1017,31 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
   if (!item.atourOrderId) {
     throw new Error("order item has no atour order id");
   }
+  if (["PAID", "REFUNDED"].includes(String(item.paymentStatus || ""))) {
+    throw new Error("该拆单已支付，禁止再次生成支付链接");
+  }
 
   const order = await prismaStore.getOrder(item.groupId);
   if (!order) {
     throw new Error("order not found");
   }
 
-  const bookingChannel = parseBookingTier(item.bookingTier || undefined);
-  const resourceCtx = await getInternalRequestContext({
-    tier: bookingChannel.tier,
-    corporateName: bookingChannel.corporateName,
-    preferredAccountId: item.accountId || undefined,
-    minDailyOrdersLeft: 0
-  });
-  if (!resourceCtx.token) {
-    throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+  if (!item.accountId) {
+    throw new Error("拆单未绑定下单账号，无法生成支付链接");
   }
-  if (!resourceCtx.proxy) {
+  const credential = await prismaStore.getPoolAccountCredential(item.accountId);
+  const boundToken = String(credential?.token || "").trim();
+  if (!boundToken) {
+    throw new Error("拆单绑定账号token缺失，无法生成支付链接");
+  }
+  const proxy = await prismaStore.acquireProxyNode();
+  if (!proxy) {
     throw new Error("暂无可用代理节点");
   }
 
   const payOrderResult = await createPayOrder({
-    token: resourceCtx.token,
-    proxy: resourceCtx.proxy,
+    token: boundToken,
+    proxy,
     payload: {
       chainId: String(order.chainId),
       source: "order",
@@ -1099,8 +1051,8 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
   });
 
   const cashierInformation = await getCashierInformation({
-    token: resourceCtx.token,
-    proxy: resourceCtx.proxy,
+    token: boundToken,
+    proxy,
     payload: {
       appFlag: "1",
       reqSeqId: String(Date.now()),
@@ -1128,8 +1080,8 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
   let payData = null;
   if (payOrgMerId && payOrderResult.token) {
     payData = await payByCashier({
-      token: resourceCtx.token,
-      proxy: resourceCtx.proxy,
+      token: boundToken,
+      proxy,
       payload: {
         channelType,
         payType: "A",
@@ -1154,9 +1106,9 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
     payOrgMerId,
     channelType,
     payInfo,
-    tokenSource: resourceCtx.tokenSource,
-    tokenAccountId: resourceCtx.tokenAccountId,
-    proxyId: resourceCtx.proxy?.id || null,
+    tokenSource: "bound-account",
+    tokenAccountId: item.accountId,
+    proxyId: proxy?.id || null,
     raw: {
       payOrderResult,
       cashierInformation,

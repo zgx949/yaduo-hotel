@@ -1,8 +1,5 @@
 import { prismaStore } from "../data/prisma-store.js";
 import { getAtourOrderDetail } from "./atour-order.service.js";
-import { parseBookingTier } from "./booking-channel.service.js";
-import { getInternalRequestContext } from "./internal-resource.service.js";
-import { env } from "../config/env.js";
 
 const mapAtourOrderDetailToPatch = (detail = {}, currentItem = null) => {
   const orderState = Number(detail?.orderState);
@@ -57,20 +54,24 @@ const mapAtourOrderDetailToPatch = (detail = {}, currentItem = null) => {
 };
 
 const pickTokenContext = async (item) => {
-  const bookingChannel = parseBookingTier(item?.bookingTier || undefined);
-  const ctx = await getInternalRequestContext({
-    tier: bookingChannel.tier,
-    corporateName: bookingChannel.corporateName,
-    preferredAccountId: item?.accountId || undefined,
-    minDailyOrdersLeft: 0
-  });
-  if (!ctx.token) {
-    throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+  if (!item?.accountId) {
+    throw new Error("拆单未绑定下单账号，无法刷新亚朵状态");
   }
-  if (!ctx.proxy) {
+  const credential = await prismaStore.getPoolAccountCredential(item.accountId);
+  const token = String(credential?.token || "").trim();
+  if (!token) {
+    throw new Error("拆单绑定账号token缺失，无法刷新亚朵状态");
+  }
+  const proxy = await prismaStore.acquireProxyNode();
+  if (!proxy) {
     throw new Error("No available proxy from proxy pool");
   }
-  return ctx;
+  return {
+    token,
+    proxy,
+    tokenSource: "bound-account",
+    tokenAccountId: item.accountId
+  };
 };
 
 const isAtourNotFoundError = (err) => {
@@ -105,15 +106,6 @@ const buildFallbackTokenContexts = async (item, primaryToken, primaryProxy) => {
         contexts.push({ token, proxy, tokenSource: "item-account-credential" });
         seenTokens.add(token);
       }
-    }
-  }
-
-  const envToken = String(env.atourAccessToken || "").trim();
-  if (envToken && !seenTokens.has(envToken)) {
-    const proxy = await prismaStore.acquireProxyNode().catch(() => null) || primaryProxy || null;
-    if (proxy) {
-      contexts.push({ token: envToken, proxy, tokenSource: "env" });
-      seenTokens.add(envToken);
     }
   }
 

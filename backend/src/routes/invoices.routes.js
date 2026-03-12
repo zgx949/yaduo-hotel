@@ -9,7 +9,6 @@ import {
   issueEinvoiceV2
 } from "../services/atour-order.service.js";
 import { getInternalRequestContext } from "../services/internal-resource.service.js";
-import { parseBookingTier } from "../services/booking-channel.service.js";
 
 export const invoicesRoutes = Router();
 
@@ -208,16 +207,19 @@ invoicesRoutes.post("/batch-issue", requireAuth, async (req, res) => {
       continue;
     }
 
-    const bookingTier = parseBookingTier(item.bookingTier || undefined);
-    const tokenCtx = await getInternalRequestContext({
-      tier: bookingTier.tier,
-      corporateName: bookingTier.corporateName,
-      preferredAccountId: item.accountId || undefined,
-      minDailyOrdersLeft: 0,
-      allowEnvFallback: false
-    });
-    if (!tokenCtx.token || !tokenCtx.proxy) {
-      results.push({ itemId, ok: false, message: "暂无可用账号token或代理" });
+    if (!item.accountId) {
+      results.push({ itemId, ok: false, message: "拆单未绑定下单账号，无法开票" });
+      continue;
+    }
+    const credential = await prismaStore.getPoolAccountCredential(item.accountId);
+    const boundToken = String(credential?.token || "").trim();
+    if (!boundToken) {
+      results.push({ itemId, ok: false, message: "拆单绑定账号token缺失，无法开票" });
+      continue;
+    }
+    const proxy = await prismaStore.acquireProxyNode();
+    if (!proxy) {
+      results.push({ itemId, ok: false, message: "暂无可用代理" });
       continue;
     }
 
@@ -273,8 +275,8 @@ invoicesRoutes.post("/batch-issue", requireAuth, async (req, res) => {
       }
 
       const issueResult = await issueEinvoiceV2({
-        token: tokenCtx.token,
-        proxy: tokenCtx.proxy,
+        token: boundToken,
+        proxy,
         payload: {
           activeId: "",
           inactiveId: "",
@@ -302,7 +304,7 @@ invoicesRoutes.post("/batch-issue", requireAuth, async (req, res) => {
           platType: "2",
           appVer: "4.1.0",
           orderAmount: String(item.amount),
-          token: String(tokenCtx.token),
+          token: String(boundToken),
           email: encryptedEmail,
           mobile: "",
           invoiceId: template.invoiceId,
@@ -319,8 +321,8 @@ invoicesRoutes.post("/batch-issue", requireAuth, async (req, res) => {
       });
 
       const latestInfo = await getInvoiceInfoByOrder({
-        token: tokenCtx.token,
-        proxy: tokenCtx.proxy,
+        token: boundToken,
+        proxy,
         chainId: order.chainId,
         orderId: item.atourOrderId
       }).catch(() => ({ found: false }));

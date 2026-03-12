@@ -352,6 +352,27 @@ const pickTokenContext = async (tier, options = {}) => {
   return ctx;
 };
 
+const pickBoundOrderItemTokenContext = async (orderItem) => {
+  if (!orderItem?.accountId) {
+    throw new Error("拆单未绑定下单账号，无法发起该操作");
+  }
+  const credential = await prismaStore.getPoolAccountCredential(orderItem.accountId);
+  const token = String(credential?.token || "").trim();
+  if (!token) {
+    throw new Error("拆单绑定账号token缺失，无法发起该操作");
+  }
+  const proxy = await prismaStore.acquireProxyNode();
+  if (!proxy) {
+    throw new Error("No available proxy from proxy pool");
+  }
+  return {
+    token,
+    proxy,
+    tokenSource: "bound-account",
+    tokenAccountId: orderItem.accountId
+  };
+};
+
 const enqueueOrderItemTask = async (orderItem) => {
   if (env.taskSystemEnabled) {
     try {
@@ -423,10 +444,7 @@ const cancelSingleOrderItem = async (orderItem, options = {}) => {
         throw new Error("order not found");
       }
 
-      const tokenCtx = await pickTokenContext(orderItem.bookingTier || undefined, {
-        preferredAccountId: orderItem.accountId || undefined,
-        minDailyOrdersLeft: 0
-      });
+      const tokenCtx = await pickBoundOrderItemTokenContext(orderItem);
       await cancelAtourOrder({
         token: tokenCtx.token,
         proxy: tokenCtx.proxy,
@@ -1016,6 +1034,10 @@ ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) =>
     return res.status(403).json({ message: "Forbidden" });
   }
 
+  if (["PAID", "REFUNDED"].includes(String(item.paymentStatus || ""))) {
+    return res.status(400).json({ message: "该拆单已支付，不允许再生成支付链接" });
+  }
+
   const links = await prismaStore.getOrderItemLinks(req.params.itemId);
   if (item.executionStatus !== "ORDERED" && item.executionStatus !== "DONE") {
     return res.json({ paymentLink: links.paymentLink });
@@ -1031,6 +1053,27 @@ ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) =>
       payInfo: payment.payInfo
     });
   } catch (err) {
+    const message = String(err?.message || "");
+    if (/已支付|禁止再次生成支付链接/i.test(message)) {
+      return res.status(400).json({ message: "该拆单已支付，不允许再生成支付链接" });
+    }
+
+    try {
+      const latestOrder = await prismaStore.getOrder(item.groupId);
+      const latestItem = await prismaStore.getOrderItemById(item.id);
+      if (latestOrder && latestItem?.atourOrderId) {
+        await refreshOrderItemStatusByAtour(latestOrder, latestItem, { source: "route.payment-link-fallback-check" });
+      }
+      const afterSync = await prismaStore.getOrderItemById(item.id);
+      if (["PAID", "REFUNDED"].includes(String(afterSync?.paymentStatus || ""))) {
+        return res.status(400).json({ message: "该拆单已支付，不允许再生成支付链接" });
+      }
+    } catch (syncErr) {
+      if (env.nodeEnv !== "production") {
+        console.warn("payment-link paid-state sync check failed:", syncErr?.message || syncErr);
+      }
+    }
+
     if (env.nodeEnv !== "production") {
       console.warn("generate payment link failed, fallback to stored link:", err?.message || err);
     }

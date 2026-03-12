@@ -1,7 +1,5 @@
 import { prismaStore } from "../../data/prisma-store.js";
-import { parseBookingTier } from "../../services/booking-channel.service.js";
 import { cancelAtourOrder } from "../../services/atour-order.service.js";
-import { getInternalRequestContext } from "../../services/internal-resource.service.js";
 
 export const orderCancelTask = async ({ payload }) => {
   const orderItemId = payload?.orderItemId;
@@ -20,23 +18,22 @@ export const orderCancelTask = async ({ payload }) => {
       throw new Error("order not found");
     }
 
-    const bookingChannel = parseBookingTier(existing.bookingTier || undefined);
-    const resourceCtx = await getInternalRequestContext({
-      tier: bookingChannel.tier,
-      corporateName: bookingChannel.corporateName,
-      preferredAccountId: existing.accountId || undefined,
-      minDailyOrdersLeft: 0
-    });
-    if (!resourceCtx.token) {
-      throw new Error("No available token. Please configure pool account token or ATOUR_ACCESS_TOKEN.");
+    if (!existing.accountId) {
+      throw new Error("拆单未绑定下单账号，无法取消亚朵订单");
     }
-    if (!resourceCtx.proxy) {
+    const credential = await prismaStore.getPoolAccountCredential(existing.accountId);
+    const boundToken = String(credential?.token || "").trim();
+    if (!boundToken) {
+      throw new Error("拆单绑定账号token缺失，无法取消亚朵订单");
+    }
+    const proxy = await prismaStore.acquireProxyNode();
+    if (!proxy) {
       throw new Error("No available proxy from proxy pool");
     }
 
     await cancelAtourOrder({
-      token: resourceCtx.token,
-      proxy: resourceCtx.proxy,
+      token: boundToken,
+      proxy,
       chainId: order.chainId,
       folioId: existing.atourOrderId,
       reason: payload?.reason || "OTHER",
