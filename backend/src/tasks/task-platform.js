@@ -166,97 +166,119 @@ class TaskPlatform {
       }
     }
 
-    if (!this.consumeEnabled) {
-      return;
-    }
-
     for (const [queueName, queue] of this.queues.entries()) {
-      if (this.workers.has(queueName)) {
+      if (this.consumeEnabled && !this.workers.has(queueName)) {
+        const worker = new Worker(
+          queueName,
+          async (job) => {
+            const moduleConfig = this.moduleConfigs.get(job.name);
+            if (!moduleConfig || !moduleConfig.enabled) {
+              throw new Error(`module disabled: ${job.name}`);
+            }
+            const runner = builtinTaskModules[job.name];
+            if (!runner) {
+              throw new Error(`module not implemented: ${job.name}`);
+            }
+            const proxy = await pickProxyIfNeeded(moduleConfig);
+            await prismaStore.updateTaskRunByQueueJob(queueName, String(job.id), {
+              state: "active",
+              startedAt: new Date(),
+              attemptsMade: job.attemptsMade,
+              proxyId: proxy?.id || null
+            });
+            const result = await runner({ payload: job.data.payload || {}, meta: job.data.meta || {}, proxy, queueName, job });
+            return result;
+          },
+          {
+            connection: this.connection,
+            concurrency: Math.max(
+              1,
+              ...modules.filter((it) => it.queueName === queueName && it.enabled).map((it) => it.concurrency || 1)
+            )
+          }
+        );
+
+        worker.on("completed", async (job, result) => {
+          await prismaStore.updateTaskRunByQueueJob(queueName, String(job.id), {
+            state: "completed",
+            progress: 100,
+            result,
+            finishedAt: new Date(),
+            attemptsMade: job.attemptsMade
+          });
+          const orderGroupId = job?.data?.meta?.orderGroupId;
+          const orderItemId = job?.data?.meta?.orderItemId;
+          if (orderGroupId) {
+            await prismaStore.refreshOrderStatus(orderGroupId);
+          } else if (orderItemId) {
+            const orderItem = await prismaStore.getOrderItemById(orderItemId);
+            if (orderItem?.groupId) {
+              await prismaStore.refreshOrderStatus(orderItem.groupId);
+            }
+          }
+        });
+
+        worker.on("failed", async (job, err) => {
+          if (!job) {
+            return;
+          }
+          await prismaStore.updateTaskRunByQueueJob(queueName, String(job.id), {
+            state: "failed",
+            error: err?.message || "failed",
+            finishedAt: new Date(),
+            attemptsMade: job.attemptsMade
+          });
+
+          const orderItemId = job?.data?.meta?.orderItemId;
+          if (orderItemId) {
+            const orderItem = await prismaStore.getOrderItemById(orderItemId);
+            if (orderItem && orderItem.status !== "CANCELLED") {
+              await prismaStore.updateOrderItem(orderItemId, {
+                executionStatus: "FAILED",
+                status: "FAILED"
+              });
+              await prismaStore.refreshOrderStatus(orderItem.groupId);
+            }
+          }
+        });
+
+        this.workers.set(queueName, worker);
+      }
+
+      if (!this.consumeEnabled) {
         continue;
       }
-      const worker = new Worker(
-        queueName,
-        async (job) => {
-          const moduleConfig = this.moduleConfigs.get(job.name);
-          if (!moduleConfig || !moduleConfig.enabled) {
-            throw new Error(`module disabled: ${job.name}`);
-          }
-          const runner = builtinTaskModules[job.name];
-          if (!runner) {
-            throw new Error(`module not implemented: ${job.name}`);
-          }
-          const proxy = await pickProxyIfNeeded(moduleConfig);
-          await prismaStore.updateTaskRunByQueueJob(queueName, String(job.id), {
-            state: "active",
-            startedAt: new Date(),
-            attemptsMade: job.attemptsMade,
-            proxyId: proxy?.id || null
-          });
-          const result = await runner({ payload: job.data.payload || {}, meta: job.data.meta || {}, proxy, queueName, job });
-          return result;
-        },
-        {
-          connection: this.connection,
-          concurrency: Math.max(
-            1,
-            ...modules.filter((it) => it.queueName === queueName && it.enabled).map((it) => it.concurrency || 1)
-          )
-        }
-      );
-
-      worker.on("completed", async (job, result) => {
-        await prismaStore.updateTaskRunByQueueJob(queueName, String(job.id), {
-          state: "completed",
-          progress: 100,
-          result,
-          finishedAt: new Date(),
-          attemptsMade: job.attemptsMade
-        });
-        const orderGroupId = job?.data?.meta?.orderGroupId;
-        const orderItemId = job?.data?.meta?.orderItemId;
-        if (orderGroupId) {
-          await prismaStore.refreshOrderStatus(orderGroupId);
-        } else if (orderItemId) {
-          const orderItem = await prismaStore.getOrderItemById(orderItemId);
-          if (orderItem?.groupId) {
-            await prismaStore.refreshOrderStatus(orderItem.groupId);
-          }
-        }
-      });
-
-      worker.on("failed", async (job, err) => {
-        if (!job) {
-          return;
-        }
-        await prismaStore.updateTaskRunByQueueJob(queueName, String(job.id), {
-          state: "failed",
-          error: err?.message || "failed",
-          finishedAt: new Date(),
-          attemptsMade: job.attemptsMade
-        });
-
-        const orderItemId = job?.data?.meta?.orderItemId;
-        if (orderItemId) {
-          const orderItem = await prismaStore.getOrderItemById(orderItemId);
-          if (orderItem && orderItem.status !== "CANCELLED") {
-            await prismaStore.updateOrderItem(orderItemId, {
-              executionStatus: "FAILED",
-              status: "FAILED"
-            });
-            await prismaStore.refreshOrderStatus(orderItem.groupId);
-          }
-        }
-      });
-
-      this.workers.set(queueName, worker);
 
       const queueModules = modules.filter((it) => normalizeQueueName(it.queueName) === queueName && it.category === "SCHEDULED");
       for (const moduleConfig of queueModules) {
         const repeatKey = normalizeRepeatKey(moduleConfig.moduleId);
-        if (!moduleConfig.enabled || !moduleConfig.schedule) {
-          await queue.removeRepeatable(moduleConfig.moduleId, { pattern: moduleConfig.schedule || "* * * * *" }, repeatKey).catch(() => undefined);
+        const schedulePattern = String(moduleConfig.schedule || "").trim();
+
+        if (!moduleConfig.enabled || !schedulePattern) {
+          if (typeof queue.removeJobScheduler === "function") {
+            await queue.removeJobScheduler(repeatKey).catch(() => undefined);
+          } else {
+            await queue.removeRepeatableByKey(repeatKey).catch(() => undefined);
+          }
           continue;
         }
+
+        if (typeof queue.upsertJobScheduler === "function") {
+          await queue.upsertJobScheduler(
+            repeatKey,
+            { pattern: schedulePattern },
+            {
+              name: moduleConfig.moduleId,
+              data: { payload: {}, meta: { source: "scheduler" } },
+              opts: {
+                attempts: moduleConfig.attempts,
+                backoff: { type: "fixed", delay: moduleConfig.backoffMs }
+              }
+            }
+          );
+          continue;
+        }
+
         await queue.add(
           moduleConfig.moduleId,
           { payload: {}, meta: { source: "scheduler" } },
@@ -264,7 +286,7 @@ class TaskPlatform {
             jobId: repeatKey,
             attempts: moduleConfig.attempts,
             backoff: { type: "fixed", delay: moduleConfig.backoffMs },
-            repeat: { pattern: moduleConfig.schedule }
+            repeat: { pattern: schedulePattern }
           }
         );
       }

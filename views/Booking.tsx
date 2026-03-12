@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { DateRangePicker } from '../components/DateRangePicker';
-import { Hotel, RatePlan, Room, OrderPaymentDecision, OrderPaymentPrepareSplit } from '../types';
+import { Hotel, InvoiceTemplate, RatePlan, Room, OrderPaymentDecision, OrderPaymentPrepareSplit } from '../types';
 import { BookingDetailView } from './booking/BookingDetailView';
 import { BookingConfirmView } from './booking/BookingConfirmView';
 import { InvoiceFormSheet, InvoiceFormValue } from '../components/InvoiceFormSheet';
@@ -80,6 +80,9 @@ export const Booking: React.FC = () => {
   const [appliedCoupon, setAppliedCoupon] = useState<{name: string, value: number} | null>(null);
   const [invoiceEnabled, setInvoiceEnabled] = useState(false);
   const [showInvoiceSheet, setShowInvoiceSheet] = useState(false);
+  const [invoiceTemplates, setInvoiceTemplates] = useState<InvoiceTemplate[]>([]);
+  const [loadingInvoiceTemplates, setLoadingInvoiceTemplates] = useState(false);
+  const [selectedInvoiceTemplateId, setSelectedInvoiceTemplateId] = useState('');
   const [invoiceForm, setInvoiceForm] = useState<InvoiceFormValue>({
     type: 'NORMAL',
     titleType: 'PERSONAL',
@@ -335,6 +338,27 @@ export const Booking: React.FC = () => {
       clearPaymentPoll();
     };
   }, []);
+
+  useEffect(() => {
+    if (step !== 'CONFIRM') {
+      return;
+    }
+
+    const loadInvoiceTemplates = async () => {
+      setLoadingInvoiceTemplates(true);
+      try {
+        const data = await fetchWithAuth('/api/invoices/templates?page=1&pageSize=200&isEnabled=true');
+        const items = Array.isArray(data?.items) ? data.items as InvoiceTemplate[] : [];
+        setInvoiceTemplates(items);
+      } catch (err) {
+        setInvoiceTemplates([]);
+      } finally {
+        setLoadingInvoiceTemplates(false);
+      }
+    };
+
+    loadInvoiceTemplates().catch(() => undefined);
+  }, [step]);
 
   const isBookablePlace = (item: PlaceSuggestion) => item.type === 0 && Boolean(item.chainId);
 
@@ -603,10 +627,15 @@ export const Booking: React.FC = () => {
           return;
         }
       }
+      if (invoiceEnabled && !selectedInvoiceTemplateId) {
+        setSearchError('已开启开发票，请先选择发票模板');
+        return;
+      }
       setIsLoading(true);
       setSearchError('');
       try {
         const totalAmount = selectedRate.price * getNightCount();
+        const selectedInvoiceTemplate = invoiceTemplates.find((it) => it.id === selectedInvoiceTemplateId) || null;
         const data = await fetchWithAuth('/api/orders', {
           method: 'POST',
           body: JSON.stringify({
@@ -643,7 +672,19 @@ export const Booking: React.FC = () => {
                 checkInDate: searchParams.checkIn,
                 checkOutDate: searchParams.checkOut
               }
-            ]
+            ],
+            invoicePreset: (invoiceEnabled && selectedInvoiceTemplate)
+              ? {
+                enabled: true,
+                templateId: selectedInvoiceTemplate.id,
+                invoiceId: selectedInvoiceTemplate.invoiceId,
+                invoiceType: selectedInvoiceTemplate.invoiceType,
+                invoiceTitleType: selectedInvoiceTemplate.invoiceTitleType,
+                invoiceName: selectedInvoiceTemplate.invoiceName,
+                taxNo: selectedInvoiceTemplate.taxNo || '',
+                email: selectedInvoiceTemplate.email || ''
+              }
+              : { enabled: false }
           })
         });
 
@@ -901,8 +942,25 @@ export const Booking: React.FC = () => {
               setInvoiceEnabled(false);
               return;
             }
-            setShowInvoiceSheet(true);
+            setInvoiceEnabled(true);
           }}
+          invoiceTemplates={invoiceTemplates}
+          selectedInvoiceTemplateId={selectedInvoiceTemplateId}
+          onSelectInvoiceTemplate={(templateId) => {
+            setSelectedInvoiceTemplateId(templateId);
+            const picked = invoiceTemplates.find((it) => it.id === templateId);
+            if (picked) {
+              setInvoiceForm((prev) => ({
+                ...prev,
+                type: Number(picked.invoiceType) === 14 ? 'VAT' : 'NORMAL',
+                titleType: Number(picked.invoiceTitleType) === 1 ? 'COMPANY' : 'PERSONAL',
+                title: picked.invoiceName || prev.title,
+                taxNo: picked.taxNo || '',
+                email: picked.email || ''
+              }));
+            }
+          }}
+          loadingInvoiceTemplates={loadingInvoiceTemplates}
           onBack={() => setStep('DETAIL')}
           onSubmitNow={() => submitBooking(true)}
           onSaveDraft={() => submitBooking(false)}

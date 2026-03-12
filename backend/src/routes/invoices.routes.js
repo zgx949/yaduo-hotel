@@ -203,7 +203,7 @@ invoicesRoutes.post("/batch-issue", requireAuth, async (req, res) => {
       results.push({ itemId, ok: false, message: "拆单缺少亚朵订单号，无法开票" });
       continue;
     }
-    if (item.invoice) {
+    if (item.invoice?.state === "ISSUED") {
       results.push({ itemId, ok: false, message: "该拆单已开票" });
       continue;
     }
@@ -222,31 +222,55 @@ invoicesRoutes.post("/batch-issue", requireAuth, async (req, res) => {
     }
 
     try {
-      await prismaStore.createInvoiceRecord({
-        orderItemId: item.id,
-        orderGroupId: order.id,
-        invoiceTemplateId: template.id,
-        invoiceId: template.invoiceId,
+      const issuePayload = {
         orderId: item.atourOrderId,
         chainId: order.chainId,
+        invoiceId: template.invoiceId,
         invoiceType: template.invoiceType,
         invoiceTitleType: template.invoiceTitleType,
         invoiceName: template.invoiceName,
-        taxNo: template.taxNo,
         email: encryptedEmail,
-        state: "PENDING",
-        submittedPayload: {
+        orderAmount: String(item.amount)
+      };
+
+      if (item.invoice) {
+        await prismaStore.updateInvoiceRecordByOrderItemId(item.id, {
+          invoiceTemplateId: template.id,
+          invoiceId: template.invoiceId,
           orderId: item.atourOrderId,
           chainId: order.chainId,
-          invoiceId: template.invoiceId,
           invoiceType: template.invoiceType,
           invoiceTitleType: template.invoiceTitleType,
           invoiceName: template.invoiceName,
+          taxNo: template.taxNo,
           email: encryptedEmail,
-          orderAmount: String(item.amount)
-        },
-        createdBy: req.auth.user.id
-      });
+          state: "PENDING",
+          stateDesc: "开票中",
+          submittedPayload: issuePayload,
+          responsePayload: null,
+          errorMessage: null,
+          issuedAt: null,
+          createdBy: req.auth.user.id
+        });
+      } else {
+        await prismaStore.createInvoiceRecord({
+          orderItemId: item.id,
+          orderGroupId: order.id,
+          invoiceTemplateId: template.id,
+          invoiceId: template.invoiceId,
+          orderId: item.atourOrderId,
+          chainId: order.chainId,
+          invoiceType: template.invoiceType,
+          invoiceTitleType: template.invoiceTitleType,
+          invoiceName: template.invoiceName,
+          taxNo: template.taxNo,
+          email: encryptedEmail,
+          state: "PENDING",
+          stateDesc: "开票中",
+          submittedPayload: issuePayload,
+          createdBy: req.auth.user.id
+        });
+      }
 
       const issueResult = await issueEinvoiceV2({
         token: tokenCtx.token,

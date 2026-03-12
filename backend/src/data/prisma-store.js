@@ -1355,9 +1355,22 @@ export const prismaStore = {
       where.items = {
         some: {
           status: "COMPLETED",
-          invoiceRecord: {
-            is: null
-          }
+          OR: [
+            {
+              invoiceRecord: {
+                is: null
+              }
+            },
+            {
+              invoiceRecord: {
+                is: {
+                  state: {
+                    not: "ISSUED"
+                  }
+                }
+              }
+            }
+          ]
         }
       };
     } else if (String(filters.invoiceStatus || "") === "ISSUED") {
@@ -1438,9 +1451,22 @@ export const prismaStore = {
       where.items = {
         some: {
           status: "COMPLETED",
-          invoiceRecord: {
-            is: null
-          }
+          OR: [
+            {
+              invoiceRecord: {
+                is: null
+              }
+            },
+            {
+              invoiceRecord: {
+                is: {
+                  state: {
+                    not: "ISSUED"
+                  }
+                }
+              }
+            }
+          ]
         }
       };
     } else if (String(filters.invoiceStatus || "") === "ISSUED") {
@@ -2368,7 +2394,7 @@ export const prismaStore = {
         category: "SCHEDULED",
         queueName: "scheduled-orders",
         enabled: true,
-        schedule: "*/30 * * * * *",
+        schedule: "*/1 * * * *",
         concurrency: 1,
         attempts: 1,
         backoffMs: 1000,
@@ -2917,12 +2943,22 @@ export const prismaStore = {
     const row = await prisma.invoiceRecord.update({
       where: { orderItemId: String(orderItemId) },
       data: {
+        invoiceTemplateId: hasOwn(patch, "invoiceTemplateId") ? String(patch.invoiceTemplateId || existed.invoiceTemplateId) : undefined,
+        invoiceId: hasOwn(patch, "invoiceId") ? Math.trunc(Number(patch.invoiceId) || existed.invoiceId) : undefined,
+        orderId: hasOwn(patch, "orderId") ? (patch.orderId ? String(patch.orderId) : null) : undefined,
+        chainId: hasOwn(patch, "chainId") ? String(patch.chainId || existed.chainId) : undefined,
+        invoiceType: hasOwn(patch, "invoiceType") ? Math.trunc(Number(patch.invoiceType) || existed.invoiceType) : undefined,
+        invoiceTitleType: hasOwn(patch, "invoiceTitleType") ? Math.trunc(Number(patch.invoiceTitleType) || existed.invoiceTitleType) : undefined,
+        invoiceName: hasOwn(patch, "invoiceName") ? String(patch.invoiceName || existed.invoiceName).trim() : undefined,
+        taxNo: hasOwn(patch, "taxNo") ? (patch.taxNo ? String(patch.taxNo).trim() : null) : undefined,
+        email: hasOwn(patch, "email") ? (patch.email ? String(patch.email).trim() : null) : undefined,
         state: hasOwn(patch, "state") ? String(patch.state || existed.state) : undefined,
         stateDesc: hasOwn(patch, "stateDesc") ? (patch.stateDesc ? String(patch.stateDesc) : null) : undefined,
         responsePayload: hasOwn(patch, "responsePayload") ? patch.responsePayload : undefined,
         submittedPayload: hasOwn(patch, "submittedPayload") ? patch.submittedPayload : undefined,
         errorMessage: hasOwn(patch, "errorMessage") ? (patch.errorMessage ? String(patch.errorMessage) : null) : undefined,
-        issuedAt: hasOwn(patch, "issuedAt") ? (patch.issuedAt ? new Date(patch.issuedAt) : null) : undefined
+        issuedAt: hasOwn(patch, "issuedAt") ? (patch.issuedAt ? new Date(patch.issuedAt) : null) : undefined,
+        createdBy: hasOwn(patch, "createdBy") ? (patch.createdBy ? String(patch.createdBy) : null) : undefined
       }
     });
     return row;

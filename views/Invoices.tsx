@@ -197,12 +197,14 @@ export const Invoices: React.FC = () => {
 
   const stateLabel = (state: string) => {
     if (state === 'ISSUED') return '已开票';
+    if (state === 'PRESET') return '已预设';
     if (state === 'FAILED') return '开票失败';
     return '开票中';
   };
 
   const stateClass = (state: string) => {
     if (state === 'ISSUED') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (state === 'PRESET') return 'bg-sky-50 text-sky-700 border-sky-200';
     if (state === 'FAILED') return 'bg-red-50 text-red-700 border-red-200';
     return 'bg-amber-50 text-amber-700 border-amber-200';
   };

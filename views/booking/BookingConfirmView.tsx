@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookingType, Hotel, RatePlan, Room } from '../../types';
+import { BookingType, Hotel, InvoiceTemplate, RatePlan, Room } from '../../types';
 import { VALUE_ADDED_SERVICES } from '../../constants';
 import { InvoiceFormValue } from '../../components/InvoiceFormSheet';
 
@@ -30,6 +30,10 @@ interface BookingConfirmViewProps {
   invoiceEnabled: boolean;
   invoiceForm: InvoiceFormValue;
   onToggleInvoice: () => void;
+  invoiceTemplates: InvoiceTemplate[];
+  selectedInvoiceTemplateId: string;
+  onSelectInvoiceTemplate: (templateId: string) => void;
+  loadingInvoiceTemplates: boolean;
   onBack: () => void;
   onSubmitNow: () => void;
   onSaveDraft: () => void;
@@ -52,6 +56,10 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
   invoiceEnabled,
   invoiceForm,
   onToggleInvoice,
+  invoiceTemplates,
+  selectedInvoiceTemplateId,
+  onSelectInvoiceTemplate,
+  loadingInvoiceTemplates,
   onBack,
   onSubmitNow,
   onSaveDraft,
@@ -223,6 +231,12 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
           </div>
           {invoiceEnabled && (
             <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs text-emerald-900 space-y-1">
+              <div>
+                <span className="text-emerald-700">模板：</span>
+                {selectedInvoiceTemplateId
+                  ? (invoiceTemplates.find((it) => it.id === selectedInvoiceTemplateId)?.invoiceName || '已选择模板')
+                  : '未选择'}
+              </div>
               <div>类型：{invoiceForm.type === 'VAT' ? '增值税专用发票（电子）' : '普通发票（电子）'}</div>
               <div>抬头类型：{invoiceForm.titleType === 'COMPANY' ? '企业单位' : '个人/非企业单位'}</div>
               <div>抬头：{invoiceForm.title || '未填写'}</div>
@@ -230,6 +244,26 @@ export const BookingConfirmView: React.FC<BookingConfirmViewProps> = ({
                 <div>税号：{invoiceForm.taxNo || '未填写（选填）'}</div>
               )}
               <div>邮箱：{invoiceForm.email || '未填写'}</div>
+            </div>
+          )}
+
+          {invoiceEnabled && (
+            <div className="space-y-2">
+              <label className="text-sm text-gray-600">发票模板</label>
+              <select
+                value={selectedInvoiceTemplateId}
+                onChange={(e) => onSelectInvoiceTemplate(e.target.value)}
+                disabled={loadingInvoiceTemplates}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+              >
+                <option value="">{loadingInvoiceTemplates ? '加载模板中...' : '请选择模板'}</option>
+                {invoiceTemplates.map((it) => (
+                  <option key={it.id} value={it.id}>
+                    {it.invoiceName} (ID: {it.invoiceId})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-500">这里只预设开票需求，实际开票会在离店后执行。</p>
             </div>
           )}
 

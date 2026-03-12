@@ -703,7 +703,7 @@ const resolveSelectedPoint = ({ accountPoints, orderAmount, calculateResult, req
   const base = requestedPoint !== undefined && requestedPoint !== null
     ? Math.max(0, Math.floor(Number(requestedPoint) || 0))
     : maxByAccount;
-  return Math.max(0, Math.min(base, maxByRule, maxByAmount, maxByAccount, maxByCalculate));
+  return (Math.max(0, Math.min(base, maxByRule, maxByAmount, maxByAccount, maxByCalculate))/100)*100;
 };
 
 const buildAddOrderPayloadFromItem = async ({
@@ -737,7 +737,7 @@ const buildAddOrderPayloadFromItem = async ({
     activeId: "",
     repeatToken: String(calculateResult.repeatToken || ""),
 
-    appVer: String(env.atourAppVersion),
+    appVer: "4.8.1",
     deviceId: String(env.atourClientId),
     channelId: String(env.atourChannelId),
     platType: String(env.atourPlatformType),
@@ -756,7 +756,7 @@ const buildAddOrderPayloadFromItem = async ({
     remark: itemRemark,
     mergeInvoice: "",
     rateCode: calculatePayload.rateCode,
-    rateCodePriceType: String(calculateResult.rateCodePriceType || calculatePayload.rateCodePriceType || "2"),
+    rateCodePriceType: String(calculatePayload.rateCodePriceType || "2"),
     roomCount: calculatePayload.roomCount,
     recipientsMobile: "",
     start: calculatePayload.start,
@@ -764,8 +764,8 @@ const buildAddOrderPayloadFromItem = async ({
     customerNeedList: [],
     expectArrivalTime: "",
     getType: "0",
-    accommodationType: String(calculateResult.accommodationType || calculatePayload.accommodationType || "40,39,41,42"),
-    accommodationCount: String(calculateResult.accommodationCount || calculatePayload.accommodationCount || "2,0,0,0"),
+    accommodationType: String(calculatePayload.accommodationType || "40,39,41,42"),
+    accommodationCount: String(calculatePayload.accommodationCount || "0,0,0,0"),
     rpActivityId: calculatePayload.rpActivityId,
     checkInPersons: customerName || "",
     isPointPayAppChannel: "1",

@@ -6,7 +6,15 @@ import { getInternalRequestContext } from "./internal-resource.service.js";
 const mapAtourOrderDetailToPatch = (detail = {}, currentItem = null) => {
   const orderState = Number(detail?.orderState);
   const payState = Number(detail?.payState);
-  const feeAmount = Number(detail?.feeDetail?.newTotal || detail?.roomRate || 0);
+  const amountCandidates = [
+    detail?.roomRate,
+    detail?.feeDetail?.newTotal,
+    detail?.feeDetail?.depositValue,
+    detail?.feeDetail?.oldTotal
+  ];
+  const feeAmount = amountCandidates
+    .map((it) => Number(it))
+    .find((it) => Number.isFinite(it) && it > 0) || 0;
 
   const patch = {};
   if (feeAmount > 0) {

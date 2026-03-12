@@ -198,7 +198,7 @@ systemRoutes.patch("/tasks/modules/:moduleId", requireAuth, requireRole("ADMIN")
   if (!updated) {
     return res.status(404).json({ message: "task module not found" });
   }
-  await taskPlatform.syncModules();
+  await taskPlatform.syncModulesSafe();
   return res.json(updated);
 });
 

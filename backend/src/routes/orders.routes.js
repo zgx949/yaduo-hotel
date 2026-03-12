@@ -513,6 +513,18 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
   }
 
   const submitNow = requestPayload.submitNow !== false;
+  const invoicePresetInput = requestPayload.invoicePreset && typeof requestPayload.invoicePreset === "object"
+    ? requestPayload.invoicePreset
+    : null;
+  const invoicePresetEnabled = Boolean(invoicePresetInput?.enabled) && Boolean(String(invoicePresetInput?.templateId || "").trim());
+  let invoicePresetTemplate = null;
+  if (invoicePresetEnabled) {
+    invoicePresetTemplate = await prismaStore.getInvoiceTemplateById(String(invoicePresetInput.templateId));
+    if (!invoicePresetTemplate || !invoicePresetTemplate.isEnabled) {
+      return res.status(400).json({ message: "invoice preset template not found or disabled" });
+    }
+  }
+
   const payloadWithReservations = submitNow
     ? await reserveNewUserAccounts(requestPayload)
     : requestPayload;
@@ -521,6 +533,38 @@ ordersRoutes.post("/", requireAuth, async (req, res) => {
   let tasks = [];
   try {
     order = await prismaStore.createOrder(payloadWithReservations, req.auth.user);
+
+    if (invoicePresetTemplate) {
+      const presetPayloadBase = {
+        invoiceTemplateId: invoicePresetTemplate.id,
+        invoiceId: invoicePresetTemplate.invoiceId,
+        chainId: order.chainId,
+        invoiceType: invoicePresetTemplate.invoiceType,
+        invoiceTitleType: invoicePresetTemplate.invoiceTitleType,
+        invoiceName: invoicePresetTemplate.invoiceName,
+        taxNo: invoicePresetTemplate.taxNo,
+        email: invoicePresetTemplate.email,
+        state: "PRESET",
+        stateDesc: "已预设开票需求，离店后可发起开票",
+        createdBy: req.auth.user.id
+      };
+
+      for (const item of order.items) {
+        await prismaStore.createInvoiceRecord({
+          ...presetPayloadBase,
+          orderItemId: item.id,
+          orderGroupId: order.id,
+          orderId: item.atourOrderId || null,
+          submittedPayload: {
+            source: "booking-preset",
+            templateId: invoicePresetTemplate.id,
+            invoiceId: invoicePresetTemplate.invoiceId
+          }
+        });
+      }
+      order = await prismaStore.getOrder(order.id);
+    }
+
     for (const item of order.items.filter((it) => it.executionStatus === "QUEUED").sort((a, b) => a.splitIndex - b.splitIndex)) {
       const task = await enqueueOrderItemTask(item);
       tasks.push(task);
