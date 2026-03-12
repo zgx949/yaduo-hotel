@@ -24,6 +24,10 @@ export const parseBookingTier = (rawTier) => {
     };
   }
 
+  if (["PREPAIDNEW", "PREPAIDSILV"].includes(normalizedHead)) {
+    return { tier: "NEW_USER", corporateName: null, channelKey: "NEW_USER" };
+  }
+
   if (["NEW_USER", "PLATINUM", "NORMAL"].includes(normalizedHead)) {
     return { tier: normalizedHead, corporateName: null, channelKey: normalizedHead };
   }

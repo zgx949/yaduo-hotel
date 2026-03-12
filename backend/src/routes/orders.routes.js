@@ -210,77 +210,47 @@ const reserveNewUserAccounts = async (payload = {}) => {
   };
 };
 
-const reserveNewUserAccountsForItems = async (items = []) => {
-  const targets = (Array.isArray(items) ? items : [])
-    .filter((it) => parseBookingTier(it?.bookingTier || "NORMAL").tier === "NEW_USER");
-
-  if (targets.length === 0) {
-    return { assignments: [] };
-  }
-
-  const credentials = await prismaStore.listPoolAccountCredentials({
-    is_enabled: true,
-    is_online: true,
-    tier: "NEW_USER",
-    minDailyOrdersLeft: 1,
-    candidateLimit: Math.max(50, Math.min(2000, targets.length * 12))
-  });
-  const candidates = credentials
-    .filter((it) => it?.token && it?.account?.is_new_user && (Number(it?.account?.dailyOrdersLeft) || 0) >= 1)
-    .sort((a, b) => (Number(b.account.dailyOrdersLeft) || 0) - (Number(a.account.dailyOrdersLeft) || 0));
-
-  const used = new Set();
+const assignSubmitAccountsForItems = async (items = []) => {
+  const targets = (Array.isArray(items) ? items : []).filter((it) => it && it.status !== "CANCELLED");
   const assignments = [];
+
   for (const item of targets) {
-    const nights = Math.max(1, calcNights(item.checkInDate, item.checkOutDate));
-    const need = couponNeedFromItem(item);
+    const channel = parseBookingTier(item.bookingTier || "NORMAL");
     const needSilver = isSilverRequiredNewUserRate(item);
-    let selected = null;
-    if (item.accountId) {
-      selected = candidates.find((it) =>
-        it.account.id === item.accountId &&
-        !used.has(it.account.id) &&
-        (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
-        hasCouponCapacity(it.account, need) &&
-        (!needSilver || isSilverVipGrade(it.account.vip_grade))
-      ) || null;
-    }
-    if (!selected) {
-      const selectable = candidates.filter((it) =>
-        !used.has(it.account.id) &&
-        (Number(it.account.dailyOrdersLeft) || 0) >= nights &&
-        hasCouponCapacity(it.account, need) &&
-        (!needSilver || isSilverVipGrade(it.account.vip_grade))
-      );
-      const nonSilver = selectable.filter((it) => !isSilverVipGrade(it.account.vip_grade));
-      selected = needSilver
-        ? (selectable[0] || null)
-        : ((nonSilver[0] || selectable[0]) || null);
-    }
-    if (!selected) {
+    const nights = Math.max(1, calcNights(item.checkInDate, item.checkOutDate));
+    const minCouponWallet = couponNeedFromItem(item);
+    const ctx = await getInternalRequestContext({
+      tier: channel.tier,
+      corporateName: channel.corporateName,
+      preferredAccountId: item.accountId || undefined,
+      minDailyOrdersLeft: nights,
+      minCouponWallet,
+      candidateLimit: 120,
+      requiredSilverNewUser: needSilver,
+      preferNonSilverNewUser: channel.tier === "NEW_USER" && !needSilver,
+      allowEnvFallback: false
+    });
+
+    if (!ctx.tokenAccountId) {
       throw new Error(needSilver
         ? "新客账号不足：该房型要求银会员新客号（PREPAIDSILV），当前无可用银卡新客账号"
-        : "新客账号不足：无法完成账号分配（券库存或可下间夜不足）");
+        : `账号不足：${channel.channelKey} 渠道暂无满足条件的可用账号`);
     }
-    used.add(selected.account.id);
+
+    if (item.accountId !== ctx.tokenAccountId || (ctx.tokenAccountPhone && item.accountPhone !== ctx.tokenAccountPhone)) {
+      await prismaStore.updateOrderItem(item.id, {
+        accountId: ctx.tokenAccountId,
+        accountPhone: ctx.tokenAccountPhone || item.accountPhone || null
+      });
+    }
+
     assignments.push({
       itemId: item.id,
-      accountId: selected.account.id,
-      accountPhone: selected.account.phone
+      accountId: ctx.tokenAccountId,
+      accountPhone: ctx.tokenAccountPhone || null,
+      channel: channel.channelKey
     });
   }
-
-  const accountIds = assignments.map((it) => it.accountId);
-  const check = await prismaStore.checkPoolAccountsAvailability(accountIds);
-  if (!check.ok) {
-    throw new Error(`新客账号不足：需要 ${check.total} 个可用账号，当前仅 ${check.available} 个`);
-  }
-  await Promise.all(assignments.map((it) =>
-    prismaStore.updateOrderItem(it.itemId, {
-      accountId: it.accountId,
-      accountPhone: it.accountPhone
-    })
-  ));
 
   return { assignments };
 };
@@ -859,9 +829,9 @@ ordersRoutes.post("/:id/submit", requireAuth, async (req, res) => {
     (it) => it.status !== "CANCELLED" && ["PLAN_PENDING", "FAILED"].includes(it.executionStatus)
   );
   try {
-    await reserveNewUserAccountsForItems(pendingForSubmit);
+    await assignSubmitAccountsForItems(pendingForSubmit);
   } catch (err) {
-    return res.status(409).json({ message: err?.message || "新客账号预检失败" });
+    return res.status(409).json({ message: err?.message || "账号预检失败" });
   }
 
   const result = await prismaStore.submitOrder(order.id);
@@ -972,13 +942,10 @@ ordersRoutes.post("/items/:itemId/confirm-submit", requireAuth, async (req, res)
     return res.json({ item, task: null });
   }
 
-  const tier = parseBookingTier(item.bookingTier || "NORMAL");
-  if (tier.tier === "NEW_USER") {
-    try {
-      await reserveNewUserAccountsForItems([item]);
-    } catch (err) {
-      return res.status(409).json({ message: err?.message || "新客账号预检失败" });
-    }
+  try {
+    await assignSubmitAccountsForItems([item]);
+  } catch (err) {
+    return res.status(409).json({ message: err?.message || "账号预检失败" });
   }
 
   const submitted = await prismaStore.submitOrderItem(item.id);

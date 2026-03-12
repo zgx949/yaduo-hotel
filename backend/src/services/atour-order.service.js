@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { prismaStore } from "../data/prisma-store.js";
 import { parseBookingTier } from "./booking-channel.service.js";
+import { getInternalRequestContext } from "./internal-resource.service.js";
 import { runCouponScanTask } from "./atour-maintenance.service.js";
 import { fetchWithProxy } from "./proxied-fetch.service.js";
 
@@ -34,6 +35,68 @@ const isSilverRequiredNewUserRate = (item = {}) => {
   }
   const rateCode = String(item?.rateCode || "").trim().toUpperCase();
   return rateCode === "PREPAIDSILV";
+};
+
+const calcNights = (checkInDate, checkOutDate) => {
+  const start = new Date(String(checkInDate)).getTime();
+  const end = new Date(String(checkOutDate)).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return 1;
+  }
+  return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
+};
+
+const resolveBoundSubmitAccount = async ({ order, item }) => {
+  const bookingChannel = parseBookingTier(item?.bookingTier || undefined);
+  const nights = calcNights(item?.checkInDate, item?.checkOutDate);
+  const needSilverNewUser = isSilverRequiredNewUserRate(item);
+  const minCouponWallet = {
+    breakfast: Math.max(0, Number(item?.breakfastCount) || 0),
+    upgrade: Math.max(0, Number(item?.roomLevelUpCount) || 0),
+    lateCheckout: Math.max(0, Number(item?.delayedCheckOutCount) || 0),
+    slippers: Math.max(0, Number(item?.shooseCount) || 0)
+  };
+
+  const ctx = await getInternalRequestContext({
+    tier: bookingChannel.tier,
+    corporateName: bookingChannel.corporateName,
+    preferredAccountId: item?.accountId || undefined,
+    minDailyOrdersLeft: Math.max(1, nights),
+    minCouponWallet,
+    candidateLimit: 120,
+    requiredSilverNewUser: needSilverNewUser,
+    preferNonSilverNewUser: bookingChannel.tier === "NEW_USER" && !needSilverNewUser,
+    allowEnvFallback: false
+  });
+
+  if (!ctx.tokenAccountId) {
+    throw new Error(needSilverNewUser
+      ? "余额不足：该房型需银会员新客号（PREPAIDSILV），当前无可用银卡新客账号"
+      : "余额不足：该渠道暂无满足条件的可用账号");
+  }
+  if (!ctx.proxy) {
+    throw new Error("暂无可用代理节点");
+  }
+
+  const credential = await prismaStore.getPoolAccountCredential(ctx.tokenAccountId);
+  const boundToken = String(credential?.token || "").trim();
+  if (!boundToken) {
+    throw new Error("选中的下单账号token缺失，无法提交");
+  }
+
+  if (item.accountId !== ctx.tokenAccountId || (credential?.account?.phone && item.accountPhone !== credential.account.phone)) {
+    await prismaStore.updateOrderItem(item.id, {
+      accountId: ctx.tokenAccountId,
+      accountPhone: credential?.account?.phone || item.accountPhone || null
+    });
+  }
+
+  return {
+    accountId: ctx.tokenAccountId,
+    accountPhone: credential?.account?.phone || item.accountPhone || null,
+    token: boundToken,
+    proxy: ctx.proxy
+  };
 };
 
 const buildAtourQuery = (token) => {
@@ -916,27 +979,16 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     customerPhone: order.contactPhone
   });
 
-  if (!item.accountId) {
-    throw new Error("拆单未绑定下单账号，无法提交到亚朵");
-  }
-
-  const credential = await prismaStore.getPoolAccountCredential(item.accountId);
-  const boundToken = String(credential?.token || "").trim();
-  if (!boundToken) {
-    throw new Error("拆单绑定账号token缺失，无法提交到亚朵");
-  }
-
-  const proxy = await prismaStore.acquireProxyNode();
-  if (!proxy) {
-    throw new Error("暂无可用代理节点");
-  }
+  const binding = await resolveBoundSubmitAccount({ order, item });
+  const boundToken = binding.token;
+  const proxy = binding.proxy;
 
   const bookingChannel = parseBookingTier(item.bookingTier || undefined);
-  const accountInfo = await prismaStore.getPoolAccount(item.accountId).catch(() => null);
+  const accountInfo = await prismaStore.getPoolAccount(binding.accountId).catch(() => null);
   const accountPoints = Math.max(0, Number(accountInfo?.points) || 0);
 
   await runCouponScanTask({
-    payload: { accountId: item.accountId, chainId: order.chainId },
+    payload: { accountId: binding.accountId, chainId: order.chainId },
     proxy
   }).catch(() => undefined);
 
@@ -956,7 +1008,7 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
       ...calculatePayload,
       createPayload: {
         customerName: order.customerName,
-        customerPhone: credential?.account?.phone || item.accountPhone || order.contactPhone,
+        customerPhone: binding.accountPhone || order.contactPhone,
         accountPoints,
         orderItem: {
           remark: item.remark || order.remark || "",
@@ -971,21 +1023,21 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
 
   await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
     atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
-    accountId: item.accountId,
-    accountPhone: credential?.account?.phone || item.accountPhone || null,
+    accountId: binding.accountId,
+    accountPhone: binding.accountPhone,
     status: "CONFIRMED",
     executionStatus: "ORDERED"
   });
   await prismaStore.refreshOrderStatus(item.groupId);
 
   await runCouponScanTask({
-    payload: { accountId: item.accountId, chainId: order.chainId },
+    payload: { accountId: binding.accountId, chainId: order.chainId },
     proxy
   }).catch(() => undefined);
 
   return {
     tokenSource: "bound-account",
-    tokenAccountId: item.accountId,
+    tokenAccountId: binding.accountId,
     proxyId: proxy?.id || null,
     ...workflow
   };
