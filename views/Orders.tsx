@@ -760,6 +760,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                       <div className="font-semibold text-gray-900">{order.hotelName}</div>
                       <div className="text-sm text-gray-600">
                         <div>入住人: {order.customerName} </div>
+                        <div>手机号: {order.contactPhone || '-'}</div>
                         <div>入: {order.checkInDate}</div>
                         <div>离:{order.checkOutDate}(<span className="text-red-700">{order.totalNights}晚</span>)</div>
                       </div>
