@@ -9,6 +9,8 @@ import { orderPaymentStatusScanTask } from "./order-payment-status-scan.task.js"
 import { orderPaymentLinkTask } from "./order-payment-link.task.js";
 import { orderStayStatusScanTask } from "./order-stay-status-scan.task.js";
 import { orderSubmitTask } from "./order-submit.task.js";
+import { otaPriceInventoryPushTask } from "./ota-price-inventory-push.task.js";
+import { otaOrderAutoSubmitTask } from "./ota-order-auto-submit.task.js";
 
 export const builtinTaskModules = {
   "order.submit": orderSubmitTask,
@@ -21,5 +23,7 @@ export const builtinTaskModules = {
   "account.daily-lottery": accountDailyLotteryTask,
   "account.points-scan": accountPointsScanTask,
   "account.coupon-scan": accountCouponScanTask,
-  "account.new-user-eligibility": accountNewUserEligibilityTask
+  "account.new-user-eligibility": accountNewUserEligibilityTask,
+  "ota.price-inventory-push": otaPriceInventoryPushTask,
+  "ota.order-auto-submit": otaOrderAutoSubmitTask
 };

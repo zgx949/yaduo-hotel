@@ -9,6 +9,7 @@ import { blacklistRoutes } from "./blacklist.routes.js";
 import { hotelsRoutes } from "./hotels.routes.js";
 import { systemRoutes } from "./system.routes.js";
 import { invoicesRoutes } from "./invoices.routes.js";
+import { otaRoutes } from "./ota.routes.js";
 
 export const apiRoutes = Router();
 
@@ -22,3 +23,4 @@ apiRoutes.use("/blacklist", blacklistRoutes);
 apiRoutes.use("/hotels", hotelsRoutes);
 apiRoutes.use("/system", systemRoutes);
 apiRoutes.use("/invoices", invoicesRoutes);
+apiRoutes.use("/ota", otaRoutes);

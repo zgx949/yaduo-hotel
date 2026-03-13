@@ -293,7 +293,7 @@ class TaskPlatform {
     }
   }
 
-  async enqueueModule(moduleId, payload = {}, meta = {}) {
+  async enqueueModule(moduleId, payload = {}, meta = {}, options = {}) {
     if (!this.enabled || !this.connection) {
       throw new Error("Task platform is disabled");
     }
@@ -313,11 +313,12 @@ class TaskPlatform {
     if (!queue) {
       throw new Error(`queue not found: ${queueName}`);
     }
+    const providedJobId = String(options?.jobId || "").trim();
     const job = await queue.add(
       moduleId,
       { payload, meta },
       {
-        jobId: `${moduleId}.${randomUUID()}`,
+        jobId: providedJobId || `${moduleId}.${randomUUID()}`,
         attempts: moduleConfig.attempts,
         backoff: { type: "fixed", delay: moduleConfig.backoffMs },
         removeOnComplete: false,

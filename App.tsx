@@ -15,6 +15,7 @@ import { UserManagement } from './views/UserManagement';
 import { SystemSettings } from './views/SystemSettings';
 import { CryptoLab } from './views/CryptoLab';
 import { PaymentBridge } from './views/PaymentBridge';
+import { OtaPlatform } from './views/OtaPlatform';
 import { SystemUser, UserPermissions } from './types';
 
 interface Tab {
@@ -195,7 +196,7 @@ const App: React.FC = () => {
       return;
     }
 
-    if (userRole === 'USER' && (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings')) {
+    if (userRole === 'USER' && (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings' || id === 'ota-platform')) {
         return; // Block access
     }
 
@@ -238,7 +239,7 @@ const App: React.FC = () => {
   const renderComponent = (id: string) => {
     // Role Guard for rendering
     if (userRole === 'USER') {
-        if (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings') {
+        if (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings' || id === 'ota-platform') {
             return <div className="p-10 text-center text-gray-500">无权访问此页面</div>;
         }
     }
@@ -260,6 +261,7 @@ const App: React.FC = () => {
       case 'blacklist': return <Blacklist currentUser={currentUser} />;
       case 'settings': return <SystemSettings />;
       case 'crypto-lab': return <CryptoLab />;
+      case 'ota-platform': return <OtaPlatform />;
       default: return <div className="p-10">页面不存在</div>;
     }
   };

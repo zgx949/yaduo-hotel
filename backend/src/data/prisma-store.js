@@ -2509,6 +2509,30 @@ export const prismaStore = {
         attempts: 1,
         backoffMs: 1000,
         useProxy: true
+      },
+      {
+        moduleId: "ota.price-inventory-push",
+        name: "OTA房态房价推送",
+        category: "SCHEDULED",
+        queueName: "scheduled-ota",
+        enabled: false,
+        schedule: "*/5 * * * *",
+        concurrency: 1,
+        attempts: 3,
+        backoffMs: 3000,
+        useProxy: false
+      },
+      {
+        moduleId: "ota.order-auto-submit",
+        name: "OTA订单自动下单",
+        category: "REALTIME",
+        queueName: "realtime-ota",
+        enabled: false,
+        schedule: null,
+        concurrency: 1,
+        attempts: 2,
+        backoffMs: 2000,
+        useProxy: false
       }
     ];
 

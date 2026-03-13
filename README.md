@@ -175,9 +175,10 @@ REDIS_PORT=6379
 REDIS_PASSWORD=
 REDIS_DB=0
 TASK_POLL_INTERVAL_MS=5000
+OTA_WEBHOOK_SECRET=
 ```
 
-说明：优先使用 `REDIS_URL`，未配置时使用 host/port 组合。
+说明：优先使用 `REDIS_URL`，未配置时使用 host/port 组合。`OTA_WEBHOOK_SECRET` 用于验签 OTA 回调，不配置时 webhook 接口会拒绝请求。
 
 当前版本已默认使用 PostgreSQL。部署时只需要正确配置 `DATABASE_URL`，然后执行：
 
@@ -232,6 +233,25 @@ TASK_POLL_INTERVAL_MS=5000
 - `POST /api/system/tasks/queues/:queueName/pause`（ADMIN）
 - `POST /api/system/tasks/queues/:queueName/resume`（ADMIN）
 - `GET /api/system/tasks/queues/:queueName/jobs`（ADMIN）
+- `GET /api/ota/platforms`
+- `POST /api/ota/hotels/sync`（ADMIN）
+- `GET /api/ota/hotels`
+- `POST /api/ota/mappings/hotels`（ADMIN）
+- `GET /api/ota/mappings/hotels`
+- `POST /api/ota/mappings/rooms`（ADMIN）
+- `GET /api/ota/mappings/rooms`
+- `POST /api/ota/mappings/channels`（ADMIN）
+- `GET /api/ota/mappings/channels`
+- `POST /api/ota/calendar`（ADMIN）
+- `GET /api/ota/calendar`
+- `POST /api/ota/push/rate-inventory`（ADMIN）
+- `POST /api/ota/webhooks/:platform/orders`
+- `GET /api/ota/orders/inbound`
+- `GET /api/ota/orders/bindings`
+- `POST /api/ota/orders/:externalOrderId/template`（ADMIN）
+- `POST /api/ota/orders/:externalOrderId/auto-submit`（ADMIN）
+- `POST /api/ota/orders/:externalOrderId/manual-payment-confirm`（ADMIN）
+- `GET /api/ota/sync-logs`（ADMIN）
 
 说明：`/api/health/crypto` 与 `/api/health/crypto/test` 仅在 `NODE_ENV=development` 时注册；生产环境会自动关闭（路由不存在）。
 

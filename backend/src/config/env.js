@@ -57,5 +57,6 @@ export const env = {
   redisPort: toNumber(process.env.REDIS_PORT, 6379),
   redisPassword: process.env.REDIS_PASSWORD || "",
   redisDb: toNumber(process.env.REDIS_DB, 0),
-  taskPollIntervalMs: toNumber(process.env.TASK_POLL_INTERVAL_MS, 5000)
+  taskPollIntervalMs: toNumber(process.env.TASK_POLL_INTERVAL_MS, 5000),
+  otaWebhookSecret: process.env.OTA_WEBHOOK_SECRET || ""
 };
