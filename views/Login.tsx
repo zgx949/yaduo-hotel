@@ -50,22 +50,22 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegister }) => {
     }
   };
 
-  const quickLogin = async (name: string) => {
-    setUsername(name);
-    setPassword('123456');
-    setError('');
-    setIsLoading(true);
-    try {
-      const err = await onLogin(name, '123456');
-      setIsLoading(false);
-      if (err) {
-        setError(err);
-      }
-    } catch (err: any) {
-      setIsLoading(false);
-      setError(err.message || '登录失败，请稍后重试');
-    }
-  };
+  // const quickLogin = async (name: string) => {
+  //   setUsername(name);
+  //   setPassword('123456');
+  //   setError('');
+  //   setIsLoading(true);
+  //   try {
+  //     const err = await onLogin(name, '123456');
+  //     setIsLoading(false);
+  //     if (err) {
+  //       setError(err);
+  //     }
+  //   } catch (err: any) {
+  //     setIsLoading(false);
+  //     setError(err.message || '登录失败，请稍后重试');
+  //   }
+  // };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 relative overflow-hidden">
@@ -208,39 +208,39 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegister }) => {
             </button>
         </form>
 
-        {mode === 'login' && (
-          <>
-            <div className="flex items-center gap-3 mb-6">
-                <div className="h-px bg-slate-700 flex-1"></div>
-                <span className="text-xs text-slate-500">测试环境快捷通道</span>
-                <div className="h-px bg-slate-700 flex-1"></div>
-            </div>
+        {/*{mode === 'login' && (*/}
+        {/*  <>*/}
+        {/*    <div className="flex items-center gap-3 mb-6">*/}
+        {/*        <div className="h-px bg-slate-700 flex-1"></div>*/}
+        {/*        <span className="text-xs text-slate-500">测试环境快捷通道</span>*/}
+        {/*        <div className="h-px bg-slate-700 flex-1"></div>*/}
+        {/*    </div>*/}
 
-            <div className="grid grid-cols-2 gap-3">
-            <button 
-                type="button"
-                onClick={() => quickLogin('admin')}
-                className="group relative flex flex-col items-center justify-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500/50 rounded-xl transition-all active:scale-95"
-            >
-                <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center mb-2 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                    👨‍💻
-                </div>
-                <span className="text-slate-200 font-medium text-xs">管理员 (Admin)</span>
-            </button>
+        {/*    <div className="grid grid-cols-2 gap-3">*/}
+        {/*    <button */}
+        {/*        type="button"*/}
+        {/*        onClick={() => quickLogin('admin')}*/}
+        {/*        className="group relative flex flex-col items-center justify-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500/50 rounded-xl transition-all active:scale-95"*/}
+        {/*    >*/}
+        {/*        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center mb-2 group-hover:bg-blue-600 group-hover:text-white transition-colors">*/}
+        {/*            👨‍💻*/}
+        {/*        </div>*/}
+        {/*        <span className="text-slate-200 font-medium text-xs">管理员 (Admin)</span>*/}
+        {/*    </button>*/}
 
-            <button 
-                type="button"
-                onClick={() => quickLogin('demo')}
-                className="group relative flex flex-col items-center justify-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500/50 rounded-xl transition-all active:scale-95"
-            >
-                <div className="w-8 h-8 rounded-full bg-purple-900/50 text-purple-400 flex items-center justify-center mb-2 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                    👤
-                </div>
-                <span className="text-slate-200 font-medium text-xs">普通用户 (User)</span>
-            </button>
-            </div>
-          </>
-        )}
+        {/*    <button */}
+        {/*        type="button"*/}
+        {/*        onClick={() => quickLogin('demo')}*/}
+        {/*        className="group relative flex flex-col items-center justify-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500/50 rounded-xl transition-all active:scale-95"*/}
+        {/*    >*/}
+        {/*        <div className="w-8 h-8 rounded-full bg-purple-900/50 text-purple-400 flex items-center justify-center mb-2 group-hover:bg-purple-600 group-hover:text-white transition-colors">*/}
+        {/*            👤*/}
+        {/*        </div>*/}
+        {/*        <span className="text-slate-200 font-medium text-xs">普通用户 (User)</span>*/}
+        {/*    </button>*/}
+        {/*    </div>*/}
+        {/*  </>*/}
+        {/*)}*/}
           
         <div className="mt-8 text-center">
              <p className="text-[10px] text-slate-600">
