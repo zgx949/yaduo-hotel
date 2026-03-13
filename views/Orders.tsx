@@ -513,6 +513,18 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     setSelectedItemIds((prev) => Array.from(new Set([...prev, ...allVisibleSelectableItemIds])));
   };
 
+  const resetAllFilters = () => {
+    setSearch('');
+    setDebouncedSearch('');
+    setStatusFilter('ALL');
+    setInvoiceFilter('ALL');
+    setCheckInFrom('');
+    setCheckInTo('');
+    setCreatorScope('ALL');
+    setCreatorIdFilter('');
+    setPage(1);
+  };
+
   const isOrderAllSelected = (order: OrderGroup) => {
     const ids = (order.items || []).filter(canSelectForInvoice).map((it) => it.id);
     return ids.length > 0 && ids.every((id) => selectedItemIds.includes(id));
@@ -725,9 +737,18 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
               ))}
             </select>
           )}
-          <div className="text-sm text-gray-500 flex items-center justify-end md:col-span-6">
-            共 {meta.total} 个主订单
-            <span className="ml-2">| 已选 {selectedItems.length}/{allVisibleSelectableItemIds.length}</span>
+          <div className="text-sm text-gray-500 flex items-center justify-between md:col-span-6 gap-2">
+            <div>
+              共 {meta.total} 个主订单
+              <span className="ml-2">| 已选 {selectedItems.length}/{allVisibleSelectableItemIds.length}</span>
+            </div>
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="px-3 py-1.5 rounded border border-gray-200 bg-white text-xs text-gray-700 hover:bg-gray-50"
+            >
+              清空所有条件
+            </button>
           </div>
         </div>
       </Card>
