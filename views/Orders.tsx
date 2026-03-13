@@ -748,229 +748,240 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
           orders.map((order) => {
             const expanded = expandedId === order.id;
             return (
-              <Card key={order.id} className="p-0 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setExpandedId((prev) => prev === order.id ? null : order.id)}
-                  className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="text-xs text-gray-400">主订单号: {order.bizOrderNo}</div>
-                      <div className="font-semibold text-gray-900">{order.hotelName}</div>
-                      <div className="text-sm text-gray-600">
-                        <div>入住人: {order.customerName} </div>
-                        <div>手机号: {order.contactPhone || '-'}</div>
-                        <div>入: {order.checkInDate}</div>
-                        <div>离:{order.checkOutDate}(<span className="text-red-700">{order.totalNights}晚</span>)</div>
+                <Card key={order.id} className="p-0 overflow-hidden">
+                  <button
+                      type="button"
+                      onClick={() => setExpandedId((prev) => prev === order.id ? null : order.id)}
+                      className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="text-xs text-gray-400">主订单号: {order.bizOrderNo}</div>
+                        <div className="font-semibold text-gray-900">{order.hotelName}</div>
+                        <div className="text-sm text-gray-600">
+                          <div>入住人: {order.customerName} </div>
+                          <div>手机号: {order.contactPhone || '-'}</div>
+                          <div>入: {order.checkInDate}</div>
+                          <div>离:{order.checkOutDate}(<span className="text-red-700">{order.totalNights}晚</span>)
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <label
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-700"
+                        >
+                          <input
+                              type="checkbox"
+                              checked={isOrderAllSelected(order)}
+                              ref={(node) => {
+                                if (node) {
+                                  node.indeterminate = isOrderPartiallySelected(order);
+                                }
+                              }}
+                              onChange={() => toggleOrderSelection(order)}
+                          />
+                          本组全选
+                        </label>
+                        <span
+                            className={`px-2 py-1 rounded border text-xs ${statusClass(order.status)}`}>{statusText(order.status)}</span>
+                        <span
+                            className={`px-2 py-1 rounded border text-xs ${statusClass(order.paymentStatus)}`}>{statusText(order.paymentStatus)}</span>
+                        {/*<span className="px-2 py-1 rounded border text-xs bg-blue-50 text-blue-700 border-blue-200">拆单 {order.splitCount} 条</span>*/}
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              refreshOrder(order.id);
+                            }}
+                            disabled={refreshingOrderId === order.id}
+                            className="px-2 py-1 rounded border border-indigo-200 text-xs bg-indigo-50 text-indigo-700 disabled:opacity-50"
+                        >
+                          {refreshingOrderId === order.id ? '刷新中...' : '一键刷新状态'}
+                        </button>
+                        {canSubmitOrder(order) && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  submitOrder(order.id);
+                                }}
+                                disabled={submittingOrderId === order.id}
+                                className="px-2 py-1 rounded border border-emerald-200 text-xs bg-emerald-50 text-emerald-700 disabled:opacity-50"
+                            >
+                              {submittingOrderId === order.id ? '下单中...' : '一键下单'}
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestCancelOrder(order.id);
+                            }}
+                            disabled={cancellingOrderId === order.id}
+                            className="px-2 py-1 rounded border border-red-200 text-xs bg-red-50 text-red-700 disabled:opacity-50"
+                        >
+                          {cancellingOrderId === order.id ? '取消中...' : '一键取消'}
+                        </button>
+                        {canSoftDeleteOrder(order) && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  softDeleteOrder(order.id);
+                                }}
+                                disabled={deletingOrderId === order.id}
+                                className="px-2 py-1 rounded border border-slate-200 text-xs bg-slate-50 text-slate-700 disabled:opacity-50"
+                            >
+                              {deletingOrderId === order.id ? '隐藏中...' : '删除(隐藏)'}
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              jumpToBlacklistAdd(order.chainId, order.hotelName);
+                            }}
+                            className="px-2 py-1 rounded border border-red-200 text-xs bg-red-50 text-red-700"
+                        >
+                          拉黑酒店
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <label
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 bg-white text-xs text-gray-700"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isOrderAllSelected(order)}
-                          ref={(node) => {
-                            if (node) {
-                              node.indeterminate = isOrderPartiallySelected(order);
-                            }
-                          }}
-                          onChange={() => toggleOrderSelection(order)}
-                        />
-                        本组全选
-                      </label>
-                      <span className={`px-2 py-1 rounded border text-xs ${statusClass(order.status)}`}>{statusText(order.status)}</span>
-                      <span className={`px-2 py-1 rounded border text-xs ${statusClass(order.paymentStatus)}`}>{statusText(order.paymentStatus)}</span>
-                      <span className="px-2 py-1 rounded border text-xs bg-blue-50 text-blue-700 border-blue-200">拆单 {order.splitCount} 条</span>
-                      <span className="font-semibold text-gray-900">{order.currency} {order.totalAmount}</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          refreshOrder(order.id);
-                        }}
-                        disabled={refreshingOrderId === order.id}
-                        className="px-2 py-1 rounded border border-indigo-200 text-xs bg-indigo-50 text-indigo-700 disabled:opacity-50"
-                      >
-                        {refreshingOrderId === order.id ? '刷新中...' : '一键刷新状态'}
-                      </button>
-                      {canSubmitOrder(order) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            submitOrder(order.id);
-                          }}
-                          disabled={submittingOrderId === order.id}
-                          className="px-2 py-1 rounded border border-emerald-200 text-xs bg-emerald-50 text-emerald-700 disabled:opacity-50"
-                        >
-                          {submittingOrderId === order.id ? '下单中...' : '一键下单'}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestCancelOrder(order.id);
-                        }}
-                        disabled={cancellingOrderId === order.id}
-                        className="px-2 py-1 rounded border border-red-200 text-xs bg-red-50 text-red-700 disabled:opacity-50"
-                      >
-                        {cancellingOrderId === order.id ? '取消中...' : '一键取消'}
-                      </button>
-                      {canSoftDeleteOrder(order) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            softDeleteOrder(order.id);
-                          }}
-                          disabled={deletingOrderId === order.id}
-                          className="px-2 py-1 rounded border border-slate-200 text-xs bg-slate-50 text-slate-700 disabled:opacity-50"
-                        >
-                          {deletingOrderId === order.id ? '隐藏中...' : '删除(隐藏)'}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          jumpToBlacklistAdd(order.chainId, order.hotelName);
-                        }}
-                        className="px-2 py-1 rounded border border-red-200 text-xs bg-red-50 text-red-700"
-                      >
-                        拉黑酒店
-                      </button>
-                    </div>
-                  </div>
-                </button>
+                    <span className="font-semibold text-gray-900">{order.currency} {order.totalAmount}</span>
 
-                {expanded && (
-                  <div className="border-t border-gray-100 p-4 bg-gray-50 space-y-3">
-                    <div className="text-xs text-gray-500">
-                      下单员: {order.creatorName} | 创建时间: {new Date(order.createdAt).toLocaleString()} {order.remark ? `| 备注: ${order.remark}` : ''}
-                    </div>
+                  </button>
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm bg-white rounded-lg overflow-hidden border border-gray-100">
-                        <thead className="bg-gray-100 text-gray-600">
-                          <tr>
-                            <th className="px-3 py-2 text-left">勾选</th>
-                            <th className="px-3 py-2 text-left">拆单</th>
-                            <th className="px-3 py-2 text-left">渠道</th>
-                            <th className="px-3 py-2 text-left">入住离店</th>
-                            <th className="px-3 py-2 text-left">亚朵单号</th>
-                            <th className="px-3 py-2 text-left">账号</th>
-                            <th className="px-3 py-2 text-left">金额</th>
-                            <th className="px-3 py-2 text-left">礼遇券</th>
-                            <th className="px-3 py-2 text-left">备注</th>
-                            <th className="px-3 py-2 text-left">执行状态</th>
-                            <th className="px-3 py-2 text-left">支付状态</th>
-                            <th className="px-3 py-2 text-left">开票状态</th>
-                            <th className="px-3 py-2 text-right">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {order.items.map((item) => (
-                            <tr key={item.id} className="border-t border-gray-100">
-                              <td className="px-3 py-2">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedItemIds.includes(item.id)}
-                                  onChange={() => toggleItemSelected(item)}
-                                  disabled={!canSelectForInvoice(item)}
-                                  className="w-4 h-4"
-                                />
-                              </td>
-                              <td className="px-3 py-2">#{item.splitIndex}/{item.splitTotal} {item.roomType} x{item.roomCount}</td>
-                              <td className="px-3 py-2 text-xs">
+                  {expanded && (
+                      <div className="border-t border-gray-100 p-4 bg-gray-50 space-y-3">
+                        <div className="text-xs text-gray-500">
+                          下单员: {order.creatorName} |
+                          创建时间: {new Date(order.createdAt).toLocaleString()} {order.remark ? `| 备注: ${order.remark}` : ''}
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm bg-white rounded-lg overflow-hidden border border-gray-100">
+                            <thead className="bg-gray-100 text-gray-600">
+                            <tr>
+                              <th className="px-3 py-2 text-left">勾选</th>
+                              <th className="px-3 py-2 text-left">拆单</th>
+                              <th className="px-3 py-2 text-left">渠道</th>
+                              <th className="px-3 py-2 text-left">入住离店</th>
+                              <th className="px-3 py-2 text-left">亚朵单号</th>
+                              <th className="px-3 py-2 text-left">账号</th>
+                              <th className="px-3 py-2 text-left">金额</th>
+                              <th className="px-3 py-2 text-left">礼遇券</th>
+                              <th className="px-3 py-2 text-left">备注</th>
+                              <th className="px-3 py-2 text-left">执行状态</th>
+                              <th className="px-3 py-2 text-left">支付状态</th>
+                              <th className="px-3 py-2 text-left">开票状态</th>
+                              <th className="px-3 py-2 text-right">操作</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {order.items.map((item) => (
+                                <tr key={item.id} className="border-t border-gray-100">
+                                  <td className="px-3 py-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedItemIds.includes(item.id)}
+                                        onChange={() => toggleItemSelected(item)}
+                                        disabled={!canSelectForInvoice(item)}
+                                        className="w-4 h-4"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">#{item.splitIndex}/{item.splitTotal} {item.roomType} x{item.roomCount}</td>
+                                  <td className="px-3 py-2 text-xs">
                                 <span className="px-2 py-1 rounded border border-sky-200 bg-sky-50 text-sky-700">
                                   {bookingTierText(item.bookingTier)}
                                 </span>
-                              </td>
-                              <td className="px-3 py-2 text-xs text-gray-600">{item.checkInDate} ~ {item.checkOutDate}</td>
-                              <td className="px-3 py-2 font-mono text-xs">{item.atourOrderId || '-'}</td>
-                              <td className="px-3 py-2">{item.accountPhone || '-'}</td>
-                              <td className="px-3 py-2">{order.currency} {item.amount}</td>
-                              <td className="px-3 py-2 text-xs text-gray-600">
-                                {[
-                                  item.breakfastCount > 0 ? `早${item.breakfastCount}` : '',
-                                  item.roomLevelUpCount > 0 ? `升${item.roomLevelUpCount}` : '',
-                                  item.delayedCheckOutCount > 0 ? `延${item.delayedCheckOutCount}` : '',
-                                  item.shooseCount > 0 ? `鞋${item.shooseCount}` : ''
-                                ].filter(Boolean).join(' / ') || '-'}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-gray-600 max-w-[180px] truncate">{item.remark || order.remark || '-'}</td>
-                              <td className="px-3 py-2">
-                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-xs ${statusClass(item.executionStatus)}`}>
-                                  {isRotatingExecution(item.executionStatus) && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-gray-600">{item.checkInDate} ~ {item.checkOutDate}</td>
+                                  <td className="px-3 py-2 font-mono text-xs">{item.atourOrderId || '-'}</td>
+                                  <td className="px-3 py-2">{item.accountPhone || '-'}</td>
+                                  <td className="px-3 py-2">{order.currency} {item.amount}</td>
+                                  <td className="px-3 py-2 text-xs text-gray-600">
+                                    {[
+                                      item.breakfastCount > 0 ? `早${item.breakfastCount}` : '',
+                                      item.roomLevelUpCount > 0 ? `升${item.roomLevelUpCount}` : '',
+                                      item.delayedCheckOutCount > 0 ? `延${item.delayedCheckOutCount}` : '',
+                                      item.shooseCount > 0 ? `鞋${item.shooseCount}` : ''
+                                    ].filter(Boolean).join(' / ') || '-'}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-gray-600 max-w-[180px] truncate">{item.remark || order.remark || '-'}</td>
+                                  <td className="px-3 py-2">
+                                <span
+                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-xs ${statusClass(item.executionStatus)}`}>
+                                  {isRotatingExecution(item.executionStatus) && <span
+                                      className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"/>}
                                   {executionText(item.executionStatus)}
                                 </span>
-                              </td>
-                              <td className="px-3 py-2"><span className={`px-2 py-1 rounded border text-xs ${statusClass(item.paymentStatus)}`}>{statusText(item.paymentStatus)}</span></td>
-                              <td className="px-3 py-2">
-                                {item.invoice ? (
-                                  <span className={`px-2 py-1 rounded border text-xs ${item.invoice.state === 'ISSUED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : item.invoice.state === 'FAILED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                  </td>
+                                  <td className="px-3 py-2"><span
+                                      className={`px-2 py-1 rounded border text-xs ${statusClass(item.paymentStatus)}`}>{statusText(item.paymentStatus)}</span>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {item.invoice ? (
+                                        <span
+                                            className={`px-2 py-1 rounded border text-xs ${item.invoice.state === 'ISSUED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : item.invoice.state === 'FAILED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                     {item.invoice.state === 'ISSUED' ? '已开票' : item.invoice.state === 'FAILED' ? '开票失败' : '开票中'}
                                   </span>
-                                ) : (
-                                  <span className={`px-2 py-1 rounded border text-xs ${item.status === 'COMPLETED' ? 'bg-gray-50 text-gray-700 border-gray-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                                    ) : (
+                                        <span
+                                            className={`px-2 py-1 rounded border text-xs ${item.status === 'COMPLETED' ? 'bg-gray-50 text-gray-700 border-gray-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
                                     {item.status === 'COMPLETED' ? '可开票' : '未离店'}
                                   </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <div className="flex gap-2 justify-end flex-wrap">
-                                  <button
-                                    disabled={updatingItemId === item.id}
-                                    onClick={() => refreshSplit(item.id)}
-                                    className="px-2 py-1 text-xs rounded border border-indigo-200 text-indigo-700 bg-indigo-50 disabled:opacity-50"
-                                  >
-                                    刷新状态
-                                  </button>
-                                  {item.executionStatus === 'PLAN_PENDING' && (
-                                    <button
-                                      disabled={updatingItemId === item.id}
-                                      onClick={() => confirmSubmitItem(item)}
-                                      className="px-2 py-1 text-xs rounded border border-emerald-200 text-emerald-700 bg-emerald-50 disabled:opacity-50"
-                                    >
-                                      确认下单
-                                    </button>
-                                  )}
-                                  <button
-                                    disabled={updatingItemId === item.id || openingPaymentItemId === item.id || (item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE')}
-                                    onClick={() => openPaymentLink(item)}
-                                    className="px-2 py-1 text-xs rounded border border-blue-200 text-blue-700 bg-blue-50 disabled:opacity-50"
-                                  >
-                                    {openingPaymentItemId === item.id ? '生成中...' : '支付链接'}
-                                  </button>
-                                  <button
-                                    disabled={item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE'}
-                                    onClick={() => openDetailIframe(item)}
-                                    className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-700 bg-white disabled:opacity-40"
-                                  >
-                                    官方详情
-                                  </button>
-                                  <button
-                                    disabled={updatingItemId === item.id}
-                                    onClick={() => requestCancelItem(order.id, item)}
-                                    className="px-2 py-1 text-xs rounded border border-red-200 text-red-700 bg-red-50 disabled:opacity-50"
-                                  >
-                                    取消
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </Card>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-right">
+                                    <div className="flex gap-2 justify-end flex-wrap">
+                                      <button
+                                          disabled={updatingItemId === item.id}
+                                          onClick={() => refreshSplit(item.id)}
+                                          className="px-2 py-1 text-xs rounded border border-indigo-200 text-indigo-700 bg-indigo-50 disabled:opacity-50"
+                                      >
+                                        刷新状态
+                                      </button>
+                                      {item.executionStatus === 'PLAN_PENDING' && (
+                                          <button
+                                              disabled={updatingItemId === item.id}
+                                              onClick={() => confirmSubmitItem(item)}
+                                              className="px-2 py-1 text-xs rounded border border-emerald-200 text-emerald-700 bg-emerald-50 disabled:opacity-50"
+                                          >
+                                            确认下单
+                                          </button>
+                                      )}
+                                      <button
+                                          disabled={updatingItemId === item.id || openingPaymentItemId === item.id || (item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE')}
+                                          onClick={() => openPaymentLink(item)}
+                                          className="px-2 py-1 text-xs rounded border border-blue-200 text-blue-700 bg-blue-50 disabled:opacity-50"
+                                      >
+                                        {openingPaymentItemId === item.id ? '生成中...' : '支付链接'}
+                                      </button>
+                                      <button
+                                          disabled={item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE'}
+                                          onClick={() => openDetailIframe(item)}
+                                          className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-700 bg-white disabled:opacity-40"
+                                      >
+                                        官方详情
+                                      </button>
+                                      <button
+                                          disabled={updatingItemId === item.id}
+                                          onClick={() => requestCancelItem(order.id, item)}
+                                          className="px-2 py-1 text-xs rounded border border-red-200 text-red-700 bg-red-50 disabled:opacity-50"
+                                      >
+                                        取消
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                  )}
+                </Card>
             );
           })
         )}
