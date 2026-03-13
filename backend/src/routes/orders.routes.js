@@ -23,6 +23,7 @@ import {
 export const ordersRoutes = Router();
 
 const PAYMENT_READY_STATES = new Set(["ORDERED", "DONE"]);
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 const toDateOnly = (value) => new Date(value).toISOString().slice(0, 10);
 
@@ -443,6 +444,28 @@ const cancelSingleOrderItem = async (orderItem, options = {}) => {
 };
 
 ordersRoutes.get("/", requireAuth, async (req, res) => {
+  const isAdmin = req.auth.user.role === "ADMIN";
+  const creatorScope = String(req.query.creatorScope || "ALL").toUpperCase();
+  const includeDeleted = isAdmin && String(req.query.includeDeleted || "").toLowerCase() === "true";
+  const requestedStatus = String(req.query.status || "").toUpperCase();
+  let creatorId = undefined;
+
+  if (!isAdmin) {
+    creatorId = req.auth.user.id;
+  } else if (creatorScope === "SELF") {
+    creatorId = req.auth.user.id;
+  } else if (creatorScope === "USER") {
+    const queryCreatorId = String(req.query.creatorId || "").trim();
+    if (!queryCreatorId) {
+      return res.status(400).json({ message: "creatorId is required when creatorScope=USER" });
+    }
+    creatorId = queryCreatorId;
+  }
+
+  if (requestedStatus === "DELETED" && !includeDeleted) {
+    return res.status(400).json({ message: "status=DELETED requires includeDeleted=true" });
+  }
+
   const filters = {
     search: req.query.search,
     status: req.query.status,
@@ -451,7 +474,8 @@ ordersRoutes.get("/", requireAuth, async (req, res) => {
     checkInTo: req.query.checkInTo,
     page: req.query.page,
     pageSize: req.query.pageSize,
-    creatorId: req.auth.user.role === "ADMIN" ? undefined : req.auth.user.id
+    creatorId,
+    includeDeleted
   };
   const result = await prismaStore.listOrdersPage(filters);
   return res.json({ items: result.items, data: result.items, meta: result.meta });
@@ -799,8 +823,42 @@ ordersRoutes.patch("/:id", requireAuth, async (req, res) => {
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const updated = await prismaStore.updateOrder(req.params.id, req.body || {});
+  const incoming = req.body || {};
+  if (String(incoming.status || "").toUpperCase() === "DELETED") {
+    return res.status(409).json({ message: "Use DELETE /api/orders/:id to hide order" });
+  }
+
+  const patch = req.auth.user.role === "ADMIN"
+    ? {
+      ...(hasOwn(incoming, "status") ? { status: incoming.status } : {}),
+      ...(hasOwn(incoming, "paymentStatus") ? { paymentStatus: incoming.paymentStatus } : {}),
+      ...(hasOwn(incoming, "remark") ? { remark: incoming.remark } : {}),
+      ...(hasOwn(incoming, "totalAmount") ? { totalAmount: incoming.totalAmount } : {})
+    }
+    : {
+      ...(hasOwn(incoming, "remark") ? { remark: incoming.remark } : {})
+    };
+
+  const updated = await prismaStore.updateOrder(req.params.id, patch);
   return res.json(updated);
+});
+
+ordersRoutes.delete("/:id", requireAuth, async (req, res) => {
+  const order = await prismaStore.getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+  if (req.auth.user.role !== "ADMIN" && order.creatorId !== req.auth.user.id) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const currentStatus = String(order.status || "");
+  if (!["FAILED", "CANCELLED", "DELETED"].includes(currentStatus)) {
+    return res.status(409).json({ message: "Only FAILED or CANCELLED orders can be hidden" });
+  }
+
+  const deleted = await prismaStore.softDeleteOrder(order.id);
+  return res.json({ ok: true, order: deleted });
 });
 
 ordersRoutes.post("/:id/refresh-status", requireAuth, async (req, res) => {
@@ -894,7 +952,30 @@ ordersRoutes.patch("/items/:itemId", requireAuth, async (req, res) => {
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const updated = await prismaStore.updateOrderItem(req.params.itemId, req.body || {});
+  if (req.auth.user.role !== "ADMIN") {
+    return res.status(403).json({ message: "Only ADMIN can patch order items" });
+  }
+
+  const incoming = req.body || {};
+  const patch = {
+    ...(hasOwn(incoming, "bookingTier") ? { bookingTier: incoming.bookingTier } : {}),
+    ...(hasOwn(incoming, "roomTypeId") ? { roomTypeId: incoming.roomTypeId } : {}),
+    ...(hasOwn(incoming, "rateCode") ? { rateCode: incoming.rateCode } : {}),
+    ...(hasOwn(incoming, "rateCodeId") ? { rateCodeId: incoming.rateCodeId } : {}),
+    ...(hasOwn(incoming, "rpActivityId") ? { rpActivityId: incoming.rpActivityId } : {}),
+    ...(hasOwn(incoming, "rateCodePriceType") ? { rateCodePriceType: incoming.rateCodePriceType } : {}),
+    ...(hasOwn(incoming, "rateCodeActivities") ? { rateCodeActivities: incoming.rateCodeActivities } : {}),
+    ...(hasOwn(incoming, "remark") ? { remark: incoming.remark } : {}),
+    ...(hasOwn(incoming, "breakfastCount") ? { breakfastCount: incoming.breakfastCount } : {}),
+    ...(hasOwn(incoming, "roomLevelUpCount") ? { roomLevelUpCount: incoming.roomLevelUpCount } : {}),
+    ...(hasOwn(incoming, "delayedCheckOutCount") ? { delayedCheckOutCount: incoming.delayedCheckOutCount } : {}),
+    ...(hasOwn(incoming, "shooseCount") ? { shooseCount: incoming.shooseCount } : {}),
+    ...(hasOwn(incoming, "accountId") ? { accountId: incoming.accountId } : {}),
+    ...(hasOwn(incoming, "accountPhone") ? { accountPhone: incoming.accountPhone } : {}),
+    ...(hasOwn(incoming, "amount") ? { amount: incoming.amount } : {})
+  };
+
+  const updated = await prismaStore.updateOrderItem(req.params.itemId, patch);
   await prismaStore.refreshOrderStatus(updated.groupId);
   return res.json(updated);
 });

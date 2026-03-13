@@ -1337,11 +1337,14 @@ export const prismaStore = {
   },
   async listOrders(filters = {}) {
     const where = {};
+    const includeDeleted = String(filters.includeDeleted || "").toLowerCase() === "true";
     if (filters.creatorId) {
       where.creatorId = filters.creatorId;
     }
     if (filters.status) {
       where.status = String(filters.status);
+    } else if (!includeDeleted) {
+      where.status = { not: "DELETED" };
     }
     if (filters.search) {
       const keyword = String(filters.search);
@@ -1421,11 +1424,14 @@ export const prismaStore = {
   },
   async listOrdersPage(filters = {}) {
     const where = {};
+    const includeDeleted = String(filters.includeDeleted || "").toLowerCase() === "true";
     if (filters.creatorId) {
       where.creatorId = filters.creatorId;
     }
     if (filters.status) {
       where.status = String(filters.status);
+    } else if (!includeDeleted) {
+      where.status = { not: "DELETED" };
     }
     if (filters.search) {
       const keyword = String(filters.search);
@@ -1582,6 +1588,23 @@ export const prismaStore = {
         paymentStatus: patch.paymentStatus ? String(patch.paymentStatus) : undefined,
         remark: hasOwn(patch, "remark") ? (patch.remark ? String(patch.remark) : null) : undefined,
         totalAmount: hasOwn(patch, "totalAmount") ? Number(patch.totalAmount) || 0 : undefined
+      }
+    });
+    return this.getOrder(id);
+  },
+  async softDeleteOrder(id) {
+    const existed = await prisma.orderGroup.findUnique({ where: { id } });
+    if (!existed) {
+      return null;
+    }
+    if (String(existed.status || "") === "DELETED") {
+      return this.getOrder(id);
+    }
+
+    await prisma.orderGroup.update({
+      where: { id },
+      data: {
+        status: "DELETED"
       }
     });
     return this.getOrder(id);
@@ -1760,6 +1783,9 @@ export const prismaStore = {
     });
     if (!group) {
       return null;
+    }
+    if (String(group.status || "") === "DELETED") {
+      return this.getOrder(orderGroupId);
     }
     const next = aggregateOrderStatuses(group.items);
     await prisma.orderGroup.update({

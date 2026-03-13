@@ -12,6 +12,12 @@ interface CancelConfirmState {
   item?: OrderSplitItem;
 }
 
+interface OrderCreatorOption {
+  id: string;
+  name: string;
+  username: string;
+}
+
 const TOKEN_KEY = 'skyhotel_auth_token';
 const ORDERS_LIST_STATE_KEY = 'skyagent_orders_list_state_v1';
 
@@ -25,6 +31,8 @@ const loadOrdersListState = () => {
       invoiceFilter: typeof parsed.invoiceFilter === 'string' ? parsed.invoiceFilter : 'ALL',
       checkInFrom: typeof parsed.checkInFrom === 'string' ? parsed.checkInFrom : '',
       checkInTo: typeof parsed.checkInTo === 'string' ? parsed.checkInTo : '',
+      creatorScope: typeof parsed.creatorScope === 'string' ? parsed.creatorScope : 'ALL',
+      creatorIdFilter: typeof parsed.creatorIdFilter === 'string' ? parsed.creatorIdFilter : '',
       page: Math.max(1, Number(parsed.page) || 1),
       pageSize: Math.max(1, Number(parsed.pageSize) || 20)
     };
@@ -35,6 +43,8 @@ const loadOrdersListState = () => {
       invoiceFilter: 'ALL',
       checkInFrom: '',
       checkInTo: '',
+      creatorScope: 'ALL',
+      creatorIdFilter: '',
       page: 1,
       pageSize: 20
     };
@@ -53,7 +63,8 @@ const statusText = (status: string) => {
     UNPAID: '未支付',
     PAID: '已支付',
     PARTIAL: '部分支付',
-    REFUNDED: '已退款'
+    REFUNDED: '已退款',
+    DELETED: '已隐藏'
   };
   return dict[status] || status;
 };
@@ -84,6 +95,8 @@ const isRotatingExecution = (status: string) => status === 'QUEUED' || status ==
 const canSubmitOrder = (order: OrderGroup) =>
   (order.items || []).some((it) => it.executionStatus === 'PLAN_PENDING' || it.executionStatus === 'FAILED');
 
+const canSoftDeleteOrder = (order: OrderGroup) => order.status === 'FAILED' || order.status === 'CANCELLED';
+
 export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const savedState = loadOrdersListState();
   const [orders, setOrders] = useState<OrderGroup[]>([]);
@@ -96,6 +109,9 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const [invoiceFilter, setInvoiceFilter] = useState(savedState.invoiceFilter || 'ALL');
   const [checkInFrom, setCheckInFrom] = useState(savedState.checkInFrom);
   const [checkInTo, setCheckInTo] = useState(savedState.checkInTo);
+  const [creatorScope, setCreatorScope] = useState(savedState.creatorScope || 'ALL');
+  const [creatorIdFilter, setCreatorIdFilter] = useState(savedState.creatorIdFilter || '');
+  const [creatorOptions, setCreatorOptions] = useState<OrderCreatorOption[]>([]);
   const [page, setPage] = useState(savedState.page);
   const [pageSize, setPageSize] = useState(savedState.pageSize);
   const [meta, setMeta] = useState({ total: 0, page: 1, pageSize: 20, totalPages: 1, hasMore: false });
@@ -103,6 +119,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   const [refreshingOrderId, setRefreshingOrderId] = useState('');
   const [submittingOrderId, setSubmittingOrderId] = useState('');
   const [cancellingOrderId, setCancellingOrderId] = useState('');
+  const [deletingOrderId, setDeletingOrderId] = useState('');
   const [iframeUrl, setIframeUrl] = useState('');
   const [notice, setNotice] = useState('');
   const [cancelConfirm, setCancelConfirm] = useState<CancelConfirmState | null>(null);
@@ -143,6 +160,11 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     setError('');
     setNotice('');
     try {
+      if (currentUser?.role === 'ADMIN' && creatorScope === 'USER' && !creatorIdFilter) {
+        setOrders([]);
+        setMeta({ total: 0, page: 1, pageSize, totalPages: 1, hasMore: false });
+        return;
+      }
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
@@ -160,6 +182,13 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
       }
       if (checkInTo) {
         params.set('checkInTo', checkInTo);
+      }
+      if (currentUser?.role === 'ADMIN') {
+        const normalizedScope = creatorScope === 'SELF' || creatorScope === 'USER' ? creatorScope : 'ALL';
+        params.set('creatorScope', normalizedScope);
+        if (normalizedScope === 'USER' && creatorIdFilter) {
+          params.set('creatorId', creatorIdFilter);
+        }
       }
 
       const data = await fetchWithAuth(`/api/orders?${params.toString()}`);
@@ -213,9 +242,39 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     }
   };
 
+  const loadCreatorOptions = async () => {
+    if (currentUser?.role !== 'ADMIN') {
+      setCreatorOptions([]);
+      return;
+    }
+    const data = await fetchWithAuth('/api/users');
+    const users = Array.isArray(data.items) ? data.items : [];
+    setCreatorOptions(users.map((it: any) => ({
+      id: String(it.id),
+      name: String(it.name || it.username || it.id),
+      username: String(it.username || it.id)
+    })));
+  };
+
   useEffect(() => {
     loadOrders();
-  }, [page, pageSize, debouncedSearch, statusFilter, invoiceFilter, checkInFrom, checkInTo]);
+  }, [page, pageSize, debouncedSearch, statusFilter, invoiceFilter, checkInFrom, checkInTo, creatorScope, creatorIdFilter, currentUser?.role]);
+
+  useEffect(() => {
+    loadCreatorOptions().catch(() => undefined);
+  }, [currentUser?.role]);
+
+  useEffect(() => {
+    if (currentUser?.role !== 'ADMIN') {
+      return;
+    }
+    if (creatorScope === 'USER' && creatorIdFilter) {
+      return;
+    }
+    if (creatorScope === 'SELF' || creatorScope === 'ALL') {
+      setPage(1);
+    }
+  }, [creatorScope, creatorIdFilter, currentUser?.role]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -232,10 +291,12 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
       invoiceFilter,
       checkInFrom,
       checkInTo,
+      creatorScope,
+      creatorIdFilter,
       page,
       pageSize
     }));
-  }, [search, statusFilter, invoiceFilter, checkInFrom, checkInTo, page, pageSize]);
+  }, [search, statusFilter, invoiceFilter, checkInFrom, checkInTo, creatorScope, creatorIdFilter, page, pageSize]);
 
   const updateSplitItem = async (item: OrderSplitItem, patch: Record<string, unknown>) => {
     setUpdatingItemId(item.id);
@@ -376,6 +437,21 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
 
   const requestCancelOrder = (orderId: string) => {
     setCancelConfirm({ mode: 'order', orderId });
+  };
+
+  const softDeleteOrder = async (orderId: string) => {
+    setDeletingOrderId(orderId);
+    setError('');
+    setNotice('');
+    try {
+      await fetchWithAuth(`/api/orders/${orderId}`, { method: 'DELETE' });
+      setNotice('订单已隐藏（软删除）');
+      await loadOrders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除订单失败');
+    } finally {
+      setDeletingOrderId('');
+    }
   };
 
   const handleConfirmCancel = async () => {
@@ -601,7 +677,40 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
             }}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
           />
-          <div className="text-sm text-gray-500 flex items-center justify-end md:col-span-2">
+          {currentUser?.role === 'ADMIN' && (
+            <select
+              value={creatorScope}
+              onChange={(e) => {
+                const next = e.target.value;
+                setCreatorScope(next);
+                if (next !== 'USER') {
+                  setCreatorIdFilter('');
+                }
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+            >
+              <option value="ALL">下单人：全部</option>
+              <option value="SELF">下单人：我自己</option>
+              <option value="USER">下单人：指定用户</option>
+            </select>
+          )}
+          {currentUser?.role === 'ADMIN' && creatorScope === 'USER' && (
+            <select
+              value={creatorIdFilter}
+              onChange={(e) => {
+                setCreatorIdFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+            >
+              <option value="">请选择下单用户</option>
+              {creatorOptions.map((user) => (
+                <option key={user.id} value={user.id}>{user.name} ({user.username})</option>
+              ))}
+            </select>
+          )}
+          <div className="text-sm text-gray-500 flex items-center justify-end md:col-span-6">
             共 {meta.total} 个主订单
             <span className="ml-2">| 已选 {selectedItems.length}/{allVisibleSelectableItemIds.length}</span>
           </div>
@@ -694,6 +803,19 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                       >
                         {cancellingOrderId === order.id ? '取消中...' : '一键取消'}
                       </button>
+                      {canSoftDeleteOrder(order) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            softDeleteOrder(order.id);
+                          }}
+                          disabled={deletingOrderId === order.id}
+                          className="px-2 py-1 rounded border border-slate-200 text-xs bg-slate-50 text-slate-700 disabled:opacity-50"
+                        >
+                          {deletingOrderId === order.id ? '隐藏中...' : '删除(隐藏)'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
