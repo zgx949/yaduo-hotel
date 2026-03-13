@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '../components/ui/Card';
 import { InvoiceTemplate, OrderGroup, OrderSplitItem, SystemUser } from '../types';
 
@@ -81,6 +82,20 @@ const executionText = (status: string) => {
     CANCELLED: '已取消'
   };
   return dict[status] || status;
+};
+
+const bookingTierText = (tier?: string | null) => {
+  const normalized = String(tier || '').toUpperCase();
+  const dict: Record<string, string> = {
+    NEW_USER: '新客',
+    PLATINUM: '铂金',
+    CO_PLATINUM: '联名铂金',
+    CORPORATE: '企业协议',
+    DIAMOND: '钻石',
+    GOLD: '金卡',
+    NORMAL: '普通'
+  };
+  return dict[normalized] || (tier ? String(tier) : '未记录');
 };
 
 const statusClass = (status: string) => {
@@ -592,7 +607,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
   };
 
   return (
-    <div className="h-full flex flex-col gap-4">
+    <div className="h-full flex flex-col gap-4 relative">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">订单中心</h2>
@@ -744,7 +759,9 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                       <div className="text-xs text-gray-400">主订单号: {order.bizOrderNo}</div>
                       <div className="font-semibold text-gray-900">{order.hotelName}</div>
                       <div className="text-sm text-gray-600">
-                        入住人: {order.customerName} | 入离: {order.checkInDate} - {order.checkOutDate} ({order.totalNights}晚)
+                        <div>入住人: {order.customerName} </div>
+                        <div>入: {order.checkInDate}</div>
+                        <div>离:{order.checkOutDate}(<span className="text-red-700">{order.totalNights}晚</span>)</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -842,6 +859,7 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                           <tr>
                             <th className="px-3 py-2 text-left">勾选</th>
                             <th className="px-3 py-2 text-left">拆单</th>
+                            <th className="px-3 py-2 text-left">渠道</th>
                             <th className="px-3 py-2 text-left">入住离店</th>
                             <th className="px-3 py-2 text-left">亚朵单号</th>
                             <th className="px-3 py-2 text-left">账号</th>
@@ -867,6 +885,11 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
                                 />
                               </td>
                               <td className="px-3 py-2">#{item.splitIndex}/{item.splitTotal} {item.roomType} x{item.roomCount}</td>
+                              <td className="px-3 py-2 text-xs">
+                                <span className="px-2 py-1 rounded border border-sky-200 bg-sky-50 text-sky-700">
+                                  {bookingTierText(item.bookingTier)}
+                                </span>
+                              </td>
                               <td className="px-3 py-2 text-xs text-gray-600">{item.checkInDate} ~ {item.checkOutDate}</td>
                               <td className="px-3 py-2 font-mono text-xs">{item.atourOrderId || '-'}</td>
                               <td className="px-3 py-2">{item.accountPhone || '-'}</td>
@@ -980,9 +1003,9 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
         </div>
       </Card>
 
-      {iframeUrl && (
-        <div className="fixed inset-0 z-50 bg-black/60 p-3 sm:p-4 flex items-center justify-center">
-          <div className="w-full max-w-[min(1280px,calc(100vw-1.5rem))] h-[min(88vh,900px)] max-h-[calc(100vh-1.5rem)] bg-white rounded-xl overflow-hidden flex flex-col shadow-2xl">
+      {iframeUrl && createPortal(
+        <div className="fixed inset-0 z-[120] bg-black/60 p-3 sm:p-4 md:p-6 flex items-center justify-center">
+          <div className="w-full max-w-[460px] h-[min(92vh,980px)] bg-white rounded-xl overflow-hidden flex flex-col shadow-2xl">
             <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
               <div className="text-sm font-medium text-gray-700">官方订单详情</div>
               <button
@@ -994,7 +1017,8 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
             </div>
             <iframe title="官方订单详情" src={iframeUrl} className="w-full flex-1 min-h-0" />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {invoiceDialogOpen && (

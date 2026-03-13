@@ -1281,7 +1281,7 @@ export const prismaStore = {
             checkInDate: it.checkInDate ? new Date(it.checkInDate) : checkInDate,
             checkOutDate: it.checkOutDate ? new Date(it.checkOutDate) : checkOutDate,
             atourOrderId: it.atourOrderId ? String(it.atourOrderId) : null,
-            bookingTier: it.bookingTier ? String(it.bookingTier) : null,
+            bookingTier: String(it.bookingTier || payload.bookingTier || "NORMAL"),
             roomTypeId: it.roomTypeId ? String(it.roomTypeId) : null,
             rateCode: it.rateCode ? String(it.rateCode) : null,
             rateCodeId: it.rateCodeId ? String(it.rateCodeId) : (it.rpActivityId ? String(it.rpActivityId) : null),
