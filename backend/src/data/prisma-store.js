@@ -2528,7 +2528,7 @@ export const prismaStore = {
         category: "SCHEDULED",
         queueName: "scheduled-ota",
         enabled: true,
-        schedule: "15 */1 * * *",
+        schedule: "*/30 * * * *",
         concurrency: 1,
         attempts: 2,
         backoffMs: 3000,
@@ -2549,11 +2549,22 @@ export const prismaStore = {
     ];
 
     for (const module of defaults) {
-      await prisma.taskModuleConfig.upsert({
+      const row = await prisma.taskModuleConfig.upsert({
         where: { moduleId: module.moduleId },
         update: {},
         create: module
       });
+      if (
+        module.moduleId === "ota.rack-rate-sync"
+        && String(row.schedule || "").trim() === "15 */1 * * *"
+      ) {
+        await prisma.taskModuleConfig.update({
+          where: { moduleId: module.moduleId },
+          data: {
+            schedule: "*/30 * * * *"
+          }
+        });
+      }
     }
   },
   async getTaskModuleByModuleId(moduleId) {

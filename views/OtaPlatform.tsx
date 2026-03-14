@@ -291,6 +291,27 @@ const getDisplayHotelName = (hotel: OtaHotel) => {
   );
 };
 
+const formatChinaTimeCompact = (value?: string | null) => {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '';
+  }
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const formatted = formatter.format(date).replace(/\//g, '-');
+  return formatted;
+};
+
 const TOKEN_KEY = 'skyhotel_auth_token';
 const ORDERS_LIST_STATE_KEY = 'skyagent_orders_list_state_v1';
 const WEEK_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -706,6 +727,23 @@ export const OtaPlatform: React.FC = () => {
       map[it.date] = it;
     });
     return map;
+  }, [calendarForModalRoom]);
+
+  const lastCalendarUpdatedAt = useMemo(() => {
+    if (!Array.isArray(calendarForModalRoom) || calendarForModalRoom.length === 0) {
+      return '';
+    }
+    let latest = '';
+    for (const item of calendarForModalRoom) {
+      const candidate = String(item.updatedAt || item.lastPushedAt || '').trim();
+      if (!candidate) {
+        continue;
+      }
+      if (!latest || candidate > latest) {
+        latest = candidate;
+      }
+    }
+    return latest;
   }, [calendarForModalRoom]);
 
   const activeRoomDraft = useMemo(() => {
@@ -1312,6 +1350,38 @@ export const OtaPlatform: React.FC = () => {
       setNotice(`查询完成：门市价 ${Number(data.rackPrice || 0)}，按公式后价格 ${Number(data.calculatedPrice || 0)}，库存 ${Number(data.inventory || 0)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '门市价同步失败');
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const syncAndSaveCalendarForStrategy = async () => {
+    if (!calendarModal.platformHotelId || !calendarModal.platformRoomTypeId || !calendarModal.rateplanCode) {
+      setError('请选择策略后再执行日历更新');
+      return;
+    }
+    const startDate = calendarModal.selectedDate || toDateText(new Date());
+    setActionLoading('syncAndSaveCalendarForStrategy');
+    setError('');
+    setNotice('');
+    try {
+      const data = await fetchWithAuth('/api/ota/calendar/sync-from-rack', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform,
+          date: startDate,
+          days: Math.max(1, Number(activeRoomDraft?.autoSyncFutureDays || 30) || 30),
+          platformHotelId: calendarModal.platformHotelId,
+          platformRoomTypeId: calendarModal.platformRoomTypeId,
+          platformChannel: calendarModal.platformChannel,
+          rateplanCode: calendarModal.rateplanCode,
+          clearOutOfRange: true
+        })
+      });
+      setNotice(`日历更新完成：写入 ${Number(data.updatedCount) || 0} 条，错误 ${Number(data.errorCount) || 0} 条`);
+      await loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '日历更新失败');
     } finally {
       setActionLoading('');
     }
@@ -2265,6 +2335,7 @@ export const OtaPlatform: React.FC = () => {
                 <div className="font-semibold text-gray-900">价格库存日历</div>
               <div className="text-xs text-gray-500 mt-1">酒店: {calendarModal.platformHotelId} | 房型: {calendarModal.roomTypeName} ({calendarModal.platformRoomTypeId})</div>
               <div className="text-xs text-gray-500 mt-1">策略: 渠道 {calendarModal.platformChannel} / 价格政策 {calendarModal.rateplanCode || '-'}</div>
+              <div className="text-xs text-gray-500 mt-1">最后更新: {formatChinaTimeCompact(lastCalendarUpdatedAt) || '暂无'}</div>
               </div>
               <button onClick={() => setCalendarModal((p) => ({ ...p, open: false }))} className="px-3 py-1 text-xs rounded border border-gray-200">关闭</button>
             </div>
@@ -2302,6 +2373,7 @@ export const OtaPlatform: React.FC = () => {
                         <div className="text-[11px]">{day.getDate()}</div>
                         <div className="text-[10px] mt-1 text-emerald-700">{item ? `￥${item.price}` : '-'}</div>
                         <div className="text-[10px] text-indigo-700">{item ? `库存${item.inventory}` : ''}</div>
+                        <div className="text-[9px] text-gray-400 mt-0.5 truncate">{item ? `更${formatChinaTimeCompact(item.updatedAt || item.lastPushedAt || '')}` : ''}</div>
                       </button>
                     );
                   })}
@@ -2367,7 +2439,7 @@ export const OtaPlatform: React.FC = () => {
                       请先在房型行完成“内部房型绑定 + 启用”后再保存或推送日历。
                     </div>
                   )}
-                  <input
+                  报价：<input
                     type="number"
                     min={0}
                     disabled={
@@ -2380,7 +2452,7 @@ export const OtaPlatform: React.FC = () => {
                     placeholder="价格"
                     className="w-full border border-gray-200 rounded px-3 py-2 text-sm disabled:bg-gray-100"
                   />
-                  <input
+                  库存：<input
                     type="number"
                     min={0}
                     disabled={
@@ -2400,6 +2472,13 @@ export const OtaPlatform: React.FC = () => {
                       className="flex-1 px-2 py-2 text-xs rounded border border-amber-200 text-amber-700 bg-amber-50 disabled:opacity-50"
                     >
                       {actionLoading === 'syncRackForSelectedStrategyDay' ? '查询中...' : '查询门市价并回填'}
+                    </button>
+                    <button
+                      disabled={actionLoading !== ''}
+                      onClick={syncAndSaveCalendarForStrategy}
+                      className="flex-1 px-2 py-2 text-xs rounded border border-cyan-200 text-cyan-700 bg-cyan-50 disabled:opacity-50"
+                    >
+                      {actionLoading === 'syncAndSaveCalendarForStrategy' ? '更新中...' : `更新${Math.max(1, Number(activeRoomDraft?.autoSyncFutureDays || 30) || 30)}天价格日历`}
                     </button>
                   </div>
                   <div className="flex gap-2">

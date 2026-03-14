@@ -187,6 +187,11 @@ otaRoutes.get("/calendar", requireAuth, requireRole("ADMIN"), async (req, res) =
 
 otaRoutes.post("/calendar/sync-from-rack", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
+    const clearRaw = req.body?.clearOutOfRange ?? req.query?.clearOutOfRange;
+    const clearOutOfRange =
+      clearRaw === true
+      || String(clearRaw || "").toLowerCase() === "true"
+      || String(clearRaw || "") === "1";
     const result = await otaIntegrationService.syncCalendarFromRackRates({
       platform: req.body?.platform || req.query?.platform || "FLIGGY",
       date: req.body?.date || req.query?.date,
@@ -194,7 +199,8 @@ otaRoutes.post("/calendar/sync-from-rack", requireAuth, requireRole("ADMIN"), as
       platformHotelId: req.body?.platformHotelId || req.query?.platformHotelId,
       platformRoomTypeId: req.body?.platformRoomTypeId || req.query?.platformRoomTypeId,
       platformChannel: req.body?.platformChannel || req.query?.platformChannel,
-      rateplanCode: req.body?.rateplanCode || req.query?.rateplanCode
+      rateplanCode: req.body?.rateplanCode || req.query?.rateplanCode,
+      clearOutOfRange
     });
     return res.status(201).json(result);
   } catch (err) {

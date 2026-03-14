@@ -139,10 +139,13 @@ const buildAtourApiOrigin = () => {
   }
 };
 
-function addOneDay(dateStr) {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+function addOneDay(dateText) {
+  const base = new Date(`${String(dateText || "").trim()}T00:00:00.000Z`);
+  if (Number.isNaN(base.getTime())) {
+    return "";
+  }
+  base.setUTCDate(base.getUTCDate() + 1);
+  return base.toISOString().slice(0, 10);
 }
 
 const fetchAtourHotelDetailForDate = async ({ chainId, date, tokenContext }) => {
@@ -877,15 +880,16 @@ export const otaIntegrationService = {
   async syncCalendarFromRackRates({
     platform = "FLIGGY",
     date,
-    days = 1,
+    days,
     platformHotelId,
     platformRoomTypeId,
     platformChannel,
-    rateplanCode
+    rateplanCode,
+    clearOutOfRange = false
   } = {}) {
     const normalizedPlatform = normalizePlatform(platform);
     const startDate = normalizeDateText(date) || new Date().toISOString().slice(0, 10);
-    const totalDays = Math.max(1, Math.min(30, Number(days) || 1));
+    const hasDaysOverride = Number.isFinite(Number(days)) && Number(days) > 0;
     const roomMappings = (await otaPrismaStore.listRoomMappings({
       platform: normalizedPlatform,
       platformHotelId: platformHotelId || undefined,
@@ -894,6 +898,16 @@ export const otaIntegrationService = {
     }))
       .filter((it) => it.enabled !== false)
       .filter((it) => !rateplanCode || String(it.rateCode || "").trim() === String(rateplanCode || "").trim());
+
+    const strategyDays = new Map();
+    for (const strategy of roomMappings) {
+      const key = `${strategy.platformHotelId}::${strategy.platformRoomTypeId}::${String(strategy.platformChannel || "DEFAULT").trim().toUpperCase()}::${String(strategy.rateCode || "").trim()}`;
+      const value = hasDaysOverride
+        ? Math.max(1, Math.min(180, Number(days) || 1))
+        : Math.max(1, Math.min(180, Number(strategy.autoSyncFutureDays || env.otaRackSyncDays || 30) || 30));
+      strategyDays.set(key, value);
+    }
+    const totalDays = Math.max(1, ...Array.from(strategyDays.values()));
 
     const hotelMappings = (await otaPrismaStore.listHotelMappings({ platform: normalizedPlatform }))
       .filter((it) => it.enabled !== false)
@@ -966,6 +980,11 @@ export const otaIntegrationService = {
           if (!roomRaw) {
             continue;
           }
+          const strategyKey = `${strategy.platformHotelId}::${strategy.platformRoomTypeId}::${String(strategy.platformChannel || "DEFAULT").trim().toUpperCase()}::${String(strategy.rateCode || "").trim()}`;
+          const allowedDays = Number(strategyDays.get(strategyKey) || 1);
+          if (offset >= allowedDays) {
+            continue;
+          }
           const { rackPrice, inventory } = resolveRackPrice(roomRaw);
           const otaPrice = applyFormulaPrice({
             rackPrice,
@@ -989,12 +1008,54 @@ export const otaIntegrationService = {
       }
     }
 
+    if (clearOutOfRange) {
+      for (const strategy of roomMappings) {
+        const strategyKey = `${strategy.platformHotelId}::${strategy.platformRoomTypeId}::${String(strategy.platformChannel || "DEFAULT").trim().toUpperCase()}::${String(strategy.rateCode || "").trim()}`;
+        const allowedDays = Number(strategyDays.get(strategyKey) || 1);
+        const rangeEndDate = new Date(`${startDate}T00:00:00.000Z`);
+        rangeEndDate.setUTCDate(rangeEndDate.getUTCDate() + allowedDays - 1);
+        const rangeEndText = rangeEndDate.toISOString().slice(0, 10);
+
+        const existing = await otaPrismaStore.listCalendarItems({
+          platform: normalizedPlatform,
+          platformHotelId: String(strategy.platformHotelId || "").trim(),
+          platformRoomTypeId: String(strategy.platformRoomTypeId || "").trim(),
+          platformChannel: String(strategy.platformChannel || "DEFAULT").trim().toUpperCase(),
+          rateplanCode: String(strategy.rateCode || "").trim()
+        });
+
+        for (const item of existing) {
+          const dateText = normalizeDateText(item.date);
+          if (!dateText) {
+            continue;
+          }
+          if (dateText >= startDate && dateText <= rangeEndText) {
+            continue;
+          }
+          const upserted = await otaPrismaStore.upsertCalendarItem({
+            platform: normalizedPlatform,
+            platformHotelId: String(strategy.platformHotelId || "").trim(),
+            platformRoomTypeId: String(strategy.platformRoomTypeId || "").trim(),
+            platformChannel: String(strategy.platformChannel || "DEFAULT").trim().toUpperCase(),
+            rateplanCode: String(strategy.rateCode || "").trim(),
+            date: dateText,
+            price: Math.max(0, Number(item.price) || 0),
+            inventory: 0,
+            currency: String(item.currency || "CNY").trim().toUpperCase(),
+            source: "RACK_SYNC_TRIM"
+          });
+          updatedItems.push(upserted);
+        }
+      }
+    }
+
     await otaPrismaStore.appendSyncLog({
       type: "RACK_RATE_SYNC",
       platform: normalizedPlatform,
       result: {
         startDate,
         days: totalDays,
+        clearOutOfRange: Boolean(clearOutOfRange),
         updatedCount: updatedItems.length,
         errorCount: errors.length,
         errors
@@ -1005,6 +1066,7 @@ export const otaIntegrationService = {
       platform: normalizedPlatform,
       startDate,
       days: totalDays,
+      clearOutOfRange: Boolean(clearOutOfRange),
       updatedCount: updatedItems.length,
       errorCount: errors.length,
       items: updatedItems,
