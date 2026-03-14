@@ -26,6 +26,97 @@ otaRoutes.get("/hotels", requireAuth, async (req, res) => {
   return res.json({ items });
 });
 
+otaRoutes.post("/products/hotels", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.upsertHotelProduct({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      product: req.body?.product || req.body || {}
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "upsert hotel product failed" });
+  }
+});
+
+otaRoutes.delete("/products/hotels/:platformHotelId", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.deleteHotelProduct({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      product: {
+        ...(req.body?.product || req.body || {}),
+        platformHotelId: req.params.platformHotelId
+      }
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "delete local hotel product failed" });
+  }
+});
+
+otaRoutes.post("/products/room-types", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.upsertRoomTypeProduct({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      product: req.body?.product || req.body || {}
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "upsert room type product failed" });
+  }
+});
+
+otaRoutes.delete("/products/room-types/:platformRoomTypeId", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.deleteRoomTypeProduct({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      product: {
+        ...(req.body?.product || req.body || {}),
+        platformRoomTypeId: req.params.platformRoomTypeId,
+        platformHotelId: req.body?.platformHotelId || req.query?.platformHotelId || req.body?.product?.platformHotelId
+      }
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "delete room type product failed" });
+  }
+});
+
+otaRoutes.post("/products/rateplans", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.upsertRatePlanProduct({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      product: req.body?.product || req.body || {}
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "upsert rateplan product failed" });
+  }
+});
+
+otaRoutes.delete("/products/rateplans", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.deleteRatePlanProduct({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      product: req.body?.product || req.body || {}
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "delete rateplan product failed" });
+  }
+});
+
+otaRoutes.delete("/products/rates", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.deleteRateProduct({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      product: req.body?.product || req.body || {}
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "delete rate product failed" });
+  }
+});
+
 otaRoutes.post("/mappings/hotels", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const mapping = await otaIntegrationService.upsertHotelMapping(req.body || {});
@@ -86,6 +177,8 @@ otaRoutes.get("/calendar", requireAuth, requireRole("ADMIN"), async (req, res) =
     platform: req.query.platform,
     platformHotelId: req.query.platformHotelId,
     platformRoomTypeId: req.query.platformRoomTypeId,
+    platformChannel: req.query.platformChannel,
+    rateplanCode: req.query.rateplanCode,
     startDate: req.query.startDate,
     endDate: req.query.endDate
   });

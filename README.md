@@ -236,6 +236,13 @@ OTA_WEBHOOK_SECRET=
 - `GET /api/ota/platforms`
 - `POST /api/ota/hotels/sync`（ADMIN）
 - `GET /api/ota/hotels`
+- `POST /api/ota/products/hotels`（ADMIN）
+- `DELETE /api/ota/products/hotels/:platformHotelId`（ADMIN）
+- `POST /api/ota/products/room-types`（ADMIN）
+- `DELETE /api/ota/products/room-types/:platformRoomTypeId`（ADMIN）
+- `POST /api/ota/products/rateplans`（ADMIN）
+- `DELETE /api/ota/products/rateplans`（ADMIN）
+- `DELETE /api/ota/products/rates`（ADMIN）
 - `POST /api/ota/mappings/hotels`（ADMIN）
 - `GET /api/ota/mappings/hotels`
 - `POST /api/ota/mappings/rooms`（ADMIN）
@@ -252,6 +259,8 @@ OTA_WEBHOOK_SECRET=
 - `POST /api/ota/orders/:externalOrderId/auto-submit`（ADMIN）
 - `POST /api/ota/orders/:externalOrderId/manual-payment-confirm`（ADMIN）
 - `GET /api/ota/sync-logs`（ADMIN）
+
+飞猪 OTA 对接说明与 API 选型清单见：`docs/fliggy-ota-integration.md`
 
 说明：`/api/health/crypto` 与 `/api/health/crypto/test` 仅在 `NODE_ENV=development` 时注册；生产环境会自动关闭（路由不存在）。
 

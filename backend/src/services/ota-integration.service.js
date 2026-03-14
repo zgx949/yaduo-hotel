@@ -181,7 +181,8 @@ const enqueueBindingForInboundOrder = async ({ normalizedPlatform, inbound }) =>
   const roomMapping = await otaPrismaStore.getRoomMapping({
     platform: normalizedPlatform,
     platformHotelId: inbound.platformHotelId,
-    platformRoomTypeId: inbound.platformRoomTypeId
+    platformRoomTypeId: inbound.platformRoomTypeId,
+    platformChannel: inbound.platformChannel
   });
   const channelMapping = await otaPrismaStore.getChannelMapping({
     platform: normalizedPlatform,
@@ -226,7 +227,7 @@ export const otaIntegrationService = {
   async syncPublishedHotels({ platform = "FLIGGY" } = {}) {
     const { platform: normalizedPlatform, adapter } = getAdapter(platform);
     const fetchResult = await adapter.fetchPublishedHotels({
-      status: "1",
+      status: "0",
       pageSize: 50,
       maxPages: 10
     });
@@ -315,6 +316,8 @@ export const otaIntegrationService = {
           platform: normalizedPlatform,
           platformHotelId: mapping.platformHotelId,
           platformRoomTypeId: mapping.platformRoomTypeId,
+          platformChannel: String(mapping.platformChannel || "DEFAULT").trim().toUpperCase(),
+          rateplanCode,
           date,
           price: toIntegerAmount(item.price),
           inventory: Math.max(0, Number(item.quota || item.inventory || 0) || 0),
@@ -354,6 +357,341 @@ export const otaIntegrationService = {
 
   async listPublishedHotels({ platform } = {}) {
     return otaPrismaStore.listPublishedHotels({ platform: normalizePlatform(platform || "") });
+  },
+
+  async upsertHotelProduct({ platform = "FLIGGY", product = {} } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+    const result = await adapter.fetchHotelByOuterId({
+      product: {
+        ...product,
+        outer_id: product.outer_id || product.outerId || product.platformHotelId,
+        vendor: product.vendor || env.otaTopVendor || undefined
+      }
+    });
+
+    const platformHotelId = String(result.platformHotelId || product.outer_id || product.outerId || "").trim();
+    const hotel = result.hotel || {};
+    await otaPrismaStore.upsertPublishedHotels({
+      platform: normalizedPlatform,
+      source: "MANUAL",
+      hotels: [
+        {
+          platformHotelId,
+          hotelName: String(hotel.hotelName || product.hotelName || product.name || platformHotelId).trim(),
+          city: String(hotel.city || product.city || "").trim(),
+          status: String(hotel.status || "OFFLINE").trim().toUpperCase(),
+          rawPayload: hotel.rawPayload || result.response || null,
+          rooms: []
+        }
+      ]
+    });
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_HOTEL_IMPORT_BY_OUTER_ID",
+      platform: normalizedPlatform,
+      result: {
+        platformHotelId,
+        status: hotel.status || null,
+        isOnline: String(hotel.status || "").toUpperCase() === "ONLINE",
+        response: result.response || null
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId,
+      hotel,
+      status: hotel.status || null,
+      isOnline: String(hotel.status || "").toUpperCase() === "ONLINE",
+      response: result.response || null
+    };
+  },
+
+  async deleteHotelProduct({ platform = "FLIGGY", product = {} } = {}) {
+    const { platform: normalizedPlatform } = getAdapter(platform);
+
+    const platformHotelId = String(
+      product.platformHotelId || product.hid || product.hotel_id || product.outer_id || ""
+    ).trim();
+
+    if (!platformHotelId) {
+      throw new Error("platformHotelId is required");
+    }
+
+    const deleted = await otaPrismaStore.deletePublishedHotelLocal({
+      platform: normalizedPlatform,
+      platformHotelId
+    });
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_HOTEL_LOCAL_DELETE",
+      platform: normalizedPlatform,
+      result: {
+        platformHotelId,
+        deleted
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId,
+      deleted,
+      remoteDeleted: false
+    };
+  },
+
+  async upsertRoomTypeProduct({ platform = "FLIGGY", product = {} } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+    const result = await adapter.fetchRoomTypeByOuterId({
+      product: {
+        ...product,
+        hotel_outer_id: product.hotel_outer_id || product.hotelOuterId || product.platformHotelId,
+        room_outer_id: product.room_outer_id || product.roomOuterId || product.outer_id || product.out_rid || product.outRid || product.platformRoomTypeId,
+        outer_id: product.room_outer_id || product.roomOuterId || product.outer_id || product.out_rid || product.outRid || product.platformRoomTypeId,
+        vendor: product.vendor || env.otaTopVendor || undefined
+      }
+    });
+
+    const platformHotelId = String(
+      result.platformHotelId ||
+      product.hotel_outer_id ||
+      product.hotelOuterId ||
+      product.platformHotelId ||
+      ""
+    ).trim();
+    const platformRoomTypeId = String(
+      result.platformRoomTypeId ||
+      product.room_outer_id ||
+      product.roomOuterId ||
+      product.outer_id ||
+      product.out_rid ||
+      product.outRid ||
+      ""
+    ).trim();
+    const room = result.room || {};
+
+    if (!platformHotelId) {
+      throw new Error("roomtype fetched but hotel outer_id is missing; please provide hotel outer_id when room outer_id has no hotel prefix");
+    }
+
+    const existingHotels = await otaPrismaStore.listPublishedHotels({ platform: normalizedPlatform });
+    const existingHotel = existingHotels.find((it) => String(it.platformHotelId || "").trim() === platformHotelId) || null;
+
+    await otaPrismaStore.upsertPublishedHotels({
+      platform: normalizedPlatform,
+      source: "MANUAL",
+      hotels: [
+        {
+          platformHotelId,
+          hotelName: String(existingHotel?.hotelName || product.hotelName || platformHotelId).trim(),
+          city: String(existingHotel?.city || product.city || "").trim(),
+          status: String(existingHotel?.status || "ONLINE").trim().toUpperCase(),
+          rooms: [
+            {
+              platformRoomTypeId,
+              roomTypeName: String(room.roomTypeName || product.roomTypeName || product.name || platformRoomTypeId).trim(),
+              bedType: String(room.bedType || product.bedType || product.bed_type || "").trim(),
+              area: String(room.area || "").trim(),
+              floor: String(room.floor || "").trim(),
+              maxOccupancy: Number(room.maxOccupancy || 0) || null,
+              windowType: String(room.windowType || "").trim(),
+              status: String(room.status || "").trim(),
+              gid: String(room.gid || product.gid || "").trim(),
+              rpid: String(room.rpid || product.rpid || "").trim(),
+              outRid: String(room.outRid || product.outRid || product.out_rid || platformRoomTypeId).trim(),
+              rateplanCode: String(room.rateplanCode || product.rateplanCode || product.rateplan_code || "").trim(),
+              vendor: String(product.vendor || env.otaTopVendor || "").trim(),
+              rawPayload: room.rawPayload || result.response || null
+            }
+          ]
+        }
+      ]
+    });
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_ROOMTYPE_IMPORT_BY_OUTER_ID",
+      platform: normalizedPlatform,
+      result: {
+        platformHotelId,
+        platformRoomTypeId,
+        roomTypeName: room.roomTypeName || null,
+        response: result.response || null
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId,
+      platformRoomTypeId,
+      room,
+      response: result.response || null
+    };
+  },
+
+  async deleteRoomTypeProduct({ platform = "FLIGGY", product = {} } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+    const result = await adapter.deleteRoomTypeProduct({
+      product: {
+        ...product,
+        outer_id: product.outer_id || product.platformHotelId,
+        vendor: product.vendor || env.otaTopVendor || undefined
+      }
+    });
+
+    if (result.platformHotelId && result.platformRoomTypeId) {
+      await otaPrismaStore.deletePublishedRoomType({
+        platform: normalizedPlatform,
+        platformHotelId: result.platformHotelId,
+        platformRoomTypeId: result.platformRoomTypeId
+      });
+    }
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_ROOMTYPE_DELETE",
+      platform: normalizedPlatform,
+      result: {
+        platformHotelId: result.platformHotelId || null,
+        platformRoomTypeId: result.platformRoomTypeId || null,
+        response: result.response || null
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId: result.platformHotelId || null,
+      platformRoomTypeId: result.platformRoomTypeId || null,
+      response: result.response || null
+    };
+  },
+
+  async upsertRatePlanProduct({ platform = "FLIGGY", product = {} } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+    const result = await adapter.fetchRatePlanByCode({
+      product: {
+        ...product,
+        rateplan_code: product.rateplan_code || product.rateplanCode,
+        vendor: product.vendor || env.otaTopVendor || undefined
+      }
+    });
+
+    const platformHotelId = String(product.platformHotelId || product.hotel_outer_id || product.outer_id || "").trim();
+    const platformRoomTypeId = String(product.platformRoomTypeId || product.room_outer_id || product.out_rid || product.outRid || "").trim();
+    if (!platformHotelId || !platformRoomTypeId) {
+      throw new Error("platformHotelId and platformRoomTypeId are required to bind rateplan");
+    }
+
+    const fetchedRaw = result?.rateplan?.rawPayload?.rateplan || {};
+    const fetchedHid = String(fetchedRaw.hid || fetchedRaw.hotel_id || fetchedRaw.hotelId || "").trim();
+    const fetchedOutRid = String(fetchedRaw.out_rid || fetchedRaw.outer_id || fetchedRaw.outRid || fetchedRaw.rid || "").trim();
+    if (fetchedOutRid && fetchedOutRid !== platformRoomTypeId) {
+      throw new Error(`rateplan_code does not belong to room ${platformRoomTypeId}, fetched out_rid=${fetchedOutRid}`);
+    }
+
+    const knownHotels = await otaPrismaStore.listPublishedHotels({ platform: normalizedPlatform });
+    const matchedHotel = knownHotels.find((it) => String(it.platformHotelId || "").trim() === platformHotelId) || null;
+    const matchedRoom = matchedHotel?.rooms?.find((it) => String(it.platformRoomTypeId || "").trim() === platformRoomTypeId) || null;
+    const roomHid = String(matchedRoom?.rawPayload?.hid || "").trim();
+    if (fetchedHid && roomHid && fetchedHid !== roomHid) {
+      throw new Error(`rateplan_code does not belong to hotel ${platformHotelId}, fetched hid=${fetchedHid}`);
+    }
+
+    const persisted = await otaPrismaStore.upsertRoomRatePlan({
+      platform: normalizedPlatform,
+      platformHotelId,
+      platformRoomTypeId,
+      rateplan: result.rateplan || {
+        rateplanCode: String(product.rateplanCode || product.rateplan_code || "").trim(),
+        rateplanName: String(product.rateplanName || product.name || "").trim(),
+        rpid: String(product.rpid || "").trim()
+      }
+    });
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_RATEPLAN_IMPORT_BY_CODE",
+      platform: normalizedPlatform,
+      result: {
+        platformHotelId,
+        platformRoomTypeId,
+        rateplanCode: result.rateplanCode || String(product.rateplanCode || product.rateplan_code || "").trim(),
+        response: result.response || null
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId,
+      platformRoomTypeId,
+      rateplanCode: result.rateplanCode || String(product.rateplanCode || product.rateplan_code || "").trim(),
+      rateplan: result.rateplan || null,
+      roomRateplans: persisted.rateplans || [],
+      response: result.response || null
+    };
+  },
+
+  async deleteRatePlanProduct({ platform = "FLIGGY", product = {} } = {}) {
+    const { platform: normalizedPlatform } = getAdapter(platform);
+    const platformHotelId = String(product.platformHotelId || product.hotel_outer_id || product.outer_id || "").trim();
+    const platformRoomTypeId = String(product.platformRoomTypeId || product.room_outer_id || product.out_rid || product.outRid || "").trim();
+    const rateplanCode = String(product.rateplanCode || product.rateplan_code || "").trim();
+
+    if (!platformHotelId || !platformRoomTypeId || !rateplanCode) {
+      throw new Error("platformHotelId, platformRoomTypeId and rateplanCode are required");
+    }
+
+    const result = await otaPrismaStore.deleteRoomRatePlan({
+      platform: normalizedPlatform,
+      platformHotelId,
+      platformRoomTypeId,
+      rateplanCode
+    });
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_RATEPLAN_LOCAL_DELETE",
+      platform: normalizedPlatform,
+      result: {
+        platformHotelId,
+        platformRoomTypeId,
+        rateplanCode,
+        removed: result.removed,
+        remainingCount: Array.isArray(result.rateplans) ? result.rateplans.length : 0
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId,
+      platformRoomTypeId,
+      rateplanCode,
+      removed: result.removed,
+      roomRateplans: result.rateplans || []
+    };
+  },
+
+  async deleteRateProduct({ platform = "FLIGGY", product = {} } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+    const result = await adapter.deleteRateProduct({
+      product: {
+        ...product,
+        vendor: product.vendor || env.otaTopVendor || undefined
+      }
+    });
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_RATE_DELETE",
+      platform: normalizedPlatform,
+      result: {
+        gid: String(product.gid || "").trim() || null,
+        rpid: String(product.rpid || "").trim() || null,
+        outRid: String(product.outRid || product.out_rid || "").trim() || null,
+        rateplanCode: String(product.rateplanCode || product.rateplan_code || "").trim() || null,
+        response: result.response || null
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      response: result.response || null
+    };
   },
 
   async upsertHotelMapping(payload = {}) {
@@ -406,13 +744,20 @@ export const otaIntegrationService = {
       }
       const platformHotelId = String(item.platformHotelId || "").trim();
       const platformRoomTypeId = String(item.platformRoomTypeId || "").trim();
+      const platformChannel = String(item.platformChannel || "DEFAULT").trim().toUpperCase();
+      const rateplanCode = String(item.rateplanCode || item.rateplan_code || "").trim();
       if (!platformHotelId || !platformRoomTypeId) {
+        continue;
+      }
+      if (!rateplanCode) {
         continue;
       }
       const upserted = await otaPrismaStore.upsertCalendarItem({
         platform: normalizedPlatform,
         platformHotelId,
         platformRoomTypeId,
+        platformChannel,
+        rateplanCode,
         date,
         price: Math.max(0, Number(item.price) || 0),
         inventory: Math.max(0, Number(item.inventory) || 0),
@@ -429,6 +774,8 @@ export const otaIntegrationService = {
       platform: normalizePlatform(filters.platform || ""),
       platformHotelId: filters.platformHotelId,
       platformRoomTypeId: filters.platformRoomTypeId,
+      platformChannel: filters.platformChannel,
+      rateplanCode: filters.rateplanCode,
       startDate: filters.startDate,
       endDate: filters.endDate
     });
@@ -443,7 +790,10 @@ export const otaIntegrationService = {
 
     const roomMappings = await otaPrismaStore.listRoomMappings({ platform: normalizedPlatform });
     const mappingByRoom = new Map(
-      roomMappings.map((it) => [`${it.platformHotelId}::${it.platformRoomTypeId}`, it])
+      roomMappings.map((it) => [
+        `${it.platformHotelId}::${it.platformRoomTypeId}::${String(it.platformChannel || "DEFAULT").trim().toUpperCase()}::${String(it.rateCode || "").trim()}`,
+        it
+      ])
     );
 
     const prepared = sourceItems
@@ -454,13 +804,15 @@ export const otaIntegrationService = {
         date: normalizeDateText(it.date),
         price: Math.max(0, Number(it.price) || 0),
         inventory: Math.max(0, Number(it.inventory) || 0),
-        currency: String(it.currency || "CNY").trim().toUpperCase()
+        currency: String(it.currency || "CNY").trim().toUpperCase(),
+        platformChannel: String(it.platformChannel || "DEFAULT").trim().toUpperCase(),
+        rateplanCode: String(it.rateplanCode || it.rateplan_code || "").trim()
       }))
       .filter((it) => {
-        if (!it.platformHotelId || !it.platformRoomTypeId || !it.date) {
+        if (!it.platformHotelId || !it.platformRoomTypeId || !it.date || !it.rateplanCode) {
           return false;
         }
-        const roomMapping = mappingByRoom.get(`${it.platformHotelId}::${it.platformRoomTypeId}`);
+        const roomMapping = mappingByRoom.get(`${it.platformHotelId}::${it.platformRoomTypeId}::${it.platformChannel}::${it.rateplanCode}`);
         if (!roomMapping?.enabled) {
           return false;
         }
@@ -483,7 +835,7 @@ export const otaIntegrationService = {
 
     const grouped = new Map();
     for (const item of prepared) {
-      const key = `${item.platformHotelId}::${item.platformRoomTypeId}`;
+      const key = `${item.platformHotelId}::${item.platformRoomTypeId}::${item.platformChannel}::${item.rateplanCode}`;
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }
@@ -492,15 +844,15 @@ export const otaIntegrationService = {
 
     const requestResults = [];
     let rejectedCount = 0;
+    const pushedKeys = new Set();
     for (const [key, groupedItems] of grouped.entries()) {
-      const [platformHotelId, platformRoomTypeId] = key.split("::");
-      const roomMapping = mappingByRoom.get(`${platformHotelId}::${platformRoomTypeId}`);
+      const [platformHotelId, platformRoomTypeId, platformChannel, rateplanCode] = key.split("::");
+      const roomMapping = mappingByRoom.get(`${platformHotelId}::${platformRoomTypeId}::${platformChannel}::${rateplanCode}`);
       if (!roomMapping) {
         rejectedCount += groupedItems.length;
         continue;
       }
       const outRid = String(roomMapping.platformRoomTypeId || "").trim();
-      const rateplanCode = String(roomMapping.rateCode || "").trim();
       if (!outRid || !rateplanCode) {
         rejectedCount += groupedItems.length;
         continue;
@@ -512,9 +864,14 @@ export const otaIntegrationService = {
         vendor: env.otaTopVendor || undefined,
         items: groupedItems
       });
+      for (const item of groupedItems) {
+        pushedKeys.add(`${item.platformHotelId}::${item.platformRoomTypeId}::${item.platformChannel}::${item.rateplanCode}::${item.date}`);
+      }
       requestResults.push({
         platformHotelId,
         platformRoomTypeId,
+        platformChannel,
+        rateplanCode,
         count: groupedItems.length,
         gidAndRpid: pushed.gidAndRpid || null,
         response: pushed.response || null
@@ -523,6 +880,10 @@ export const otaIntegrationService = {
 
     const pushedAt = new Date().toISOString();
     for (const item of prepared) {
+      const key = `${item.platformHotelId}::${item.platformRoomTypeId}::${item.platformChannel}::${item.rateplanCode}::${item.date}`;
+      if (!pushedKeys.has(key)) {
+        continue;
+      }
       await otaPrismaStore.upsertCalendarItem({
         ...item,
         source: "PUSH",
@@ -534,7 +895,7 @@ export const otaIntegrationService = {
       type: "RATE_INVENTORY_PUSH",
       platform: normalizedPlatform,
       result: {
-        acceptedCount: prepared.length,
+        acceptedCount: pushedKeys.size,
         rejectedCount,
         requestResults
       }
@@ -542,9 +903,9 @@ export const otaIntegrationService = {
 
     return {
       platform: normalizedPlatform,
-      acceptedCount: prepared.length,
+      acceptedCount: pushedKeys.size,
       rejectedCount,
-      items: prepared,
+      items: prepared.filter((it) => pushedKeys.has(`${it.platformHotelId}::${it.platformRoomTypeId}::${it.platformChannel}::${it.rateplanCode}::${it.date}`)),
       requestResults
     };
   },
@@ -653,7 +1014,8 @@ export const otaIntegrationService = {
     const roomMapping = await otaPrismaStore.getRoomMapping({
       platform: normalizedPlatform,
       platformHotelId: inboundOrder.platformHotelId,
-      platformRoomTypeId: inboundOrder.platformRoomTypeId
+      platformRoomTypeId: inboundOrder.platformRoomTypeId,
+      platformChannel: inboundOrder.platformChannel
     });
     const channelMapping = await otaPrismaStore.getChannelMapping({
       platform: normalizedPlatform,

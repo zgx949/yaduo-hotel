@@ -130,35 +130,138 @@ const parseRoomRows = (response = {}) => {
 };
 
 const normalizeHotel = (item = {}) => {
-  const platformHotelId = String(item.hid || item.hotel_id || item.hotelId || item.id || "").trim();
+  const platformHotelId = String(item.outer_id || item.outerId || item.hid || item.hotel_id || item.hotelId || item.id || "").trim();
   if (!platformHotelId) {
     return null;
   }
+  const basic = normalizeObject(item.s_hotel || item.sHotel || {});
+  const hotelName = String(
+    item.name || item.hotel_name || item.hotelName || basic.name || basic.hotel_name || basic.hotelName || platformHotelId
+  ).trim();
+  const city = String(item.city || item.city_name || item.cityName || basic.city || basic.city_name || basic.cityName || "").trim();
   return {
     platformHotelId,
-    hotelName: String(item.name || item.hotel_name || item.hotelName || platformHotelId).trim(),
-    city: String(item.city || item.city_name || item.cityName || "").trim(),
-    status: String(item.status || item.state || "ONLINE").trim().toUpperCase(),
+    hotelName,
+    city,
+    status: normalizeStatus(item.status || item.state || "ONLINE"),
     rawPayload: item
   };
 };
 
 const normalizeRoom = (item = {}) => {
-  const platformRoomTypeId = String(item.out_rid || item.rid || item.room_type_id || item.roomTypeId || item.id || "").trim();
+  const platformRoomTypeId = String(item.out_rid || item.outer_id || item.outerId || item.rid || item.room_type_id || item.roomTypeId || item.id || "").trim();
   if (!platformRoomTypeId) {
     return null;
   }
+  const basic = normalizeObject(item.s_roomtype || item.sRoomtype || {});
+  const bedInfo = item.bed_info || item.bedInfo || "";
+  const bedJsonText = String(basic.bed || "").trim();
+  let bedFromJson = "";
+  if (bedJsonText) {
+    try {
+      const parsed = JSON.parse(bedJsonText);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        bedFromJson = String(parsed[0]?.bedType || parsed[0]?.type || "").trim();
+      }
+    } catch {
+      bedFromJson = "";
+    }
+  }
+  const bedType =
+    String(item.bed_type || item.bedType || "").trim() ||
+    (typeof bedInfo === "string" ? bedInfo.trim() : String(bedInfo?.name || bedInfo?.type || "").trim()) ||
+    bedFromJson;
   return {
     platformRoomTypeId,
-    roomTypeName: String(item.name || item.room_name || item.roomTypeName || platformRoomTypeId).trim(),
-    bedType: String(item.bed_type || item.bedType || "").trim(),
+    roomTypeName: String(item.name || item.room_name || item.roomTypeName || basic.name || platformRoomTypeId).trim(),
+    bedType,
     gid: String(item.gid || "").trim(),
     rpid: String(item.rpid || "").trim(),
     outRid: String(item.out_rid || item.outRid || platformRoomTypeId).trim(),
     rateplanCode: String(item.rateplan_code || item.rateplanCode || "").trim(),
     vendor: String(item.vendor || "").trim(),
+    area: String(item.area || basic.area || "").trim(),
+    floor: String(item.floor || basic.floor || "").trim(),
+    maxOccupancy: Number(item.max_occupancy || basic.max_occupancy || 0) || null,
+    windowType: String(item.window_type || basic.window_type || "").trim(),
+    status: normalizeStatus(item.status || basic.status || "ONLINE"),
     rawPayload: item
   };
+};
+
+const normalizeStatus = (value) => {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return "ONLINE";
+  }
+  if (text === "0") {
+    return "ONLINE";
+  }
+  if (text === "1") {
+    return "ONLINE";
+  }
+  if (text === "-1") {
+    return "DELETED";
+  }
+  if (text === "-2") {
+    return "OFFLINE";
+  }
+  const upper = text.toUpperCase();
+  if (upper === "ONLINE" || upper === "DELETED" || upper === "OFFLINE") {
+    return upper;
+  }
+  return upper;
+};
+
+const unwrapTopResponse = (response = {}) => {
+  const keys = Object.keys(response || {});
+  const wrapperKey = keys.find((key) => key.endsWith("_response") && response[key] && typeof response[key] === "object");
+  if (!wrapperKey) {
+    return response;
+  }
+  return normalizeObject(response[wrapperKey]);
+};
+
+const parseSingleHotel = (response = {}) => {
+  const unwrapped = unwrapTopResponse(response);
+  const item =
+    unwrapped?.xhotel ||
+    unwrapped?.x_hotel ||
+    unwrapped?.s_hotel ||
+    unwrapped?.hotel ||
+    unwrapped?.result?.xhotel ||
+    unwrapped?.result?.x_hotel ||
+    unwrapped?.result?.s_hotel ||
+    unwrapped?.result?.hotel ||
+    unwrapped;
+  return normalizeObject(item);
+};
+
+const parseSingleRoomType = (response = {}) => {
+  const unwrapped = unwrapTopResponse(response);
+  const item =
+    unwrapped?.xroomtype ||
+    unwrapped?.x_room_type ||
+    unwrapped?.room_type ||
+    unwrapped?.room ||
+    unwrapped?.result?.xroomtype ||
+    unwrapped?.result?.x_room_type ||
+    unwrapped?.result?.room_type ||
+    unwrapped?.result?.room ||
+    unwrapped;
+  return normalizeObject(item);
+};
+
+const inferHotelOuterIdFromRoomOuterId = (roomOuterId = "") => {
+  const text = String(roomOuterId || "").trim();
+  if (!text) {
+    return "";
+  }
+  const idx = text.indexOf("_");
+  if (idx <= 0) {
+    return "";
+  }
+  return text.slice(0, idx).trim();
 };
 
 const splitChunks = (items = [], chunkSize = 20) => {
@@ -200,12 +303,49 @@ const parseBatchRatePlans = (response = {}) => {
   );
 };
 
+const parseSingleRatePlan = (response = {}) => {
+  const unwrapped = unwrapTopResponse(response);
+  const item =
+    unwrapped?.rateplan ||
+    unwrapped?.x_rateplan ||
+    unwrapped?.xRatePlan ||
+    unwrapped?.result?.rateplan ||
+    unwrapped?.result?.x_rateplan ||
+    unwrapped;
+  return normalizeObject(item);
+};
+
+const normalizeRatePlan = (item = {}) => {
+  const rateplanCode = String(item.rateplan_code || item.rateplanCode || item.outer_id || "").trim();
+  if (!rateplanCode) {
+    return null;
+  }
+  return {
+    rateplanCode,
+    rateplanName: String(item.name || item.rateplan_name || item.rateplanName || rateplanCode).trim(),
+    rpid: String(item.rpid || item.rp_id || item.rpId || "").trim(),
+    status: String(item.status || "").trim(),
+    breakfastCount: Number(item.breakfast_count || item.breakfastCount || 0) || 0,
+    paymentType: String(item.payment_type || item.paymentType || "").trim(),
+    cancelPolicy: typeof item.cancel_policy === "string" ? item.cancel_policy : JSON.stringify(item.cancel_policy || ""),
+    modifiedTime: String(item.modified_time || item.modifiedTime || "").trim(),
+    rawPayload: item
+  };
+};
+
 const tryExecute = async (method, params = {}) => {
   try {
     return await execute(method, params);
   } catch {
     return null;
   }
+};
+
+const normalizeObject = (value) => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  return value;
 };
 
 const buildClient = () => {
@@ -247,6 +387,276 @@ const execute = async (method, params = {}) => {
 
 export const taobaoTopAdapter = {
   platform: "FLIGGY",
+
+  async fetchHotelByOuterId(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const outerId = String(body.outer_id || body.outerId || body.platformHotelId || "").trim();
+    if (!outerId) {
+      throw new Error("outer_id is required");
+    }
+    const response = await execute("taobao.xhotel.get", {
+      outer_id: outerId,
+      hid: body.hid || undefined,
+      need_sale_info: body.need_sale_info ?? true,
+      vendor: body.vendor || undefined
+    });
+    const hotel = parseSingleHotel(response);
+    const statusValue =
+      hotel?.status ??
+      hotel?.s_hotel?.status ??
+      hotel?.sHotel?.status ??
+      response?.status ??
+      response?.xhotel_get_response?.xhotel?.status;
+    const normalizedHotel = normalizeHotel({
+      ...hotel,
+      outer_id: outerId,
+      status: statusValue
+    });
+    if (!normalizedHotel) {
+      throw new Error(`hotel not found by outer_id: ${outerId}`);
+    }
+    return {
+      ok: true,
+      platformHotelId: outerId,
+      hotel: {
+        ...normalizedHotel,
+        platformHotelId: outerId,
+        status: normalizeStatus(statusValue),
+        rawPayload: {
+          sourceResponse: response,
+          xhotel: hotel,
+          s_hotel: normalizeObject(hotel?.s_hotel || hotel?.sHotel || {})
+        }
+      },
+      response
+    };
+  },
+
+  async fetchRoomTypeByOuterId(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const hotelOuterId = String(body.hotel_outer_id || body.platformHotelId || "").trim();
+    const roomOuterId = String(
+      body.room_outer_id || body.outer_id || body.out_rid || body.outRid || body.platformRoomTypeId || ""
+    ).trim();
+    if (!roomOuterId) {
+      throw new Error("room outer_id is required");
+    }
+
+    const response = await execute("taobao.xhotel.roomtype.get", {
+      outer_id: roomOuterId,
+      rid: body.rid || undefined,
+      vendor: body.vendor || undefined
+    });
+
+    const room = parseSingleRoomType(response);
+    const normalizedRoom = normalizeRoom({
+      ...room,
+      out_rid: roomOuterId,
+      outer_id: roomOuterId
+    });
+    if (!normalizedRoom) {
+      throw new Error(`roomtype not found by out_rid: ${roomOuterId}`);
+    }
+
+    const normalizedHotelOuterId =
+      String(hotelOuterId || room.hotel_outer_id || room.hotelOuterId || "").trim() ||
+      inferHotelOuterIdFromRoomOuterId(roomOuterId);
+
+    return {
+      ok: true,
+      platformHotelId: normalizedHotelOuterId,
+      platformRoomTypeId: roomOuterId,
+      room: {
+        ...normalizedRoom,
+        platformRoomTypeId: roomOuterId,
+        outRid: roomOuterId,
+        hid: String(room.hid || "").trim() || null,
+        rawPayload: {
+          ...room,
+          response
+        }
+      },
+      response
+    };
+  },
+
+  async upsertHotelProduct(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const platformHotelId = String(body.platformHotelId || body.hid || body.hotel_id || body.outer_id || "").trim();
+    const request = {
+      ...body,
+      hid: body.hid || body.hotel_id || undefined,
+      outer_id: body.outer_id || platformHotelId || undefined,
+      name: body.name || body.hotelName || undefined,
+      city: body.city || undefined,
+      address: body.address || undefined,
+      status: body.status || undefined,
+      vendor: body.vendor || undefined
+    };
+
+    const response =
+      (await tryExecute("taobao.xhotel.add", request)) ||
+      (await execute("taobao.xhotel.update", request));
+
+    return {
+      ok: true,
+      platformHotelId,
+      response
+    };
+  },
+
+  async deleteHotelProduct(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const platformHotelId = String(body.platformHotelId || body.hid || body.hotel_id || body.outer_id || "").trim();
+    const response = await execute("taobao.xhotel.delete", {
+      hid: body.hid || body.hotel_id || undefined,
+      outer_id: body.outer_id || platformHotelId || undefined,
+      vendor: body.vendor || undefined
+    });
+    return {
+      ok: true,
+      platformHotelId,
+      response
+    };
+  },
+
+  async upsertRoomTypeProduct(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const platformHotelId = String(body.platformHotelId || body.hid || body.hotel_id || "").trim();
+    const platformRoomTypeId = String(
+      body.platformRoomTypeId || body.outRid || body.out_rid || body.room_type_id || body.outer_id || ""
+    ).trim();
+
+    const request = {
+      ...body,
+      hid: body.hid || body.hotel_id || platformHotelId || undefined,
+      out_rid: body.out_rid || body.outRid || platformRoomTypeId || undefined,
+      outer_id: body.outer_id || platformRoomTypeId || undefined,
+      name: body.name || body.roomTypeName || undefined,
+      bed_type: body.bed_type || body.bedType || undefined,
+      vendor: body.vendor || undefined
+    };
+
+    const response =
+      (await tryExecute("taobao.xhotel.roomtype.add", request)) ||
+      (await execute("taobao.xhotel.roomtype.update", request));
+
+    return {
+      ok: true,
+      platformHotelId,
+      platformRoomTypeId,
+      response
+    };
+  },
+
+  async deleteRoomTypeProduct(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const platformHotelId = String(body.platformHotelId || body.hid || body.hotel_id || "").trim();
+    const platformRoomTypeId = String(
+      body.platformRoomTypeId || body.outRid || body.out_rid || body.room_type_id || body.outer_id || ""
+    ).trim();
+
+    const response = await execute("taobao.xhotel.roomtype.delete.public", {
+      hid: body.hid || body.hotel_id || undefined,
+      out_rid: body.out_rid || body.outRid || platformRoomTypeId || undefined,
+      outer_id: body.outer_id || platformHotelId || undefined,
+      vendor: body.vendor || undefined
+    });
+
+    return {
+      ok: true,
+      platformHotelId,
+      platformRoomTypeId,
+      response
+    };
+  },
+
+  async upsertRatePlanProduct(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const request = {
+      ...body,
+      hid: body.hid || body.hotel_id || body.platformHotelId || undefined,
+      out_rid: body.out_rid || body.outRid || body.platformRoomTypeId || undefined,
+      rateplan_code: body.rateplan_code || body.rateplanCode || undefined,
+      name: body.name || body.rateplanName || undefined,
+      vendor: body.vendor || undefined
+    };
+
+    const response =
+      (await tryExecute("taobao.xhotel.rateplan.add", request)) ||
+      (await execute("taobao.xhotel.rateplan.update", request));
+
+    return {
+      ok: true,
+      rateplanCode: String(request.rateplan_code || "").trim(),
+      response
+    };
+  },
+
+  async fetchRatePlanByCode(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const rateplanCode = String(body.rateplan_code || body.rateplanCode || "").trim();
+    if (!rateplanCode) {
+      throw new Error("rateplan_code is required");
+    }
+    const response = await execute("taobao.xhotel.rateplan.get", {
+      rateplan_code: rateplanCode,
+      rpid: body.rpid || undefined,
+      vendor: body.vendor || undefined
+    });
+    const rateplan = parseSingleRatePlan(response);
+    const normalized = normalizeRatePlan({
+      ...rateplan,
+      rateplan_code: rateplanCode
+    });
+    if (!normalized) {
+      throw new Error(`rateplan not found by rateplan_code: ${rateplanCode}`);
+    }
+    return {
+      ok: true,
+      rateplanCode,
+      rateplan: {
+        ...normalized,
+        rawPayload: {
+          sourceResponse: response,
+          rateplan
+        }
+      },
+      response
+    };
+  },
+
+  async deleteRatePlanProduct(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const response = await execute("taobao.xhotel.rateplan.delete", {
+      hid: body.hid || body.hotel_id || body.platformHotelId || undefined,
+      out_rid: body.out_rid || body.outRid || body.platformRoomTypeId || undefined,
+      rateplan_code: body.rateplan_code || body.rateplanCode || undefined,
+      vendor: body.vendor || undefined
+    });
+
+    return {
+      ok: true,
+      rateplanCode: String(body.rateplanCode || body.rateplan_code || "").trim(),
+      response
+    };
+  },
+
+  async deleteRateProduct(payload = {}) {
+    const body = normalizeObject(payload.product || payload);
+    const response = await execute("taobao.xhotel.rate.delete", {
+      gid: body.gid || undefined,
+      rpid: body.rpid || undefined,
+      out_rid: body.out_rid || body.outRid || body.platformRoomTypeId || undefined,
+      rateplan_code: body.rateplan_code || body.rateplanCode || undefined,
+      vendor: body.vendor || undefined
+    });
+
+    return {
+      ok: true,
+      response
+    };
+  },
 
   async fetchPublishedHotels(payload = {}) {
     const pageSize = Math.min(100, Math.max(1, Number(payload.pageSize) || 50));
@@ -294,8 +704,11 @@ export const taobaoTopAdapter = {
         if (!normalized) {
           continue;
         }
-        hotelMap.set(normalized.platformHotelId, {
+        const hid = String(row.hid || row.hotel_id || row.hotelId || normalized.platformHotelId || "").trim();
+        const key = hid || normalized.platformHotelId;
+        hotelMap.set(key, {
           ...normalized,
+          __hid: hid || normalized.platformHotelId,
           rooms: []
         });
       }
@@ -312,6 +725,7 @@ export const taobaoTopAdapter = {
           hotelName: id,
           city: "",
           status: "ONLINE",
+          __hid: id,
           rawPayload: { hid: id },
           rooms: []
         });
@@ -319,7 +733,7 @@ export const taobaoTopAdapter = {
     }
 
     if (hotelMap.size > 0) {
-      const hotelIds = Array.from(hotelMap.keys());
+      const hotelIds = Array.from(hotelMap.values()).map((it) => String(it.__hid || it.platformHotelId || "").trim()).filter(Boolean);
       const roomByHotel = new Map();
       const rateplansByHotel = new Map();
 
@@ -391,7 +805,7 @@ export const taobaoTopAdapter = {
       }
 
       for (const hotel of hotelMap.values()) {
-        const hid = hotel.platformHotelId;
+        const hid = String(hotel.__hid || hotel.platformHotelId || "").trim();
         const rooms = roomByHotel.get(hid) || [];
         const plans = rateplansByHotel.get(hid) || [];
 
@@ -465,7 +879,7 @@ export const taobaoTopAdapter = {
           ? payload.items.map((it) => ({
             date: String(it.date || ""),
             quota: Math.max(0, Number(it.inventory) || 0),
-            price: Math.max(0, Number(it.price) || 0)
+            price: Math.max(0, Math.round((Number(it.price) || 0) * 100))
           }))
           : []
       })

@@ -24,15 +24,81 @@ const toInt = (value, fallback = 0) => {
   return Number.isNaN(num) ? fallback : Math.trunc(num);
 };
 
+const normalizeRateplanEntry = (item = {}) => {
+  const rateplanCode = String(item.rateplanCode || item.rateplan_code || item.code || "").trim();
+  if (!rateplanCode) {
+    return null;
+  }
+  return {
+    rateplanCode,
+    rateplanName: String(item.rateplanName || item.name || "").trim(),
+    rpid: String(item.rpid || item.rp_id || "").trim(),
+    status: String(item.status || "").trim(),
+    breakfastCount: Number(item.breakfastCount ?? item.breakfast_count ?? 0) || 0,
+    paymentType: String(item.paymentType ?? item.payment_type ?? "").trim(),
+    cancelPolicy: String(item.cancelPolicy ?? item.cancel_policy ?? "").trim(),
+    modifiedTime: String(item.modifiedTime || item.modified_time || "").trim(),
+    rawPayload: item.rawPayload || item || {}
+  };
+};
+
+const extractRateplansFromRoomPayload = (payload = {}) => {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+  const direct = Array.isArray(payload.rateplans) ? payload.rateplans : [];
+  const candidates = direct.map(normalizeRateplanEntry).filter(Boolean);
+  return candidates;
+};
+
+const mergeRateplanArrays = (base = [], incoming = []) => {
+  const merged = new Map();
+  for (const item of Array.isArray(base) ? base : []) {
+    const normalized = normalizeRateplanEntry(item);
+    if (normalized) {
+      merged.set(normalized.rateplanCode, normalized);
+    }
+  }
+  for (const item of Array.isArray(incoming) ? incoming : []) {
+    const normalized = normalizeRateplanEntry(item);
+    if (normalized) {
+      merged.set(normalized.rateplanCode, normalized);
+    }
+  }
+  return Array.from(merged.values());
+};
+
+const mergeRoomRawPayload = (existedPayload = {}, incomingPayload = {}) => {
+  const next = {
+    ...(existedPayload || {}),
+    ...(incomingPayload || {})
+  };
+  const mergedRateplans = mergeRateplanArrays(
+    extractRateplansFromRoomPayload(existedPayload || {}),
+    extractRateplansFromRoomPayload(incomingPayload || {})
+  );
+  if (mergedRateplans.length > 0) {
+    next.rateplans = mergedRateplans;
+  }
+  return next;
+};
+
 const mapRoom = (row) => ({
   platformRoomTypeId: row.platformRoomTypeId,
   roomTypeName: row.roomTypeName,
   bedType: row.bedType || "",
+  area: row.rawPayload?.area || "",
+  floor: row.rawPayload?.floor || "",
+  maxOccupancy: Number(row.rawPayload?.maxOccupancy || row.rawPayload?.max_occupancy || 0) || null,
+  windowType: row.rawPayload?.windowType || row.rawPayload?.window_type || "",
+  status: row.rawPayload?.status || "",
+  rateplans: extractRateplansFromRoomPayload(row.rawPayload || {}),
   gid: row.gid || "",
   rpid: row.rpid || "",
   outRid: row.outRid || "",
   rateplanCode: row.rateplanCode || "",
   vendor: row.vendor || "",
+  rawPayload: row.rawPayload || null,
   updatedAt: row.updatedAt?.toISOString?.() || nowIso()
 });
 
@@ -63,6 +129,7 @@ export const otaPrismaStore = {
       status: row.status,
       source: row.source,
       updatedAt: row.updatedAt.toISOString(),
+      rawPayload: row.rawPayload || null,
       rooms: (row.rooms || []).map(mapRoom)
     }));
   },
@@ -91,7 +158,7 @@ export const otaPrismaStore = {
           city: String(hotel?.city || "").trim() || null,
           status: String(hotel?.status || "ONLINE").trim().toUpperCase(),
           source: String(source || "sync").trim().toUpperCase(),
-          rawPayload: hotel || {},
+          rawPayload: hotel?.rawPayload || hotel || {},
           lastSyncedAt: new Date()
         },
         update: {
@@ -99,7 +166,7 @@ export const otaPrismaStore = {
           city: String(hotel?.city || "").trim() || null,
           status: String(hotel?.status || "ONLINE").trim().toUpperCase(),
           source: String(source || "sync").trim().toUpperCase(),
-          rawPayload: hotel || {},
+          rawPayload: hotel?.rawPayload || hotel || {},
           lastSyncedAt: new Date()
         }
       });
@@ -110,6 +177,22 @@ export const otaPrismaStore = {
         if (!platformRoomTypeId) {
           continue;
         }
+        const existedRoom = await prisma.otaRoomType.findUnique({
+          where: {
+            platform_platformHotelId_platformRoomTypeId: {
+              platform: normalizedPlatform,
+              platformHotelId,
+              platformRoomTypeId
+            }
+          },
+          select: {
+            rawPayload: true
+          }
+        });
+        const existedPayload = existedRoom?.rawPayload && typeof existedRoom.rawPayload === "object" ? existedRoom.rawPayload : {};
+        const incomingPayload = room?.rawPayload && typeof room.rawPayload === "object" ? room.rawPayload : (room || {});
+        const mergedPayload = mergeRoomRawPayload(existedPayload, incomingPayload);
+
         await prisma.otaRoomType.upsert({
           where: {
             platform_platformHotelId_platformRoomTypeId: {
@@ -129,7 +212,7 @@ export const otaPrismaStore = {
             outRid: room?.outRid ? String(room.outRid) : null,
             rateplanCode: room?.rateplanCode ? String(room.rateplanCode) : null,
             vendor: room?.vendor ? String(room.vendor) : null,
-            rawPayload: room || {},
+            rawPayload: mergedPayload,
             hotelId: upsertedHotel.id
           },
           update: {
@@ -140,7 +223,7 @@ export const otaPrismaStore = {
             outRid: room?.outRid ? String(room.outRid) : null,
             rateplanCode: room?.rateplanCode ? String(room.rateplanCode) : null,
             vendor: room?.vendor ? String(room.vendor) : null,
-            rawPayload: room || {},
+            rawPayload: mergedPayload,
             hotelId: upsertedHotel.id
           }
         });
@@ -167,6 +250,242 @@ export const otaPrismaStore = {
     });
 
     return merged;
+  },
+
+  async upsertRoomRatePlan({ platform, platformHotelId, platformRoomTypeId, rateplan = {} }) {
+    const normalizedPlatform = normalizePlatform(platform || "");
+    const hotelId = String(platformHotelId || "").trim();
+    const roomId = String(platformRoomTypeId || "").trim();
+    const normalizedRateplan = normalizeRateplanEntry(rateplan);
+    if (!normalizedPlatform || !hotelId || !roomId || !normalizedRateplan) {
+      throw new Error("platform/hotel/room/rateplanCode is required");
+    }
+
+    const hotel =
+      (await prisma.otaHotel.findFirst({
+        where: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId
+        },
+        select: { id: true, hotelName: true }
+      })) ||
+      (await prisma.otaHotel.create({
+        data: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId,
+          hotelName: hotelId,
+          city: null,
+          status: "ONLINE",
+          source: "RATEPLAN_IMPORT",
+          rawPayload: {},
+          lastSyncedAt: null
+        },
+        select: { id: true, hotelName: true }
+      }));
+
+    const existed = await prisma.otaRoomType.findUnique({
+      where: {
+        platform_platformHotelId_platformRoomTypeId: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId,
+          platformRoomTypeId: roomId
+        }
+      }
+    });
+
+    const existedPayload = existed?.rawPayload && typeof existed.rawPayload === "object" ? existed.rawPayload : {};
+    const existedRateplans = extractRateplansFromRoomPayload(existedPayload);
+    const merged = new Map(existedRateplans.map((it) => [it.rateplanCode, it]));
+    merged.set(normalizedRateplan.rateplanCode, normalizedRateplan);
+    const mergedRateplans = Array.from(merged.values());
+
+    const nextPayload = {
+      ...(existedPayload || {}),
+      rateplans: mergedRateplans,
+      lastRateplanCode: normalizedRateplan.rateplanCode
+    };
+
+    const room = await prisma.otaRoomType.upsert({
+      where: {
+        platform_platformHotelId_platformRoomTypeId: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId,
+          platformRoomTypeId: roomId
+        }
+      },
+      create: {
+        platform: normalizedPlatform,
+        platformHotelId: hotelId,
+        platformRoomTypeId: roomId,
+        roomTypeName: roomId,
+        bedType: null,
+        gid: null,
+        rpid: normalizedRateplan.rpid || null,
+        outRid: roomId,
+        rateplanCode: normalizedRateplan.rateplanCode,
+        vendor: null,
+        rawPayload: nextPayload,
+        hotelId: hotel.id
+      },
+      update: {
+        rpid: normalizedRateplan.rpid || existed?.rpid || null,
+        rateplanCode: normalizedRateplan.rateplanCode,
+        rawPayload: nextPayload,
+        hotelId: hotel.id
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId: hotelId,
+      platformRoomTypeId: roomId,
+      rateplan: normalizedRateplan,
+      rateplans: mergedRateplans,
+      roomTypeName: room.roomTypeName
+    };
+  },
+
+  async deleteRoomRatePlan({ platform, platformHotelId, platformRoomTypeId, rateplanCode }) {
+    const normalizedPlatform = normalizePlatform(platform || "");
+    const hotelId = String(platformHotelId || "").trim();
+    const roomId = String(platformRoomTypeId || "").trim();
+    const code = String(rateplanCode || "").trim();
+    if (!normalizedPlatform || !hotelId || !roomId || !code) {
+      return {
+        removed: false,
+        rateplans: []
+      };
+    }
+
+    const existed = await prisma.otaRoomType.findUnique({
+      where: {
+        platform_platformHotelId_platformRoomTypeId: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId,
+          platformRoomTypeId: roomId
+        }
+      }
+    });
+    if (!existed) {
+      return {
+        removed: false,
+        rateplans: []
+      };
+    }
+
+    const existedPayload = existed?.rawPayload && typeof existed.rawPayload === "object" ? existed.rawPayload : {};
+    const oldRateplans = extractRateplansFromRoomPayload(existedPayload);
+    const nextRateplans = oldRateplans.filter((it) => it.rateplanCode !== code);
+    const removed = nextRateplans.length !== oldRateplans.length;
+    if (!removed) {
+      return {
+        removed: false,
+        rateplans: oldRateplans
+      };
+    }
+    const nextPrimary = nextRateplans[0] || null;
+
+    await prisma.otaRoomType.update({
+      where: {
+        platform_platformHotelId_platformRoomTypeId: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId,
+          platformRoomTypeId: roomId
+        }
+      },
+      data: {
+        rateplanCode: nextPrimary?.rateplanCode || null,
+        rpid: nextPrimary?.rpid || null,
+        rawPayload: {
+          ...(existedPayload || {}),
+          rateplans: nextRateplans,
+          lastRateplanCode: nextPrimary?.rateplanCode || null
+        }
+      }
+    });
+
+    return {
+      removed,
+      rateplans: nextRateplans
+    };
+  },
+
+  async deletePublishedRoomType({ platform, platformHotelId, platformRoomTypeId }) {
+    const normalizedPlatform = normalizePlatform(platform || "");
+    const hotelId = String(platformHotelId || "").trim();
+    const roomId = String(platformRoomTypeId || "").trim();
+    if (!normalizedPlatform || !hotelId || !roomId) {
+      return 0;
+    }
+    const result = await prisma.otaRoomType.deleteMany({
+      where: {
+        platform: normalizedPlatform,
+        platformHotelId: hotelId,
+        platformRoomTypeId: roomId
+      }
+    });
+    return Number(result?.count || 0);
+  },
+
+  async deletePublishedHotelLocal({ platform, platformHotelId }) {
+    const normalizedPlatform = normalizePlatform(platform || "");
+    const hotelId = String(platformHotelId || "").trim();
+    if (!normalizedPlatform || !hotelId) {
+      return {
+        hotelCount: 0,
+        roomTypeCount: 0,
+        hotelMappingCount: 0,
+        roomMappingCount: 0,
+        calendarCount: 0
+      };
+    }
+
+    const [
+      roomTypeDelete,
+      roomMappingDelete,
+      calendarDelete,
+      hotelMappingDelete,
+      hotelDelete
+    ] = await Promise.all([
+      prisma.otaRoomType.deleteMany({
+        where: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId
+        }
+      }),
+      prisma.otaRoomMapping.deleteMany({
+        where: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId
+        }
+      }),
+      prisma.otaCalendarItem.deleteMany({
+        where: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId
+        }
+      }),
+      prisma.otaHotelMapping.deleteMany({
+        where: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId
+        }
+      }),
+      prisma.otaHotel.deleteMany({
+        where: {
+          platform: normalizedPlatform,
+          platformHotelId: hotelId
+        }
+      })
+    ]);
+
+    return {
+      hotelCount: Number(hotelDelete?.count || 0),
+      roomTypeCount: Number(roomTypeDelete?.count || 0),
+      hotelMappingCount: Number(hotelMappingDelete?.count || 0),
+      roomMappingCount: Number(roomMappingDelete?.count || 0),
+      calendarCount: Number(calendarDelete?.count || 0)
+    };
   },
 
   async upsertHotelMapping(payload = {}) {
@@ -245,51 +564,66 @@ export const otaPrismaStore = {
     const platform = normalizePlatform(payload.platform || "");
     const platformHotelId = String(payload.platformHotelId || "").trim();
     const platformRoomTypeId = String(payload.platformRoomTypeId || "").trim();
+    const platformChannel = String(payload.platformChannel || "DEFAULT").trim().toUpperCase();
+    const rateCode = String(payload.rateCode || "").trim();
+    if (!rateCode) {
+      throw new Error("rateCode (rateplan_code) is required");
+    }
 
-    const row = await prisma.otaRoomMapping.upsert({
-      where: {
-        platform_platformHotelId_platformRoomTypeId: {
-          platform,
-          platformHotelId,
-          platformRoomTypeId
-        }
-      },
-      create: {
+    const createData = {
         platform,
         platformHotelId,
         platformRoomTypeId,
         platformRoomTypeName: String(payload.platformRoomTypeName || "").trim() || platformRoomTypeId,
         internalRoomTypeId: String(payload.internalRoomTypeId || "").trim(),
         internalRoomTypeName: String(payload.internalRoomTypeName || "").trim(),
-        rateCode: payload.rateCode ? String(payload.rateCode) : null,
+        rateCode,
         rateCodeId: payload.rateCodeId ? String(payload.rateCodeId) : null,
         rpActivityId: payload.rpActivityId ? String(payload.rpActivityId) : null,
         bookingTier: String(payload.bookingTier || "NORMAL").trim(),
-        platformChannel: String(payload.platformChannel || "DEFAULT").trim().toUpperCase(),
+        platformChannel,
         orderSubmitMode: String(payload.orderSubmitMode || "MANUAL").trim().toUpperCase(),
         autoOrderEnabled: payload.autoOrderEnabled !== false,
         autoSyncEnabled: payload.autoSyncEnabled !== false,
         manualTuningEnabled: Boolean(payload.manualTuningEnabled),
         autoSyncFutureDays: Math.max(1, toInt(payload.autoSyncFutureDays, 30)),
         enabled: payload.enabled !== false
-      },
-      update: {
+      };
+    const updateData = {
         platformRoomTypeName: String(payload.platformRoomTypeName || "").trim() || platformRoomTypeId,
         internalRoomTypeId: String(payload.internalRoomTypeId || "").trim(),
         internalRoomTypeName: String(payload.internalRoomTypeName || "").trim(),
-        rateCode: payload.rateCode ? String(payload.rateCode) : null,
+        rateCode,
         rateCodeId: payload.rateCodeId ? String(payload.rateCodeId) : null,
         rpActivityId: payload.rpActivityId ? String(payload.rpActivityId) : null,
         bookingTier: String(payload.bookingTier || "NORMAL").trim(),
-        platformChannel: String(payload.platformChannel || "DEFAULT").trim().toUpperCase(),
+        platformChannel,
         orderSubmitMode: String(payload.orderSubmitMode || "MANUAL").trim().toUpperCase(),
         autoOrderEnabled: payload.autoOrderEnabled !== false,
         autoSyncEnabled: payload.autoSyncEnabled !== false,
         manualTuningEnabled: Boolean(payload.manualTuningEnabled),
         autoSyncFutureDays: Math.max(1, toInt(payload.autoSyncFutureDays, 30)),
         enabled: payload.enabled !== false
-      }
+      };
+
+    const existed = await prisma.otaRoomMapping.findFirst({
+      where: {
+        platform,
+        platformHotelId,
+        platformRoomTypeId,
+        platformChannel,
+        rateCode
+      },
+      select: { id: true }
     });
+    const row = existed
+      ? await prisma.otaRoomMapping.update({
+        where: { id: existed.id },
+        data: updateData
+      })
+      : await prisma.otaRoomMapping.create({
+        data: createData
+      });
 
     await prisma.otaRoomType.upsert({
       where: {
@@ -345,9 +679,15 @@ export const otaPrismaStore = {
 
   async listRoomMappings(filters = {}) {
     const platform = normalizePlatform(filters.platform || "");
+    const platformHotelId = filters.platformHotelId ? String(filters.platformHotelId).trim() : "";
+    const platformRoomTypeId = filters.platformRoomTypeId ? String(filters.platformRoomTypeId).trim() : "";
+    const platformChannel = filters.platformChannel ? String(filters.platformChannel).trim().toUpperCase() : "";
     const rows = await prisma.otaRoomMapping.findMany({
       where: {
-        platform: platform || undefined
+        platform: platform || undefined,
+        platformHotelId: platformHotelId || undefined,
+        platformRoomTypeId: platformRoomTypeId || undefined,
+        platformChannel: platformChannel || undefined
       },
       orderBy: {
         updatedAt: "desc"
@@ -361,15 +701,36 @@ export const otaPrismaStore = {
   },
 
   async getRoomMapping(params = {}) {
-    const row = await prisma.otaRoomMapping.findUnique({
-      where: {
-        platform_platformHotelId_platformRoomTypeId: {
-          platform: normalizePlatform(params.platform || ""),
-          platformHotelId: String(params.platformHotelId || "").trim(),
-          platformRoomTypeId: String(params.platformRoomTypeId || "").trim()
+    const platform = normalizePlatform(params.platform || "");
+    const platformHotelId = String(params.platformHotelId || "").trim();
+    const platformRoomTypeId = String(params.platformRoomTypeId || "").trim();
+    const platformChannel = String(params.platformChannel || "").trim().toUpperCase();
+    const rateCode = String(params.rateCode || "").trim();
+    const row = rateCode
+      ? await prisma.otaRoomMapping.findFirst({
+        where: {
+          platform,
+          platformHotelId,
+          platformRoomTypeId,
+          platformChannel: platformChannel || "DEFAULT",
+          rateCode
+        },
+        orderBy: {
+          updatedAt: "desc"
         }
-      }
-    });
+      })
+      : await prisma.otaRoomMapping.findFirst({
+        where: {
+          platform,
+          platformHotelId,
+          platformRoomTypeId,
+          platformChannel: platformChannel || undefined,
+          enabled: true
+        },
+        orderBy: {
+          updatedAt: "desc"
+        }
+      });
     if (!row) {
       return null;
     }
@@ -447,34 +808,80 @@ export const otaPrismaStore = {
   },
 
   async upsertCalendarItem(payload = {}) {
-    const row = await prisma.otaCalendarItem.upsert({
-      where: {
-        platform_platformHotelId_platformRoomTypeId_date: {
-          platform: normalizePlatform(payload.platform || ""),
-          platformHotelId: String(payload.platformHotelId || "").trim(),
-          platformRoomTypeId: String(payload.platformRoomTypeId || "").trim(),
-          date: toDateText(payload.date)
-        }
-      },
-      create: {
+    const platformHotelId = String(payload.platformHotelId || "").trim();
+    const platformRoomTypeId = String(payload.platformRoomTypeId || "").trim();
+    const date = toDateText(payload.date);
+    const platformChannel = String(payload.platformChannel || "DEFAULT").trim().toUpperCase();
+    const rateplanCode = String(payload.rateplanCode || payload.rateplan_code || "").trim();
+    if (!platformHotelId || !platformRoomTypeId || !date) {
+      throw new Error("platformHotelId, platformRoomTypeId and date are required");
+    }
+    if (!rateplanCode) {
+      throw new Error("rateplanCode is required");
+    }
+    const baseCreate = {
         platform: normalizePlatform(payload.platform || ""),
-        platformHotelId: String(payload.platformHotelId || "").trim(),
-        platformRoomTypeId: String(payload.platformRoomTypeId || "").trim(),
-        date: toDateText(payload.date),
+        platformHotelId,
+        platformRoomTypeId,
+        date,
         price: Math.max(0, toInt(payload.price, 0)),
         inventory: Math.max(0, toInt(payload.inventory, 0)),
         currency: String(payload.currency || "CNY").trim().toUpperCase(),
         source: String(payload.source || "manual").trim().toUpperCase(),
         lastPushedAt: payload.lastPushedAt ? new Date(payload.lastPushedAt) : null
-      },
-      update: {
+      };
+    const updateData = {
         price: Math.max(0, toInt(payload.price, 0)),
         inventory: Math.max(0, toInt(payload.inventory, 0)),
         currency: String(payload.currency || "CNY").trim().toUpperCase(),
         source: String(payload.source || "manual").trim().toUpperCase(),
         lastPushedAt: payload.lastPushedAt ? new Date(payload.lastPushedAt) : undefined
-      }
-    });
+      };
+
+    let row;
+    try {
+      const existed = await prisma.otaCalendarItem.findFirst({
+        where: {
+          platform: normalizePlatform(payload.platform || ""),
+          platformHotelId,
+          platformRoomTypeId,
+          platformChannel,
+          rateplanCode,
+          date
+        },
+        select: { id: true }
+      });
+      row = existed
+        ? await prisma.otaCalendarItem.update({
+          where: { id: existed.id },
+          data: updateData
+        })
+        : await prisma.otaCalendarItem.create({
+          data: {
+            ...baseCreate,
+            platformChannel,
+            rateplanCode
+          }
+        });
+    } catch {
+      const existed = await prisma.otaCalendarItem.findFirst({
+        where: {
+          platform: normalizePlatform(payload.platform || ""),
+          platformHotelId,
+          platformRoomTypeId,
+          date
+        },
+        select: { id: true }
+      });
+      row = existed
+        ? await prisma.otaCalendarItem.update({
+          where: { id: existed.id },
+          data: updateData
+        })
+        : await prisma.otaCalendarItem.create({
+          data: baseCreate
+        });
+    }
 
     return {
       ...row,
@@ -490,6 +897,8 @@ export const otaPrismaStore = {
         platform: normalizePlatform(filters.platform || "") || undefined,
         platformHotelId: filters.platformHotelId ? String(filters.platformHotelId).trim() : undefined,
         platformRoomTypeId: filters.platformRoomTypeId ? String(filters.platformRoomTypeId).trim() : undefined,
+        platformChannel: filters.platformChannel ? String(filters.platformChannel).trim().toUpperCase() : undefined,
+        rateplanCode: filters.rateplanCode ? String(filters.rateplanCode).trim() : undefined,
         date: {
           gte: filters.startDate ? toDateText(filters.startDate) : undefined,
           lte: filters.endDate ? toDateText(filters.endDate) : undefined

@@ -354,7 +354,7 @@ model OtaRoomMapping {
   platformRoomTypeName String
   internalRoomTypeId  String
   internalRoomTypeName String
-  rateCode            String?
+  rateCode            String
   rateCodeId          String?
   rpActivityId        String?
   bookingTier         String
@@ -368,7 +368,7 @@ model OtaRoomMapping {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  @@unique([platform, platformHotelId, platformRoomTypeId])
+  @@unique([platform, platformHotelId, platformRoomTypeId, platformChannel, rateCode])
   @@index([platform, enabled])
 }
 
@@ -392,6 +392,8 @@ model OtaCalendarItem {
   platform           String
   platformHotelId    String
   platformRoomTypeId String
+  platformChannel    String   @default("DEFAULT")
+  rateplanCode       String
   date               String
   price              Int      @default(0)
   inventory          Int      @default(0)
@@ -401,7 +403,7 @@ model OtaCalendarItem {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  @@unique([platform, platformHotelId, platformRoomTypeId, date])
+  @@unique([platform, platformHotelId, platformRoomTypeId, platformChannel, rateplanCode, date])
   @@index([platform, date])
 }
 

@@ -80,14 +80,18 @@ TopClient.prototype.request = function (type,params,httpHeaders,callback) {
     }
 
     for (var key in params) {
-        if(typeof params[key] === 'object' && Buffer.isBuffer(params[key])){
-            request.attach(key,params[key],{knownLength:params[key].length,filename:key})
-        } else if(typeof params[key] === 'object' && Stream.Readable(params[key]) && !util.is(params[key]).a(String)){
-            request.attach(key, params[key]);
-        } else if(typeof params[key] === 'object'){
-            args[key] = JSON.stringify(params[key]);
+        var value = params[key];
+        if (value === undefined || value === null) {
+            continue;
+        }
+        if(typeof value === 'object' && Buffer.isBuffer(value)){
+            request.attach(key,value,{knownLength:value.length,filename:key})
+        } else if(typeof value === 'object' && Stream.Readable(value) && !util.is(value).a(String)){
+            request.attach(key, value);
+        } else if(typeof value === 'object'){
+            args[key] = JSON.stringify(value);
         } else{
-            args[key] = params[key];
+            args[key] = value;
         }
     }
 
@@ -140,6 +144,12 @@ TopClient.prototype.sign = function (params) {
     var basestring = this.appsecret;
     for (var i = 0, l = sorted.length; i < l; i++) {
         var k = sorted[i];
+        if (k === 'sign') {
+            continue;
+        }
+        if (params[k] === undefined || params[k] === null) {
+            continue;
+        }
         basestring += k + params[k];
     }
     basestring += this.appsecret;
