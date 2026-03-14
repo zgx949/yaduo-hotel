@@ -290,3 +290,168 @@ model LlmModel {
   isActive     Boolean      @default(false)
   config       SystemConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
 }
+
+model OtaHotel {
+  id              String      @id @default(cuid())
+  platform        String
+  platformHotelId String
+  hotelName       String
+  city            String?
+  status          String
+  source          String      @default("SYNC")
+  rawPayload      Json?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  rooms           OtaRoomType[]
+
+  @@unique([platform, platformHotelId])
+  @@index([platform, updatedAt])
+}
+
+model OtaRoomType {
+  id                 String    @id @default(cuid())
+  platform           String
+  platformHotelId    String
+  platformRoomTypeId String
+  roomTypeName       String
+  bedType            String?
+  gid                String?
+  rpid               String?
+  outRid             String?
+  rateplanCode       String?
+  vendor             String?
+  rawPayload         Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  hotelId            String
+  hotel              OtaHotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, platformHotelId, platformRoomTypeId])
+  @@index([platform, platformHotelId])
+}
+
+model OtaHotelMapping {
+  id               String   @id @default(cuid())
+  platform         String
+  platformHotelId  String
+  platformHotelName String
+  internalChainId  String
+  internalHotelName String
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([platform, platformHotelId])
+  @@index([platform, enabled])
+}
+
+model OtaRoomMapping {
+  id                  String   @id @default(cuid())
+  platform            String
+  platformHotelId     String
+  platformRoomTypeId  String
+  platformRoomTypeName String
+  internalRoomTypeId  String
+  internalRoomTypeName String
+  rateCode            String?
+  rateCodeId          String?
+  rpActivityId        String?
+  bookingTier         String
+  platformChannel     String
+  orderSubmitMode     String
+  autoOrderEnabled    Boolean  @default(true)
+  autoSyncEnabled     Boolean  @default(true)
+  manualTuningEnabled Boolean  @default(false)
+  autoSyncFutureDays  Int      @default(30)
+  enabled             Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([platform, platformHotelId, platformRoomTypeId])
+  @@index([platform, enabled])
+}
+
+model OtaChannelMapping {
+  id                 String   @id @default(cuid())
+  platform           String
+  platformChannel    String
+  internalBookingTier String
+  internalChannelName String
+  autoSubmit         Boolean  @default(false)
+  enabled            Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([platform, platformChannel])
+  @@index([platform, enabled])
+}
+
+model OtaCalendarItem {
+  id                 String   @id @default(cuid())
+  platform           String
+  platformHotelId    String
+  platformRoomTypeId String
+  date               String
+  price              Int      @default(0)
+  inventory          Int      @default(0)
+  currency           String   @default("CNY")
+  source             String   @default("MANUAL")
+  lastPushedAt       DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([platform, platformHotelId, platformRoomTypeId, date])
+  @@index([platform, date])
+}
+
+model OtaInboundOrder {
+  id                 String   @id @default(cuid())
+  platform           String
+  externalOrderId    String
+  status             String
+  platformHotelId    String
+  platformRoomTypeId String
+  platformChannel    String
+  customerName       String
+  contactPhone       String?
+  checkInDate        String
+  checkOutDate       String
+  roomCount          Int      @default(1)
+  amount             Int      @default(0)
+  currency           String   @default("CNY")
+  remark             String?
+  rawPayload         Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([platform, externalOrderId])
+  @@index([platform, status])
+}
+
+model OtaOrderBinding {
+  id                 String   @id @default(cuid())
+  platform           String
+  externalOrderId    String
+  localOrderId       String?
+  templatePayload    Json?
+  autoSubmitState    String
+  manualPaymentState String
+  bookingConfirmState String
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([platform, externalOrderId])
+  @@index([platform, autoSubmitState])
+}
+
+model OtaSyncLog {
+  id        String   @id @default(cuid())
+  type      String
+  platform  String
+  result    Json?
+  createdAt DateTime @default(now())
+
+  @@index([platform, createdAt])
+}

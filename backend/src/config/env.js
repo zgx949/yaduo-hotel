@@ -58,5 +58,12 @@ export const env = {
   redisPassword: process.env.REDIS_PASSWORD || "",
   redisDb: toNumber(process.env.REDIS_DB, 0),
   taskPollIntervalMs: toNumber(process.env.TASK_POLL_INTERVAL_MS, 5000),
-  otaWebhookSecret: process.env.OTA_WEBHOOK_SECRET || ""
+  otaWebhookSecret: process.env.OTA_WEBHOOK_SECRET || "",
+  otaTopAppKey: process.env.OTA_TOP_APP_KEY || "",
+  otaTopAppSecret: process.env.OTA_TOP_APP_SECRET || "",
+  otaTopAssessToken: process.env.OTA_TOP_ASSESS_TOKEN || "",
+  otaTopSession: process.env.OTA_TOP_SESSION || "",
+  otaTopUrl: process.env.OTA_TOP_URL || "https://eco.taobao.com/router/rest",
+  otaTopVendor: process.env.OTA_TOP_VENDOR || "",
+  otaOrderPullLookbackHours: toNumber(process.env.OTA_ORDER_PULL_LOOKBACK_HOURS, 24)
 };

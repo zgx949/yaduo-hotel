@@ -1,0 +1,877 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { env } from "../config/env.js";
+import { otaPrismaStore } from "../data/ota-prisma-store.js";
+import { prismaStore } from "../data/prisma-store.js";
+import { taobaoTopAdapter } from "./ota/taobao-top.adapter.js";
+
+const ADAPTERS = {
+  FLIGGY: taobaoTopAdapter
+};
+
+const normalizePlatform = (value = "FLIGGY") => String(value || "FLIGGY").trim().toUpperCase();
+
+const normalizeDateText = (value) => {
+  const parsed = new Date(String(value || "").trim());
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeDateTimeText = (value) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  const yyyy = parsed.getFullYear();
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+  const dd = String(parsed.getDate()).padStart(2, "0");
+  const hh = String(parsed.getHours()).padStart(2, "0");
+  const mi = String(parsed.getMinutes()).padStart(2, "0");
+  const ss = String(parsed.getSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+};
+
+const getAdapter = (platform = "FLIGGY") => {
+  const normalized = normalizePlatform(platform);
+  const adapter = ADAPTERS[normalized];
+  if (!adapter) {
+    throw new Error(`unsupported ota platform: ${normalized}`);
+  }
+  return { platform: normalized, adapter };
+};
+
+const resolveInboundOrderSubmitPolicy = ({ roomMapping, channelMapping }) => {
+  if (roomMapping?.enabled === false) {
+    return {
+      orderSubmitMode: "MANUAL",
+      autoSubmit: false
+    };
+  }
+  const mode = String(roomMapping?.orderSubmitMode || "MANUAL").trim().toUpperCase();
+  const roomAutoEnabled = roomMapping?.autoOrderEnabled !== false;
+  const channelAutoEnabled = channelMapping?.autoSubmit === true;
+
+  if (mode === "AUTO") {
+    return {
+      orderSubmitMode: "AUTO",
+      autoSubmit: roomAutoEnabled || channelAutoEnabled
+    };
+  }
+  return {
+    orderSubmitMode: "MANUAL",
+    autoSubmit: false
+  };
+};
+
+const verifyWebhookSignature = ({ rawBody = "", signature = "", secret = "" }) => {
+  const secretText = String(secret || "").trim();
+  if (!secretText) {
+    return false;
+  }
+  const digest = createHmac("sha256", secretText).update(String(rawBody || "")).digest("hex");
+  const incoming = String(signature || "").trim();
+  if (!incoming || incoming.length !== digest.length) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(digest), Buffer.from(incoming));
+};
+
+const sanitizeInboundOrder = (item = {}, includeRaw = false) => {
+  if (includeRaw) {
+    return { ...item, rawPayload: item.rawPayload || {} };
+  }
+  const { rawPayload, ...rest } = item;
+  return rest;
+};
+
+const normalizeCustomerName = (raw = {}) => {
+  if (Array.isArray(raw.guests) && raw.guests.length > 0) {
+    return String(raw.guests[0] || "").trim();
+  }
+  if (typeof raw.guests === "string" && raw.guests.trim()) {
+    return raw.guests.trim();
+  }
+  return String(raw.buyer_nick || raw.customer_name || "").trim();
+};
+
+const toIntegerAmount = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return 0;
+  }
+  const num = Number(value);
+  if (Number.isNaN(num)) {
+    return 0;
+  }
+  return Math.max(0, Math.round(num));
+};
+
+const buildOrderPayloadFromTop = (order = {}) => {
+  const externalOrderId = String(order.out_oid || order.outOid || order.oid || order.tid || order.order_id || "").trim();
+  const platformHotelId = String(order.hid || order.hotel_id || order.hotelid || "").trim();
+  const platformRoomTypeId = String(order.rid || order.out_rid || order.room_type_id || "").trim();
+  const platformChannel = String(order.channel || order.source || "DEFAULT").trim().toUpperCase() || "DEFAULT";
+
+  return {
+    externalOrderId,
+    status: String(order.trade_status || order.status || "NEW").trim().toUpperCase() || "NEW",
+    platformHotelId,
+    platformRoomTypeId,
+    platformChannel,
+    customerName: normalizeCustomerName(order) || "OTA客户",
+    contactPhone: String(order.mobile || order.contact_phone || "").trim() || null,
+    checkInDate: normalizeDateText(order.checkin_date || order.check_in || order.arrival_date),
+    checkOutDate: normalizeDateText(order.checkout_date || order.check_out || order.departure_date),
+    roomCount: Math.max(1, Number(order.room_count || order.room_num || 1) || 1),
+    amount: toIntegerAmount(order.total_price || order.payment || order.price || 0),
+    currency: String(order.currency || "CNY").trim().toUpperCase() || "CNY",
+    remark: String(order.message || order.remark || "").trim() || null,
+    rawPayload: order
+  };
+};
+
+const buildDefaultTemplatePayload = ({ inboundOrder, hotelMapping, roomMapping, channelMapping }) => {
+  const checkInDate = normalizeDateText(inboundOrder.checkInDate);
+  const checkOutDate = normalizeDateText(inboundOrder.checkOutDate);
+
+  return {
+    hotelName: hotelMapping?.internalHotelName || inboundOrder.platformHotelId,
+    customerName: inboundOrder.customerName || "OTA客户",
+    chainId: hotelMapping?.internalChainId || "UNKNOWN",
+    checkInDate,
+    checkOutDate,
+    contactPhone: inboundOrder.contactPhone || null,
+    currency: inboundOrder.currency || "CNY",
+    submitNow: false,
+    remark: inboundOrder.remark || `OTA订单 ${inboundOrder.externalOrderId}`,
+    splits: [
+      {
+        bookingTier: roomMapping?.bookingTier || channelMapping?.internalBookingTier || "NORMAL",
+        roomTypeId: roomMapping?.internalRoomTypeId || null,
+        roomType: roomMapping?.internalRoomTypeName || inboundOrder.platformRoomTypeId,
+        roomCount: Math.max(1, Number(inboundOrder.roomCount) || 1),
+        amount: Math.max(0, Number(inboundOrder.amount) || 0),
+        rateCode: roomMapping?.rateCode || null,
+        rateCodeId: roomMapping?.rateCodeId || null,
+        rpActivityId: roomMapping?.rpActivityId || null,
+        remark: inboundOrder.remark || ""
+      }
+    ]
+  };
+};
+
+const getSystemOperator = async () => {
+  const admin = await prismaStore.getUserByUsername("admin");
+  if (admin) {
+    return admin;
+  }
+  const allUsers = await prismaStore.listUsers();
+  if (allUsers.length === 0) {
+    throw new Error("no user available to create internal order");
+  }
+  return allUsers[0];
+};
+
+const findHotelMapping = async ({ platform, platformHotelId }) => {
+  const mappings = await otaPrismaStore.listHotelMappings({ platform });
+  return mappings.find((it) => it.platformHotelId === String(platformHotelId || "")) || null;
+};
+
+const enqueueBindingForInboundOrder = async ({ normalizedPlatform, inbound }) => {
+  const roomMapping = await otaPrismaStore.getRoomMapping({
+    platform: normalizedPlatform,
+    platformHotelId: inbound.platformHotelId,
+    platformRoomTypeId: inbound.platformRoomTypeId
+  });
+  const channelMapping = await otaPrismaStore.getChannelMapping({
+    platform: normalizedPlatform,
+    platformChannel: inbound.platformChannel
+  });
+  const submitPolicy = resolveInboundOrderSubmitPolicy({ roomMapping, channelMapping });
+
+  const currentBinding = await otaPrismaStore.getOrderBinding({
+    platform: normalizedPlatform,
+    externalOrderId: inbound.externalOrderId
+  });
+
+  if (!currentBinding) {
+    await otaPrismaStore.upsertOrderBinding({
+      platform: normalizedPlatform,
+      externalOrderId: inbound.externalOrderId,
+      autoSubmitState: submitPolicy.autoSubmit ? "QUEUED" : "PENDING",
+      notes: inbound.alreadyExists ? "duplicate order" : "new inbound order"
+    });
+  }
+
+  const latestBinding = await otaPrismaStore.getOrderBinding({
+    platform: normalizedPlatform,
+    externalOrderId: inbound.externalOrderId
+  });
+
+  return {
+    platform: normalizedPlatform,
+    externalOrderId: inbound.externalOrderId,
+    alreadyExists: Boolean(inbound.alreadyExists),
+    autoSubmit: submitPolicy.autoSubmit,
+    orderSubmitMode: submitPolicy.orderSubmitMode,
+    hasLocalOrder: Boolean(latestBinding?.localOrderId)
+  };
+};
+
+export const otaIntegrationService = {
+  listPlatforms() {
+    return Object.keys(ADAPTERS).map((platform) => ({ platform, enabled: true, mode: "REAL" }));
+  },
+
+  async syncPublishedHotels({ platform = "FLIGGY" } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+    const fetchResult = await adapter.fetchPublishedHotels({
+      status: "1",
+      pageSize: 50,
+      maxPages: 10
+    });
+
+    const hotelsById = new Map();
+    for (const hotel of fetchResult.hotels || []) {
+      const platformHotelId = String(hotel.platformHotelId || "").trim();
+      if (!platformHotelId) {
+        continue;
+      }
+      hotelsById.set(platformHotelId, {
+        platformHotelId,
+        hotelName: String(hotel.hotelName || platformHotelId).trim(),
+        city: String(hotel.city || "").trim(),
+        status: String(hotel.status || "ONLINE").trim().toUpperCase() || "ONLINE",
+        rooms: Array.isArray(hotel.rooms)
+          ? hotel.rooms.map((room) => ({
+            platformRoomTypeId: String(room.platformRoomTypeId || room.outRid || "").trim(),
+            roomTypeName: String(room.roomTypeName || room.platformRoomTypeId || room.outRid || "").trim(),
+            bedType: String(room.bedType || "").trim(),
+            gid: String(room.gid || "").trim(),
+            rpid: String(room.rpid || "").trim(),
+            outRid: String(room.outRid || room.platformRoomTypeId || "").trim(),
+            rateplanCode: String(room.rateplanCode || "").trim(),
+            vendor: String(room.vendor || env.otaTopVendor || "").trim()
+          })).filter((room) => room.platformRoomTypeId)
+          : []
+      });
+    }
+
+    const roomMappings = (await otaPrismaStore.listRoomMappings({ platform: normalizedPlatform })).filter((it) => it.enabled !== false);
+    for (const mapping of roomMappings) {
+      const hotelId = String(mapping.platformHotelId || "").trim();
+      if (!hotelId) {
+        continue;
+      }
+      if (!hotelsById.has(hotelId)) {
+        hotelsById.set(hotelId, {
+          platformHotelId: hotelId,
+          hotelName: hotelId,
+          city: "",
+          status: "ONLINE",
+          rooms: []
+        });
+      }
+      const target = hotelsById.get(hotelId);
+      const exists = target.rooms.find((room) => room.platformRoomTypeId === mapping.platformRoomTypeId);
+      if (!exists) {
+        target.rooms.push({
+          platformRoomTypeId: mapping.platformRoomTypeId,
+          roomTypeName: mapping.platformRoomTypeName || mapping.platformRoomTypeId,
+          bedType: "",
+          gid: "",
+          rpid: "",
+          outRid: mapping.platformRoomTypeId,
+          rateplanCode: String(mapping.rateCode || "").trim(),
+          vendor: String(env.otaTopVendor || "").trim()
+        });
+      }
+    }
+
+    const calendarUpserts = [];
+    for (const mapping of roomMappings) {
+      const outRid = String(mapping.platformRoomTypeId || "").trim();
+      const rateplanCode = String(mapping.rateCode || "").trim();
+      if (!outRid || !rateplanCode) {
+        continue;
+      }
+      let rateResult = null;
+      try {
+        rateResult = await adapter.fetchRate({
+          outRid,
+          rateplanCode,
+          vendor: env.otaTopVendor || undefined
+        });
+      } catch {
+        rateResult = null;
+      }
+
+      for (const item of rateResult?.inventoryCalendar || []) {
+        const date = normalizeDateText(item.date);
+        if (!date) {
+          continue;
+        }
+        calendarUpserts.push({
+          platform: normalizedPlatform,
+          platformHotelId: mapping.platformHotelId,
+          platformRoomTypeId: mapping.platformRoomTypeId,
+          date,
+          price: toIntegerAmount(item.price),
+          inventory: Math.max(0, Number(item.quota || item.inventory || 0) || 0),
+          currency: "CNY",
+          source: "SYNC"
+        });
+      }
+    }
+
+    const hotels = await otaPrismaStore.upsertPublishedHotels({
+      platform: normalizedPlatform,
+      hotels: Array.from(hotelsById.values()),
+      source: "TOP_SYNC"
+    });
+
+    for (const item of calendarUpserts) {
+      await otaPrismaStore.upsertCalendarItem(item);
+    }
+
+    await otaPrismaStore.appendSyncLog({
+      type: "HOTEL_SYNC",
+      platform: normalizedPlatform,
+      result: {
+        count: hotels.length,
+        calendarCount: calendarUpserts.length,
+        source: fetchResult.source || "TOP_PRODUCT_LIBRARY"
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      count: hotels.length,
+      hotels,
+      calendarCount: calendarUpserts.length
+    };
+  },
+
+  async listPublishedHotels({ platform } = {}) {
+    return otaPrismaStore.listPublishedHotels({ platform: normalizePlatform(platform || "") });
+  },
+
+  async upsertHotelMapping(payload = {}) {
+    return otaPrismaStore.upsertHotelMapping({
+      ...payload,
+      platform: normalizePlatform(payload.platform || "FLIGGY")
+    });
+  },
+
+  async listHotelMappings({ platform } = {}) {
+    return otaPrismaStore.listHotelMappings({ platform: normalizePlatform(platform || "") });
+  },
+
+  async upsertRoomMapping(payload = {}) {
+    return otaPrismaStore.upsertRoomMapping({
+      ...payload,
+      platformChannel: String(payload.platformChannel || "DEFAULT").trim().toUpperCase(),
+      orderSubmitMode: String(payload.orderSubmitMode || "MANUAL").trim().toUpperCase(),
+      autoOrderEnabled: payload.autoOrderEnabled !== false,
+      autoSyncEnabled: payload.autoSyncEnabled !== false,
+      manualTuningEnabled: Boolean(payload.manualTuningEnabled),
+      autoSyncFutureDays: Math.max(1, Number(payload.autoSyncFutureDays) || 30),
+      platform: normalizePlatform(payload.platform || "FLIGGY")
+    });
+  },
+
+  async listRoomMappings({ platform } = {}) {
+    return otaPrismaStore.listRoomMappings({ platform: normalizePlatform(platform || "") });
+  },
+
+  async upsertChannelMapping(payload = {}) {
+    return otaPrismaStore.upsertChannelMapping({
+      ...payload,
+      platform: normalizePlatform(payload.platform || "FLIGGY")
+    });
+  },
+
+  async listChannelMappings({ platform } = {}) {
+    return otaPrismaStore.listChannelMappings({ platform: normalizePlatform(platform || "") });
+  },
+
+  async setCalendarItems({ platform = "FLIGGY", items = [], source = "manual" } = {}) {
+    const normalizedPlatform = normalizePlatform(platform);
+    const sourceItems = Array.isArray(items) ? items : [];
+    const accepted = [];
+    for (const item of sourceItems) {
+      const date = normalizeDateText(item.date);
+      if (!date) {
+        continue;
+      }
+      const platformHotelId = String(item.platformHotelId || "").trim();
+      const platformRoomTypeId = String(item.platformRoomTypeId || "").trim();
+      if (!platformHotelId || !platformRoomTypeId) {
+        continue;
+      }
+      const upserted = await otaPrismaStore.upsertCalendarItem({
+        platform: normalizedPlatform,
+        platformHotelId,
+        platformRoomTypeId,
+        date,
+        price: Math.max(0, Number(item.price) || 0),
+        inventory: Math.max(0, Number(item.inventory) || 0),
+        currency: String(item.currency || "CNY").trim().toUpperCase(),
+        source
+      });
+      accepted.push(upserted);
+    }
+    return accepted;
+  },
+
+  async listCalendarItems(filters = {}) {
+    return otaPrismaStore.listCalendarItems({
+      platform: normalizePlatform(filters.platform || ""),
+      platformHotelId: filters.platformHotelId,
+      platformRoomTypeId: filters.platformRoomTypeId,
+      startDate: filters.startDate,
+      endDate: filters.endDate
+    });
+  },
+
+  async pushRateInventory({ platform = "FLIGGY", items = [] } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+    const hasExplicitItems = Array.isArray(items) && items.length > 0;
+    const sourceItems = hasExplicitItems
+      ? items
+      : await otaPrismaStore.listCalendarItems({ platform: normalizedPlatform });
+
+    const roomMappings = await otaPrismaStore.listRoomMappings({ platform: normalizedPlatform });
+    const mappingByRoom = new Map(
+      roomMappings.map((it) => [`${it.platformHotelId}::${it.platformRoomTypeId}`, it])
+    );
+
+    const prepared = sourceItems
+      .map((it) => ({
+        platform: normalizedPlatform,
+        platformHotelId: String(it.platformHotelId || "").trim(),
+        platformRoomTypeId: String(it.platformRoomTypeId || "").trim(),
+        date: normalizeDateText(it.date),
+        price: Math.max(0, Number(it.price) || 0),
+        inventory: Math.max(0, Number(it.inventory) || 0),
+        currency: String(it.currency || "CNY").trim().toUpperCase()
+      }))
+      .filter((it) => {
+        if (!it.platformHotelId || !it.platformRoomTypeId || !it.date) {
+          return false;
+        }
+        const roomMapping = mappingByRoom.get(`${it.platformHotelId}::${it.platformRoomTypeId}`);
+        if (!roomMapping?.enabled) {
+          return false;
+        }
+        if (hasExplicitItems) {
+          return true;
+        }
+        if (roomMapping.autoSyncEnabled === false) {
+          return false;
+        }
+        const futureDays = Math.max(1, Number(roomMapping.autoSyncFutureDays) || 30);
+        const today = new Date();
+        const todayText = today.toISOString().slice(0, 10);
+        const end = new Date(new Date(`${todayText}T00:00:00.000Z`).getTime() + futureDays * 24 * 60 * 60 * 1000);
+        const day = new Date(`${it.date}T00:00:00.000Z`);
+        if (Number.isNaN(day.getTime())) {
+          return false;
+        }
+        return day >= new Date(`${todayText}T00:00:00.000Z`) && day <= end;
+      });
+
+    const grouped = new Map();
+    for (const item of prepared) {
+      const key = `${item.platformHotelId}::${item.platformRoomTypeId}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push(item);
+    }
+
+    const requestResults = [];
+    let rejectedCount = 0;
+    for (const [key, groupedItems] of grouped.entries()) {
+      const [platformHotelId, platformRoomTypeId] = key.split("::");
+      const roomMapping = mappingByRoom.get(`${platformHotelId}::${platformRoomTypeId}`);
+      if (!roomMapping) {
+        rejectedCount += groupedItems.length;
+        continue;
+      }
+      const outRid = String(roomMapping.platformRoomTypeId || "").trim();
+      const rateplanCode = String(roomMapping.rateCode || "").trim();
+      if (!outRid || !rateplanCode) {
+        rejectedCount += groupedItems.length;
+        continue;
+      }
+
+      const pushed = await adapter.pushRateInventory({
+        outRid,
+        rateplanCode,
+        vendor: env.otaTopVendor || undefined,
+        items: groupedItems
+      });
+      requestResults.push({
+        platformHotelId,
+        platformRoomTypeId,
+        count: groupedItems.length,
+        gidAndRpid: pushed.gidAndRpid || null,
+        response: pushed.response || null
+      });
+    }
+
+    const pushedAt = new Date().toISOString();
+    for (const item of prepared) {
+      await otaPrismaStore.upsertCalendarItem({
+        ...item,
+        source: "PUSH",
+        lastPushedAt: pushedAt
+      });
+    }
+
+    await otaPrismaStore.appendSyncLog({
+      type: "RATE_INVENTORY_PUSH",
+      platform: normalizedPlatform,
+      result: {
+        acceptedCount: prepared.length,
+        rejectedCount,
+        requestResults
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      acceptedCount: prepared.length,
+      rejectedCount,
+      items: prepared,
+      requestResults
+    };
+  },
+
+  async ingestOrderWebhook({ platform = "FLIGGY", rawBody = "", signature = "", payload = {} } = {}) {
+    const normalizedPlatform = normalizePlatform(platform);
+    const verified = verifyWebhookSignature({
+      rawBody,
+      signature,
+      secret: env.otaWebhookSecret
+    });
+    if (!verified) {
+      throw new Error("invalid webhook signature");
+    }
+
+    const rawOrder = payload?.order || payload;
+    const built = buildOrderPayloadFromTop(rawOrder);
+    if (!built.externalOrderId) {
+      throw new Error("externalOrderId is required");
+    }
+
+    const inbound = await otaPrismaStore.upsertInboundOrder({
+      platform: normalizedPlatform,
+      ...built
+    });
+
+    return enqueueBindingForInboundOrder({ normalizedPlatform, inbound });
+  },
+
+  async pullInboundOrders({
+    platform = "FLIGGY",
+    count = 50,
+    createdStart,
+    createdEnd,
+    checkInDateStart,
+    checkInDateEnd,
+    checkOutDateStart,
+    checkOutDateEnd,
+    tradeStatus,
+    pageNo = 1
+  } = {}) {
+    const { platform: normalizedPlatform, adapter } = getAdapter(platform);
+
+    const pullResult = await adapter.searchOrders({
+      createdStart: createdStart ? normalizeDateTimeText(createdStart) : undefined,
+      createdEnd: createdEnd ? normalizeDateTimeText(createdEnd) : undefined,
+      checkInDateStart: normalizeDateText(checkInDateStart) || undefined,
+      checkInDateEnd: normalizeDateText(checkInDateEnd) || undefined,
+      checkOutDateStart: normalizeDateText(checkOutDateStart) || undefined,
+      checkOutDateEnd: normalizeDateText(checkOutDateEnd) || undefined,
+      tradeStatus: String(tradeStatus || "").trim() || undefined,
+      pageNo: Math.max(1, Number(pageNo) || 1)
+    });
+
+    const limitedOrders = (pullResult.orders || []).slice(0, Math.max(1, Math.min(200, Number(count) || 50)));
+    const items = [];
+    for (const row of limitedOrders) {
+      const built = buildOrderPayloadFromTop(row);
+      if (!built.externalOrderId) {
+        continue;
+      }
+      const inbound = await otaPrismaStore.upsertInboundOrder({
+        platform: normalizedPlatform,
+        ...built
+      });
+      const queued = await enqueueBindingForInboundOrder({ normalizedPlatform, inbound });
+      items.push(queued);
+    }
+
+    await otaPrismaStore.appendSyncLog({
+      type: "ORDER_PULL",
+      platform: normalizedPlatform,
+      result: {
+        totalResults: pullResult.totalResults,
+        count: items.length,
+        pageNo: Math.max(1, Number(pageNo) || 1)
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      totalResults: pullResult.totalResults,
+      count: items.length,
+      items
+    };
+  },
+
+  async mockPullInboundOrders(params = {}) {
+    return this.pullInboundOrders(params);
+  },
+
+  async generateOrderTemplate({ platform = "FLIGGY", externalOrderId }) {
+    const normalizedPlatform = normalizePlatform(platform);
+    const inboundOrder = await otaPrismaStore.getInboundOrder({
+      platform: normalizedPlatform,
+      externalOrderId
+    });
+    if (!inboundOrder) {
+      throw new Error("inbound ota order not found");
+    }
+
+    const hotelMapping = await findHotelMapping({
+      platform: normalizedPlatform,
+      platformHotelId: inboundOrder.platformHotelId
+    });
+    const roomMapping = await otaPrismaStore.getRoomMapping({
+      platform: normalizedPlatform,
+      platformHotelId: inboundOrder.platformHotelId,
+      platformRoomTypeId: inboundOrder.platformRoomTypeId
+    });
+    const channelMapping = await otaPrismaStore.getChannelMapping({
+      platform: normalizedPlatform,
+      platformChannel: inboundOrder.platformChannel
+    });
+
+    const submitPolicy = resolveInboundOrderSubmitPolicy({ roomMapping, channelMapping });
+    const templatePayload = buildDefaultTemplatePayload({
+      inboundOrder,
+      hotelMapping,
+      roomMapping,
+      channelMapping
+    });
+
+    const binding = await otaPrismaStore.upsertOrderBinding({
+      platform: normalizedPlatform,
+      externalOrderId,
+      templatePayload,
+      autoSubmitState: submitPolicy.autoSubmit ? "QUEUED" : "PENDING"
+    });
+
+    return {
+      platform: normalizedPlatform,
+      externalOrderId,
+      templatePayload,
+      binding
+    };
+  },
+
+  async createInternalOrderFromTemplate({ platform = "FLIGGY", externalOrderId, executeNow = false } = {}) {
+    const normalizedPlatform = normalizePlatform(platform);
+    let binding = await otaPrismaStore.getOrderBinding({
+      platform: normalizedPlatform,
+      externalOrderId
+    });
+
+    if (!binding?.templatePayload) {
+      await this.generateOrderTemplate({
+        platform: normalizedPlatform,
+        externalOrderId
+      });
+      binding = await otaPrismaStore.getOrderBinding({
+        platform: normalizedPlatform,
+        externalOrderId
+      });
+    }
+
+    if (!binding?.templatePayload) {
+      throw new Error("order template not found");
+    }
+
+    if (binding.localOrderId) {
+      const existing = await prismaStore.getOrder(binding.localOrderId);
+      if (existing) {
+        return {
+          platform: normalizedPlatform,
+          externalOrderId,
+          localOrderId: existing.id,
+          executeNow: false,
+          queuedCount: 0,
+          order: existing,
+          reused: true
+        };
+      }
+    }
+
+    if (binding.autoSubmitState === "SUBMITTING") {
+      throw new Error("order creation in progress, please retry later");
+    }
+
+    await otaPrismaStore.upsertOrderBinding({
+      platform: normalizedPlatform,
+      externalOrderId,
+      autoSubmitState: "SUBMITTING"
+    });
+
+    try {
+      const creator = await getSystemOperator();
+      const created = await prismaStore.createOrder(binding.templatePayload, creator);
+
+      let latestOrder = created;
+      let queuedCount = 0;
+      if (executeNow) {
+        const submitResult = await prismaStore.submitOrder(created.id);
+        latestOrder = submitResult.order;
+        if (env.taskSystemEnabled) {
+          const queuedItems = submitResult.items.filter((it) => it.executionStatus === "QUEUED");
+          for (const item of queuedItems) {
+            await prismaStore.updateOrderItem(item.id, { executionStatus: "QUEUED" });
+          }
+          queuedCount = queuedItems.length;
+        }
+      }
+
+      await otaPrismaStore.upsertOrderBinding({
+        platform: normalizedPlatform,
+        externalOrderId,
+        localOrderId: created.id,
+        autoSubmitState: executeNow ? "EXECUTED" : "TEMPLATE_CREATED",
+        bookingConfirmState: "PENDING"
+      });
+
+      return {
+        platform: normalizedPlatform,
+        externalOrderId,
+        localOrderId: created.id,
+        executeNow,
+        queuedCount,
+        order: latestOrder
+      };
+    } catch (err) {
+      await otaPrismaStore.upsertOrderBinding({
+        platform: normalizedPlatform,
+        externalOrderId,
+        autoSubmitState: "FAILED",
+        notes: err?.message || "create internal order failed"
+      });
+      throw err;
+    }
+  },
+
+  async markManualPaymentAndAcknowledge({ platform = "FLIGGY", externalOrderId, localOrderId } = {}) {
+    const normalizedPlatform = normalizePlatform(platform);
+    const binding = await otaPrismaStore.getOrderBinding({ platform: normalizedPlatform, externalOrderId });
+    if (!binding) {
+      throw new Error("order binding not found");
+    }
+
+    const targetLocalOrderId = String(localOrderId || binding.localOrderId || "").trim();
+    if (!targetLocalOrderId) {
+      throw new Error("localOrderId is required");
+    }
+
+    const order = await prismaStore.getOrder(targetLocalOrderId);
+    if (!order) {
+      throw new Error("local order not found");
+    }
+
+    for (const item of order.items || []) {
+      if (item.paymentStatus !== "PAID") {
+        await prismaStore.updateOrderItem(item.id, { paymentStatus: "PAID" });
+      }
+      if (item.status !== "COMPLETED") {
+        await prismaStore.updateOrderItem(item.id, { status: "COMPLETED", executionStatus: "DONE" });
+      }
+    }
+    const refreshed = await prismaStore.refreshOrderStatus(order.id);
+
+    const inbound = await otaPrismaStore.getInboundOrder({
+      platform: normalizedPlatform,
+      externalOrderId
+    });
+    const tid = inbound?.rawPayload?.tid || inbound?.rawPayload?.order_id || inbound?.rawPayload?.oid || null;
+
+    const { adapter } = getAdapter(normalizedPlatform);
+    let ack = {
+      confirmed: false,
+      confirmCodeUpdated: false,
+      tid: tid || null
+    };
+
+    if (tid) {
+      const confirmResponse = await adapter.confirmOrder({
+        tid,
+        optType: 2,
+        confirmCode: order.id,
+        syncToHotel: "Y"
+      });
+
+      let confirmCodeResponse = null;
+      const pmsResId = String(order.id || "").trim();
+      if (pmsResId) {
+        confirmCodeResponse = await adapter.updateConfirmCode({
+          tid,
+          pmsResId,
+          outOrderId: externalOrderId
+        });
+      }
+      ack = {
+        confirmed: true,
+        confirmCodeUpdated: Boolean(confirmCodeResponse),
+        tid,
+        confirmResponse,
+        confirmCodeResponse
+      };
+    }
+
+    const next = await otaPrismaStore.upsertOrderBinding({
+      platform: normalizedPlatform,
+      externalOrderId,
+      localOrderId: order.id,
+      manualPaymentState: "PAID",
+      bookingConfirmState: ack.confirmed ? "CONFIRMED" : "PENDING",
+      notes: ack.confirmed
+        ? "manual payment confirmed and ota notified"
+        : "manual payment confirmed, no ota tid available"
+    });
+
+    return {
+      binding: next,
+      order: refreshed,
+      ack
+    };
+  },
+
+  async listOrderBindings({ platform } = {}) {
+    return otaPrismaStore.listOrderBindings({ platform: normalizePlatform(platform || "") });
+  },
+
+  async listInboundOrders({ platform, status } = {}) {
+    const rows = await otaPrismaStore.listInboundOrders({
+      platform: normalizePlatform(platform || ""),
+      status: String(status || "").trim().toUpperCase()
+    });
+    return rows.map((it) => sanitizeInboundOrder(it, false));
+  },
+
+  async listSyncLogs(limit = 50) {
+    return otaPrismaStore.listSyncLogs(limit);
+  }
+};
