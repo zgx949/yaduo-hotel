@@ -263,6 +263,30 @@ const pickText = (...values: unknown[]) => {
   return '';
 };
 
+const getDisplayHotelName = (hotel: OtaHotel) => {
+  const raw = toRecord(hotel.rawPayload);
+  const rawXhotel = toRecord(raw.xhotel);
+  const sourceResponse = toRecord(raw.sourceResponse);
+  const xhotelGetResponse = toRecord(sourceResponse.xhotel_get_response);
+  const xhotelFromResponse = toRecord(xhotelGetResponse.xhotel);
+  const sHotel = toRecord(raw.s_hotel);
+  const sHotelFromRawX = toRecord(rawXhotel.s_hotel);
+  const sHotelFromResponse = toRecord(xhotelFromResponse.s_hotel);
+
+  const nameFromModel = String(hotel.hotelName || '').trim();
+  const modelName = nameFromModel && nameFromModel !== hotel.platformHotelId ? nameFromModel : '';
+
+  return pickText(
+    modelName,
+    rawXhotel.name,
+    xhotelFromResponse.name,
+    sHotel.name,
+    sHotelFromRawX.name,
+    sHotelFromResponse.name,
+    hotel.platformHotelId
+  );
+};
+
 const TOKEN_KEY = 'skyhotel_auth_token';
 const ORDERS_LIST_STATE_KEY = 'skyagent_orders_list_state_v1';
 const WEEK_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -741,7 +765,7 @@ export const OtaPlatform: React.FC = () => {
     setHotelDeleteModal({
       open: true,
       platformHotelId: hotel.platformHotelId,
-      hotelName: hotel.hotelName || hotel.platformHotelId,
+      hotelName: getDisplayHotelName(hotel),
       roomCount: Array.isArray(hotel.rooms) ? hotel.rooms.length : 0,
       hasHotelMapping: Boolean(hotelMappingMap[hotel.platformHotelId]),
       roomMappingCount
@@ -1544,7 +1568,7 @@ export const OtaPlatform: React.FC = () => {
                             }}
                             className={`w-full text-left px-3 py-2 ${isSelectedHotel ? 'bg-blue-50' : 'bg-gray-50'}`}
                           >
-                            <div className="text-sm font-medium text-gray-900">{hotel.hotelName || hotel.platformHotelId}</div>
+                            <div className="text-sm font-medium text-gray-900">{getDisplayHotelName(hotel)}</div>
                             <div className="text-[11px] text-gray-500 font-mono">{hotel.platformHotelId}</div>
                             <div className="text-[11px] text-gray-500">{mapping?.enabled ? `已绑定 ${mapping.internalHotelName}` : '未绑定内部酒店'} / 房型 {hotel.rooms?.length || 0}</div>
                           </button>
@@ -1586,7 +1610,7 @@ export const OtaPlatform: React.FC = () => {
                     <>
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <div className="text-sm font-semibold text-gray-900">{selectedHotelNode.hotelName || selectedHotelNode.platformHotelId} / {selectedRoomNode.roomTypeName || selectedRoomNode.platformRoomTypeId}</div>
+                          <div className="text-sm font-semibold text-gray-900">{getDisplayHotelName(selectedHotelNode)} / {selectedRoomNode.roomTypeName || selectedRoomNode.platformRoomTypeId}</div>
                           <div className="text-xs text-gray-500 font-mono">{selectedHotelNode.platformHotelId} / {selectedRoomNode.platformRoomTypeId}</div>
                         </div>
                         <button
@@ -2016,7 +2040,7 @@ export const OtaPlatform: React.FC = () => {
                     setHotelBindModal({
                       open: true,
                       otaHotelId: nodeActionModal.platformHotelId,
-                      otaHotelName: hotel?.hotelName || nodeActionModal.platformHotelId,
+                      otaHotelName: hotel ? getDisplayHotelName(hotel) : nodeActionModal.platformHotelId,
                       keyword: mapping?.internalHotelName || '',
                       searching: false,
                       selectedChainId: mapping?.internalChainId || '',
