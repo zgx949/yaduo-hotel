@@ -65,5 +65,6 @@ export const env = {
   otaTopSession: process.env.OTA_TOP_SESSION || "",
   otaTopUrl: process.env.OTA_TOP_URL || "https://eco.taobao.com/router/rest",
   otaTopVendor: process.env.OTA_TOP_VENDOR || "",
-  otaOrderPullLookbackHours: toNumber(process.env.OTA_ORDER_PULL_LOOKBACK_HOURS, 24)
+  otaOrderPullLookbackHours: toNumber(process.env.OTA_ORDER_PULL_LOOKBACK_HOURS, 24),
+  otaRackSyncDays: toNumber(process.env.OTA_RACK_SYNC_DAYS, 1)
 };

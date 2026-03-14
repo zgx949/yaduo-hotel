@@ -185,6 +185,39 @@ otaRoutes.get("/calendar", requireAuth, requireRole("ADMIN"), async (req, res) =
   return res.json({ items });
 });
 
+otaRoutes.post("/calendar/sync-from-rack", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.syncCalendarFromRackRates({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      date: req.body?.date || req.query?.date,
+      days: req.body?.days || req.query?.days,
+      platformHotelId: req.body?.platformHotelId || req.query?.platformHotelId,
+      platformRoomTypeId: req.body?.platformRoomTypeId || req.query?.platformRoomTypeId,
+      platformChannel: req.body?.platformChannel || req.query?.platformChannel,
+      rateplanCode: req.body?.rateplanCode || req.query?.rateplanCode
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "sync rack rates failed" });
+  }
+});
+
+otaRoutes.post("/calendar/preview-rack", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const result = await otaIntegrationService.previewRackRateForStrategy({
+      platform: req.body?.platform || req.query?.platform || "FLIGGY",
+      date: req.body?.date || req.query?.date,
+      platformHotelId: req.body?.platformHotelId || req.query?.platformHotelId,
+      platformRoomTypeId: req.body?.platformRoomTypeId || req.query?.platformRoomTypeId,
+      platformChannel: req.body?.platformChannel || req.query?.platformChannel,
+      rateplanCode: req.body?.rateplanCode || req.query?.rateplanCode
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err?.message || "preview rack price failed" });
+  }
+});
+
 otaRoutes.post("/push/rate-inventory", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const result = await otaIntegrationService.pushRateInventory({

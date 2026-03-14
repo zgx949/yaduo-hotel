@@ -83,6 +83,53 @@ const mergeRoomRawPayload = (existedPayload = {}, incomingPayload = {}) => {
   return next;
 };
 
+const strategyConfigKey = (platformChannel, rateCode) => {
+  const ch = String(platformChannel || "DEFAULT").trim().toUpperCase() || "DEFAULT";
+  const rc = String(rateCode || "").trim();
+  return `${ch}::${rc}`;
+};
+
+const readStrategyFormula = (roomRawPayload = {}, platformChannel, rateCode) => {
+  if (!roomRawPayload || typeof roomRawPayload !== "object") {
+    return {
+      formulaMultiplier: 1,
+      formulaAddend: 0
+    };
+  }
+  const configs = roomRawPayload.strategyConfigs;
+  if (!configs || typeof configs !== "object" || Array.isArray(configs)) {
+    return {
+      formulaMultiplier: 1,
+      formulaAddend: 0
+    };
+  }
+  const cfg = configs[strategyConfigKey(platformChannel, rateCode)] || {};
+  const multiplier = Number(cfg.formulaMultiplier);
+  const addend = Number(cfg.formulaAddend);
+  return {
+    formulaMultiplier: Number.isFinite(multiplier) ? multiplier : 1,
+    formulaAddend: Number.isFinite(addend) ? addend : 0
+  };
+};
+
+const writeStrategyFormula = (roomRawPayload = {}, platformChannel, rateCode, formula = {}) => {
+  const payload = roomRawPayload && typeof roomRawPayload === "object" && !Array.isArray(roomRawPayload)
+    ? { ...roomRawPayload }
+    : {};
+  const strategyConfigs = payload.strategyConfigs && typeof payload.strategyConfigs === "object" && !Array.isArray(payload.strategyConfigs)
+    ? { ...payload.strategyConfigs }
+    : {};
+  const multiplier = Number(formula.formulaMultiplier);
+  const addend = Number(formula.formulaAddend);
+  strategyConfigs[strategyConfigKey(platformChannel, rateCode)] = {
+    formulaMultiplier: Number.isFinite(multiplier) ? multiplier : 1,
+    formulaAddend: Number.isFinite(addend) ? addend : 0,
+    updatedAt: nowIso()
+  };
+  payload.strategyConfigs = strategyConfigs;
+  return payload;
+};
+
 const mapRoom = (row) => ({
   platformRoomTypeId: row.platformRoomTypeId,
   roomTypeName: row.roomTypeName,
@@ -566,6 +613,12 @@ export const otaPrismaStore = {
     const platformRoomTypeId = String(payload.platformRoomTypeId || "").trim();
     const platformChannel = String(payload.platformChannel || "DEFAULT").trim().toUpperCase();
     const rateCode = String(payload.rateCode || "").trim();
+    const formulaMultiplier = Number(payload.formulaMultiplier);
+    const formulaAddend = Number(payload.formulaAddend);
+    const normalizedFormula = {
+      formulaMultiplier: Number.isFinite(formulaMultiplier) ? formulaMultiplier : 1,
+      formulaAddend: Number.isFinite(formulaAddend) ? formulaAddend : 0
+    };
     if (!rateCode) {
       throw new Error("rateCode (rateplan_code) is required");
     }
@@ -670,8 +723,39 @@ export const otaPrismaStore = {
       }
     });
 
+    const roomExisted = await prisma.otaRoomType.findUnique({
+      where: {
+        platform_platformHotelId_platformRoomTypeId: {
+          platform,
+          platformHotelId,
+          platformRoomTypeId
+        }
+      },
+      select: {
+        rawPayload: true
+      }
+    });
+    const roomPayload = roomExisted?.rawPayload && typeof roomExisted.rawPayload === "object"
+      ? roomExisted.rawPayload
+      : {};
+    const nextRoomPayload = writeStrategyFormula(roomPayload, platformChannel, rateCode, normalizedFormula);
+    await prisma.otaRoomType.update({
+      where: {
+        platform_platformHotelId_platformRoomTypeId: {
+          platform,
+          platformHotelId,
+          platformRoomTypeId
+        }
+      },
+      data: {
+        rawPayload: nextRoomPayload
+      }
+    });
+
+    const appliedFormula = readStrategyFormula(nextRoomPayload, platformChannel, rateCode);
     return {
       ...row,
+      ...appliedFormula,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
     };
@@ -693,11 +777,35 @@ export const otaPrismaStore = {
         updatedAt: "desc"
       }
     });
-    return rows.map((it) => ({
-      ...it,
-      createdAt: it.createdAt.toISOString(),
-      updatedAt: it.updatedAt.toISOString()
-    }));
+    const roomKeys = Array.from(new Set(rows.map((it) => `${it.platform}::${it.platformHotelId}::${it.platformRoomTypeId}`)));
+    const roomPayloadMap = new Map();
+    for (const key of roomKeys) {
+      const [platformKey, hotelId, roomId] = key.split("::");
+      const room = await prisma.otaRoomType.findUnique({
+        where: {
+          platform_platformHotelId_platformRoomTypeId: {
+            platform: platformKey,
+            platformHotelId: hotelId,
+            platformRoomTypeId: roomId
+          }
+        },
+        select: {
+          rawPayload: true
+        }
+      });
+      roomPayloadMap.set(key, room?.rawPayload && typeof room.rawPayload === "object" ? room.rawPayload : {});
+    }
+
+    return rows.map((it) => {
+      const key = `${it.platform}::${it.platformHotelId}::${it.platformRoomTypeId}`;
+      const formula = readStrategyFormula(roomPayloadMap.get(key), it.platformChannel, it.rateCode);
+      return {
+        ...it,
+        ...formula,
+        createdAt: it.createdAt.toISOString(),
+        updatedAt: it.updatedAt.toISOString()
+      };
+    });
   },
 
   async getRoomMapping(params = {}) {
@@ -734,8 +842,22 @@ export const otaPrismaStore = {
     if (!row) {
       return null;
     }
+    const room = await prisma.otaRoomType.findUnique({
+      where: {
+        platform_platformHotelId_platformRoomTypeId: {
+          platform: row.platform,
+          platformHotelId: row.platformHotelId,
+          platformRoomTypeId: row.platformRoomTypeId
+        }
+      },
+      select: {
+        rawPayload: true
+      }
+    });
+    const formula = readStrategyFormula(room?.rawPayload && typeof room.rawPayload === "object" ? room.rawPayload : {}, row.platformChannel, row.rateCode);
     return {
       ...row,
+      ...formula,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
     };
@@ -863,24 +985,8 @@ export const otaPrismaStore = {
             rateplanCode
           }
         });
-    } catch {
-      const existed = await prisma.otaCalendarItem.findFirst({
-        where: {
-          platform: normalizePlatform(payload.platform || ""),
-          platformHotelId,
-          platformRoomTypeId,
-          date
-        },
-        select: { id: true }
-      });
-      row = existed
-        ? await prisma.otaCalendarItem.update({
-          where: { id: existed.id },
-          data: updateData
-        })
-        : await prisma.otaCalendarItem.create({
-          data: baseCreate
-        });
+    } catch (err) {
+      throw err;
     }
 
     return {

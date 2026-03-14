@@ -11,6 +11,7 @@ import { orderStayStatusScanTask } from "./order-stay-status-scan.task.js";
 import { orderSubmitTask } from "./order-submit.task.js";
 import { otaPriceInventoryPushTask } from "./ota-price-inventory-push.task.js";
 import { otaOrderAutoSubmitTask } from "./ota-order-auto-submit.task.js";
+import { otaRackRateSyncTask } from "./ota-rack-rate-sync.task.js";
 
 export const builtinTaskModules = {
   "order.submit": orderSubmitTask,
@@ -25,5 +26,6 @@ export const builtinTaskModules = {
   "account.coupon-scan": accountCouponScanTask,
   "account.new-user-eligibility": accountNewUserEligibilityTask,
   "ota.price-inventory-push": otaPriceInventoryPushTask,
+  "ota.rack-rate-sync": otaRackRateSyncTask,
   "ota.order-auto-submit": otaOrderAutoSubmitTask
 };

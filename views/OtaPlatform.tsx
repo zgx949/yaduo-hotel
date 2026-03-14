@@ -58,6 +58,8 @@ interface OtaMappingRoom {
   internalRoomTypeName: string;
   rateCode?: string;
   rateCodeId?: string;
+  formulaMultiplier?: number;
+  formulaAddend?: number;
   rpActivityId?: string;
   bookingTier?: string;
   platformChannel?: string;
@@ -194,6 +196,8 @@ interface StrategyModalState {
   autoOrderEnabled: boolean;
   rateCode: string;
   rateCodeId: string;
+  formulaMultiplier: number;
+  formulaAddend: number;
   rpActivityId: string;
   autoSyncEnabled: boolean;
   manualTuningEnabled: boolean;
@@ -414,6 +418,8 @@ export const OtaPlatform: React.FC = () => {
     autoOrderEnabled: true,
     rateCode: '',
     rateCodeId: '',
+    formulaMultiplier: 1,
+    formulaAddend: 0,
     rpActivityId: '',
     autoSyncEnabled: true,
     manualTuningEnabled: false,
@@ -888,6 +894,8 @@ export const OtaPlatform: React.FC = () => {
       autoOrderEnabled: true,
       rateCode: plan.rateplanCode,
       rateCodeId: plan.rpid || '',
+      formulaMultiplier: 1,
+      formulaAddend: 0,
       rpActivityId: plan.rpid || '',
       autoSyncEnabled: true,
       manualTuningEnabled: false,
@@ -911,6 +919,8 @@ export const OtaPlatform: React.FC = () => {
       autoOrderEnabled: mapping.autoOrderEnabled,
       rateCode: mapping.rateCode || '',
       rateCodeId: mapping.rateCodeId || '',
+      formulaMultiplier: Number(mapping.formulaMultiplier ?? 1) || 1,
+      formulaAddend: Number(mapping.formulaAddend ?? 0) || 0,
       rpActivityId: mapping.rpActivityId || '',
       autoSyncEnabled: mapping.autoSyncEnabled,
       manualTuningEnabled: mapping.manualTuningEnabled,
@@ -951,6 +961,8 @@ export const OtaPlatform: React.FC = () => {
           autoOrderEnabled: strategyModal.autoOrderEnabled,
           rateCode: strategyModal.rateCode,
           rateCodeId: strategyModal.rateCodeId,
+          formulaMultiplier: strategyModal.formulaMultiplier,
+          formulaAddend: strategyModal.formulaAddend,
           rpActivityId: strategyModal.rpActivityId,
           autoSyncEnabled: strategyModal.autoSyncEnabled,
           manualTuningEnabled: strategyModal.manualTuningEnabled,
@@ -1268,6 +1280,38 @@ export const OtaPlatform: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存日历失败');
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const syncRackForSelectedStrategyDay = async () => {
+    if (!calendarModal.platformHotelId || !calendarModal.platformRoomTypeId || !calendarModal.selectedDate || !calendarModal.rateplanCode) {
+      setError('请选择策略和日期后再执行门市价查询');
+      return;
+    }
+    setActionLoading('syncRackForSelectedStrategyDay');
+    setError('');
+    setNotice('');
+    try {
+      const data = await fetchWithAuth('/api/ota/calendar/preview-rack', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform,
+          date: calendarModal.selectedDate,
+          platformHotelId: calendarModal.platformHotelId,
+          platformRoomTypeId: calendarModal.platformRoomTypeId,
+          platformChannel: calendarModal.platformChannel,
+          rateplanCode: calendarModal.rateplanCode
+        })
+      });
+      setDailyDraft({
+        price: String(Number(data.calculatedPrice || 0) || 0),
+        inventory: String(Number(data.inventory || 0) || 0)
+      });
+      setNotice(`查询完成：门市价 ${Number(data.rackPrice || 0)}，按公式后价格 ${Number(data.calculatedPrice || 0)}，库存 ${Number(data.inventory || 0)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '门市价同步失败');
     } finally {
       setActionLoading('');
     }
@@ -1644,6 +1688,7 @@ export const OtaPlatform: React.FC = () => {
                                       {strategies.map((it) => (
                                         <div key={it.id} className="text-[11px] px-2 py-1 rounded border border-gray-200 bg-gray-50">
                                           <div>渠道 {it.platformChannel} / 模式 {it.orderSubmitMode} / 自动同步 {it.autoSyncEnabled ? '开' : '关'} / 状态 {it.enabled ? '启用' : '停用'}</div>
+                                          <div>价格公式: floor(门市价 x {Number(it.formulaMultiplier ?? 1)} {Number(it.formulaAddend ?? 0) >= 0 ? '+' : '-'} {Math.abs(Number(it.formulaAddend ?? 0))})</div>
                                           <div className="mt-1 flex gap-2">
                                             <button onClick={() => openStrategyModalForEdit(it)} className="px-1.5 py-0.5 rounded border border-indigo-200 bg-white text-indigo-700">编辑</button>
                                             <button onClick={() => {
@@ -1975,7 +2020,9 @@ export const OtaPlatform: React.FC = () => {
               <div className="col-span-2">价格政策: <span className="font-mono">{strategyModal.rateCode}</span></div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <select
+              <label className="text-xs text-gray-600 space-y-1 block">
+                <div>内部房型</div>
+                <select
                 value={strategyModal.internalRoomTypeId}
                 onChange={(e) => {
                   const nextId = e.target.value;
@@ -1990,21 +2037,51 @@ export const OtaPlatform: React.FC = () => {
                   <option key={opt.id} value={opt.id}>{opt.name} ({opt.id})</option>
                 ))}
               </select>
-              <select value={strategyModal.platformChannel} onChange={(e) => setStrategyModal((p) => ({ ...p, platformChannel: e.target.value }))} className="border border-gray-200 rounded px-2 py-2 text-sm">
+              </label>
+              <label className="text-xs text-gray-600 space-y-1 block">
+                <div>下单渠道</div>
+                <select value={strategyModal.platformChannel} onChange={(e) => setStrategyModal((p) => ({ ...p, platformChannel: e.target.value }))} className="border border-gray-200 rounded px-2 py-2 text-sm w-full">
                 {channelOptions.map((opt) => (
                   <option key={opt.platformChannel} value={opt.platformChannel}>{opt.platformChannel}</option>
                 ))}
               </select>
-              <select value={strategyModal.bookingTier} onChange={(e) => setStrategyModal((p) => ({ ...p, bookingTier: e.target.value }))} className="border border-gray-200 rounded px-2 py-2 text-sm">
+              </label>
+              <label className="text-xs text-gray-600 space-y-1 block">
+                <div>渠道等级</div>
+                <select value={strategyModal.bookingTier} onChange={(e) => setStrategyModal((p) => ({ ...p, bookingTier: e.target.value }))} className="border border-gray-200 rounded px-2 py-2 text-sm w-full">
                 <option value="NEW_USER">新客八折</option>
                 <option value="PLATINUM">铂金</option>
                 <option value="CORPORATE">企业协议</option>
                 <option value="NORMAL">普通</option>
               </select>
-              <select value={strategyModal.orderSubmitMode} onChange={(e) => setStrategyModal((p) => ({ ...p, orderSubmitMode: e.target.value }))} className="border border-gray-200 rounded px-2 py-2 text-sm">
+              </label>
+              <label className="text-xs text-gray-600 space-y-1 block">
+                <div>下单模式</div>
+                <select value={strategyModal.orderSubmitMode} onChange={(e) => setStrategyModal((p) => ({ ...p, orderSubmitMode: e.target.value }))} className="border border-gray-200 rounded px-2 py-2 text-sm w-full">
                 <option value="MANUAL">手动模式</option>
                 <option value="AUTO">自动模式</option>
               </select>
+              </label>
+              <label className="text-xs text-gray-600 space-y-1 block">
+                <div>价格公式系数（门市价 x 系数）</div>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={strategyModal.formulaMultiplier}
+                  onChange={(e) => setStrategyModal((p) => ({ ...p, formulaMultiplier: Number(e.target.value) || 0 }))}
+                  className="border border-gray-200 rounded px-2 py-2 text-sm w-full"
+                />
+              </label>
+              <label className="text-xs text-gray-600 space-y-1 block">
+                <div>价格公式增减值（+/-）</div>
+                <input
+                  type="number"
+                  step="1"
+                  value={strategyModal.formulaAddend}
+                  onChange={(e) => setStrategyModal((p) => ({ ...p, formulaAddend: Number(e.target.value) || 0 }))}
+                  className="border border-gray-200 rounded px-2 py-2 text-sm w-full"
+                />
+              </label>
               <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={strategyModal.autoOrderEnabled} onChange={(e) => setStrategyModal((p) => ({ ...p, autoOrderEnabled: e.target.checked }))} />自动下单</label>
               <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={strategyModal.enabled} onChange={(e) => setStrategyModal((p) => ({ ...p, enabled: e.target.checked }))} />启用</label>
               <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={strategyModal.autoSyncEnabled} onChange={(e) => setStrategyModal((p) => ({ ...p, autoSyncEnabled: e.target.checked }))} />自动同步</label>
@@ -2316,6 +2393,15 @@ export const OtaPlatform: React.FC = () => {
                     placeholder="库存"
                     className="w-full border border-gray-200 rounded px-3 py-2 text-sm disabled:bg-gray-100"
                   />
+                  <div className="flex gap-2">
+                    <button
+                      disabled={actionLoading !== ''}
+                      onClick={syncRackForSelectedStrategyDay}
+                      className="flex-1 px-2 py-2 text-xs rounded border border-amber-200 text-amber-700 bg-amber-50 disabled:opacity-50"
+                    >
+                      {actionLoading === 'syncRackForSelectedStrategyDay' ? '查询中...' : '查询门市价并回填'}
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       disabled={

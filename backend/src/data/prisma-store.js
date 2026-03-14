@@ -2515,12 +2515,24 @@ export const prismaStore = {
         name: "OTA房态房价推送",
         category: "SCHEDULED",
         queueName: "scheduled-ota",
-        enabled: false,
+        enabled: true,
         schedule: "*/5 * * * *",
         concurrency: 1,
         attempts: 3,
         backoffMs: 3000,
         useProxy: false
+      },
+      {
+        moduleId: "ota.rack-rate-sync",
+        name: "OTA门市价日历同步",
+        category: "SCHEDULED",
+        queueName: "scheduled-ota",
+        enabled: true,
+        schedule: "15 */1 * * *",
+        concurrency: 1,
+        attempts: 2,
+        backoffMs: 3000,
+        useProxy: true
       },
       {
         moduleId: "ota.order-auto-submit",
@@ -2539,17 +2551,7 @@ export const prismaStore = {
     for (const module of defaults) {
       await prisma.taskModuleConfig.upsert({
         where: { moduleId: module.moduleId },
-        update: {
-          name: module.name,
-          category: module.category,
-          queueName: module.queueName,
-          enabled: module.enabled,
-          schedule: module.schedule,
-          concurrency: module.concurrency,
-          attempts: module.attempts,
-          backoffMs: module.backoffMs,
-          useProxy: module.useProxy
-        },
+        update: {},
         create: module
       });
     }

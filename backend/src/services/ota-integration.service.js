@@ -2,7 +2,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env.js";
 import { otaPrismaStore } from "../data/ota-prisma-store.js";
 import { prismaStore } from "../data/prisma-store.js";
+import { getInternalRequestContext } from "./internal-resource.service.js";
 import { taobaoTopAdapter } from "./ota/taobao-top.adapter.js";
+import { fetchWithProxy } from "./proxied-fetch.service.js";
 
 const ADAPTERS = {
   FLIGGY: taobaoTopAdapter
@@ -104,6 +106,97 @@ const toIntegerAmount = (value) => {
     return 0;
   }
   return Math.max(0, Math.round(num));
+};
+
+const resolveRackPrice = (roomItem = {}) => {
+  const prices = Array.isArray(roomItem.roomPriceList) ? roomItem.roomPriceList : [];
+  if (prices.length === 0) {
+    const min = roomItem?.minRoomPrice || {};
+    return {
+      rackPrice: Number(min.marketPrice || min.showPriceV2 || min.showPrice || min.price || min.priceOfDiscount || 0) || 0,
+      inventory: Math.max(0, Number(min.leftRoomNum || min.roomNum || 0) || 0)
+    };
+  }
+  const first = prices[0] || {};
+  const rackPrice = Number(first.marketPrice || first.showPriceV2 || first.showPrice || first.priceOfDiscount || first.price || 0) || 0;
+  const inventory = Math.max(0, Number(first.leftRoomNum || first.roomNum || roomItem?.minRoomPrice?.leftRoomNum || 0) || 0);
+  return {
+    rackPrice,
+    inventory
+  };
+};
+
+const applyFormulaPrice = ({ rackPrice = 0, multiplier = 1, addend = 0 }) => {
+  const finalValue = Math.floor((Number(rackPrice) || 0) * (Number(multiplier) || 1) + (Number(addend) || 0));
+  return Math.max(0, finalValue);
+};
+
+const buildAtourApiOrigin = () => {
+  try {
+    return new URL(env.atourPlaceSearchBaseUrl).origin;
+  } catch {
+    return "https://api2.yaduo.com";
+  }
+};
+
+function addOneDay(dateStr) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+const fetchAtourHotelDetailForDate = async ({ chainId, date, tokenContext }) => {
+  const ctx = tokenContext || await getInternalRequestContext({
+    candidateLimit: 1,
+    allowEnvFallback: true
+  });
+  if (!ctx.token) {
+    throw new Error("no atour token for rack-rate sync");
+  }
+
+  const query = new URLSearchParams({
+    platType: env.atourPlatformType,
+    appVer: env.atourAppVersion,
+    inactiveId: "",
+    channelId: env.atourChannelId,
+    token: String(ctx.token),
+    activitySource: "",
+    activeId: ""
+  });
+  const endDate = addOneDay(date);
+  const response = await fetchWithProxy(`${buildAtourApiOrigin()}/atourlife/chain/chainDetailQuote?${query.toString()}`, {
+    method: "POST",
+    headers: {
+      Accept: "*/*",
+      "At-Platform-Type": env.atourPlatformType,
+      "At-Client-Id": env.atourClientId,
+      "At-App-Version": env.atourAppVersion,
+      "Content-Type": "application/json",
+      "User-Agent": env.atourUserAgent,
+      "At-Access-Token": ctx.token,
+      "At-Channel-Id": env.atourChannelId,
+      ...(env.atourCookie ? { Cookie: env.atourCookie } : {})
+    },
+    body: JSON.stringify({
+      beginDate: date,
+      endDate: endDate,
+      sortByPriceWithCoupon: 1,
+      chainId: String(chainId),
+      delegatorId: "",
+      delegatorMebId: "",
+      corporationId: ""
+    }),
+    timeoutMs: 12000
+  }, ctx.proxy || null);
+
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok || Number(raw?.retcode) !== 0) {
+    throw new Error(raw?.retmsg || "query chainDetailQuote failed");
+  }
+  const roomList = Array.isArray(raw?.result?.priceResponse?.chainRoomList)
+    ? raw.result.priceResponse.chainRoomList
+    : [];
+  return roomList;
 };
 
 const buildOrderPayloadFromTop = (order = {}) => {
@@ -779,6 +872,222 @@ export const otaIntegrationService = {
       startDate: filters.startDate,
       endDate: filters.endDate
     });
+  },
+
+  async syncCalendarFromRackRates({
+    platform = "FLIGGY",
+    date,
+    days = 1,
+    platformHotelId,
+    platformRoomTypeId,
+    platformChannel,
+    rateplanCode
+  } = {}) {
+    const normalizedPlatform = normalizePlatform(platform);
+    const startDate = normalizeDateText(date) || new Date().toISOString().slice(0, 10);
+    const totalDays = Math.max(1, Math.min(30, Number(days) || 1));
+    const roomMappings = (await otaPrismaStore.listRoomMappings({
+      platform: normalizedPlatform,
+      platformHotelId: platformHotelId || undefined,
+      platformRoomTypeId: platformRoomTypeId || undefined,
+      platformChannel: platformChannel || undefined
+    }))
+      .filter((it) => it.enabled !== false)
+      .filter((it) => !rateplanCode || String(it.rateCode || "").trim() === String(rateplanCode || "").trim());
+
+    const hotelMappings = (await otaPrismaStore.listHotelMappings({ platform: normalizedPlatform }))
+      .filter((it) => it.enabled !== false)
+      .filter((it) => !platformHotelId || it.platformHotelId === String(platformHotelId));
+
+    const hotelById = new Map(hotelMappings.map((it) => [String(it.platformHotelId), it]));
+    const updatedItems = [];
+    const errors = [];
+    const tokenContext = await getInternalRequestContext({
+      candidateLimit: 1,
+      allowEnvFallback: true
+    });
+    if (!tokenContext.token) {
+      throw new Error("no atour token for rack-rate sync");
+    }
+
+    for (let offset = 0; offset < totalDays; offset += 1) {
+      const dayDate = new Date(`${startDate}T00:00:00.000Z`);
+      dayDate.setUTCDate(dayDate.getUTCDate() + offset);
+      const dayText = dayDate.toISOString().slice(0, 10);
+
+      const byHotel = new Map();
+      for (const mapping of roomMappings) {
+        const hotelId = String(mapping.platformHotelId || "").trim();
+        if (!hotelId) {
+          continue;
+        }
+        if (!byHotel.has(hotelId)) {
+          byHotel.set(hotelId, []);
+        }
+        byHotel.get(hotelId).push(mapping);
+      }
+
+      for (const [hotelId, mappings] of byHotel.entries()) {
+        const hotelBinding = hotelById.get(hotelId);
+        const chainId = String(hotelBinding?.internalChainId || "").trim();
+        if (!chainId) {
+          errors.push({ hotelId, date: dayText, message: "missing internalChainId mapping" });
+          continue;
+        }
+
+        let roomList = [];
+        try {
+          roomList = await fetchAtourHotelDetailForDate({
+            chainId,
+            date: dayText,
+            tokenContext
+          });
+        } catch (err) {
+          errors.push({
+            hotelId,
+            date: dayText,
+            message: err instanceof Error ? err.message : "query rack failed"
+          });
+          continue;
+        }
+
+        const roomMap = new Map();
+        for (const room of roomList) {
+          const roomTypeId = String(room?.roomTypeInfoResponse?.roomTypeId || "").trim();
+          if (!roomTypeId) {
+            continue;
+          }
+          roomMap.set(roomTypeId, room);
+        }
+
+        for (const strategy of mappings) {
+          const internalRoomTypeId = String(strategy.internalRoomTypeId || "").trim();
+          const roomRaw = roomMap.get(internalRoomTypeId);
+          if (!roomRaw) {
+            continue;
+          }
+          const { rackPrice, inventory } = resolveRackPrice(roomRaw);
+          const otaPrice = applyFormulaPrice({
+            rackPrice,
+            multiplier: Number(strategy.formulaMultiplier ?? 1),
+            addend: Number(strategy.formulaAddend ?? 0)
+          });
+          const upserted = await otaPrismaStore.upsertCalendarItem({
+            platform: normalizedPlatform,
+            platformHotelId: String(strategy.platformHotelId || "").trim(),
+            platformRoomTypeId: String(strategy.platformRoomTypeId || "").trim(),
+            platformChannel: String(strategy.platformChannel || "DEFAULT").trim().toUpperCase(),
+            rateplanCode: String(strategy.rateCode || "").trim(),
+            date: dayText,
+            price: otaPrice,
+            inventory,
+            currency: "CNY",
+            source: "RACK_SYNC"
+          });
+          updatedItems.push(upserted);
+        }
+      }
+    }
+
+    await otaPrismaStore.appendSyncLog({
+      type: "RACK_RATE_SYNC",
+      platform: normalizedPlatform,
+      result: {
+        startDate,
+        days: totalDays,
+        updatedCount: updatedItems.length,
+        errorCount: errors.length,
+        errors
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      startDate,
+      days: totalDays,
+      updatedCount: updatedItems.length,
+      errorCount: errors.length,
+      items: updatedItems,
+      errors
+    };
+  },
+
+  async previewRackRateForStrategy({
+    platform = "FLIGGY",
+    date,
+    platformHotelId,
+    platformRoomTypeId,
+    platformChannel,
+    rateplanCode
+  } = {}) {
+    const normalizedPlatform = normalizePlatform(platform);
+    const dayText = normalizeDateText(date) || new Date().toISOString().slice(0, 10);
+    const hotelId = String(platformHotelId || "").trim();
+    const roomId = String(platformRoomTypeId || "").trim();
+    const channel = String(platformChannel || "DEFAULT").trim().toUpperCase();
+    const rateCode = String(rateplanCode || "").trim();
+
+    if (!hotelId || !roomId || !rateCode) {
+      throw new Error("platformHotelId, platformRoomTypeId, rateplanCode are required");
+    }
+
+    const strategy = (await otaPrismaStore.listRoomMappings({
+      platform: normalizedPlatform,
+      platformHotelId: hotelId,
+      platformRoomTypeId: roomId,
+      platformChannel: channel
+    })).find((it) => String(it.rateCode || "").trim() === rateCode && it.enabled !== false);
+
+    if (!strategy) {
+      throw new Error("strategy mapping not found for this room/channel/rateplan");
+    }
+
+    const hotelMapping = (await otaPrismaStore.listHotelMappings({ platform: normalizedPlatform }))
+      .find((it) => it.platformHotelId === hotelId && it.enabled !== false);
+    const chainId = String(hotelMapping?.internalChainId || "").trim();
+    if (!chainId) {
+      throw new Error("missing internalChainId mapping");
+    }
+
+    const tokenContext = await getInternalRequestContext({
+      candidateLimit: 1,
+      allowEnvFallback: true
+    });
+    if (!tokenContext.token) {
+      throw new Error("no atour token for rack-rate preview");
+    }
+
+    const roomList = await fetchAtourHotelDetailForDate({
+      chainId,
+      date: dayText,
+      tokenContext
+    });
+
+    const roomRaw = roomList.find((it) => String(it?.roomTypeInfoResponse?.roomTypeId || "").trim() === String(strategy.internalRoomTypeId || "").trim());
+    if (!roomRaw) {
+      throw new Error("room not found in atour quote result");
+    }
+
+    const { rackPrice, inventory } = resolveRackPrice(roomRaw);
+    const calculatedPrice = applyFormulaPrice({
+      rackPrice,
+      multiplier: Number(strategy.formulaMultiplier ?? 1),
+      addend: Number(strategy.formulaAddend ?? 0)
+    });
+
+    return {
+      platform: normalizedPlatform,
+      date: dayText,
+      platformHotelId: hotelId,
+      platformRoomTypeId: roomId,
+      platformChannel: channel,
+      rateplanCode: rateCode,
+      formulaMultiplier: Number(strategy.formulaMultiplier ?? 1),
+      formulaAddend: Number(strategy.formulaAddend ?? 0),
+      rackPrice,
+      inventory,
+      calculatedPrice
+    };
   },
 
   async pushRateInventory({ platform = "FLIGGY", items = [] } = {}) {
