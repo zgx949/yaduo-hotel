@@ -869,26 +869,39 @@ export const taobaoTopAdapter = {
   },
 
   async pushRateInventory(payload = {}) {
-    const response = await execute("taobao.xhotel.rate.update", {
-      out_rid: payload.outRid,
-      rateplan_code: payload.rateplanCode,
+    const rateInventoryPriceMap = [
+      {
+        out_rid: payload.outRid,
+        rateplan_code: payload.rateplanCode,
+        vendor: payload.vendor || "",
+        data: {
+          use_room_inventory: false,
+          inventory_price: Array.isArray(payload.items)
+            ? payload.items.map((it) => ({
+              date: String(it.date || ""),
+              quota: Math.max(0, Number(it.inventory) || 0),
+              price: Math.max(0, Math.round((Number(it.price) || 0) * 100))
+            }))
+            : []
+        }
+      }
+    ];
+
+    const response = await execute("taobao.xhotel.rates.update", {
       vendor: payload.vendor || undefined,
-      inventory_price: JSON.stringify({
-        use_room_inventory: false,
-        inventory_price: Array.isArray(payload.items)
-          ? payload.items.map((it) => ({
-            date: String(it.date || ""),
-            quota: Math.max(0, Number(it.inventory) || 0),
-            price: Math.max(0, Math.round((Number(it.price) || 0) * 100))
-          }))
-          : []
-      })
+      rate_inventory_price_map: JSON.stringify(rateInventoryPriceMap)
     });
+
+    const wrapper = response?.xhotel_rates_update_response || response || {};
+    const gidAndRpids = Array.isArray(wrapper?.gid_and_rpids?.string)
+      ? wrapper.gid_and_rpids.string
+      : (Array.isArray(response?.gid_and_rpids?.string) ? response.gid_and_rpids.string : []);
 
     return {
       ok: true,
       response,
-      gidAndRpid: response?.gid_and_rpid || null
+      gidAndRpid: gidAndRpids[0] || response?.gid_and_rpid || null,
+      gidAndRpids
     };
   },
 

@@ -784,9 +784,10 @@ export const otaIntegrationService = {
   async pushRateInventory({ platform = "FLIGGY", items = [] } = {}) {
     const { platform: normalizedPlatform, adapter } = getAdapter(platform);
     const hasExplicitItems = Array.isArray(items) && items.length > 0;
+    const allCalendarItems = await otaPrismaStore.listCalendarItems({ platform: normalizedPlatform });
     const sourceItems = hasExplicitItems
       ? items
-      : await otaPrismaStore.listCalendarItems({ platform: normalizedPlatform });
+      : allCalendarItems;
 
     const roomMappings = await otaPrismaStore.listRoomMappings({ platform: normalizedPlatform });
     const mappingByRoom = new Map(
@@ -845,6 +846,30 @@ export const otaIntegrationService = {
     const requestResults = [];
     let rejectedCount = 0;
     const pushedKeys = new Set();
+
+    const allPreparedForMerge = allCalendarItems
+      .map((it) => ({
+        platform: normalizedPlatform,
+        platformHotelId: String(it.platformHotelId || "").trim(),
+        platformRoomTypeId: String(it.platformRoomTypeId || "").trim(),
+        date: normalizeDateText(it.date),
+        price: Math.max(0, Number(it.price) || 0),
+        inventory: Math.max(0, Number(it.inventory) || 0),
+        currency: String(it.currency || "CNY").trim().toUpperCase(),
+        platformChannel: String(it.platformChannel || "DEFAULT").trim().toUpperCase(),
+        rateplanCode: String(it.rateplanCode || it.rateplan_code || "").trim()
+      }))
+      .filter((it) => it.platformHotelId && it.platformRoomTypeId && it.date && it.rateplanCode);
+
+    const existingByStrategy = new Map();
+    for (const it of allPreparedForMerge) {
+      const key = `${it.platformHotelId}::${it.platformRoomTypeId}::${it.platformChannel}::${it.rateplanCode}`;
+      if (!existingByStrategy.has(key)) {
+        existingByStrategy.set(key, []);
+      }
+      existingByStrategy.get(key).push(it);
+    }
+
     for (const [key, groupedItems] of grouped.entries()) {
       const [platformHotelId, platformRoomTypeId, platformChannel, rateplanCode] = key.split("::");
       const roomMapping = mappingByRoom.get(`${platformHotelId}::${platformRoomTypeId}::${platformChannel}::${rateplanCode}`);
@@ -858,13 +883,31 @@ export const otaIntegrationService = {
         continue;
       }
 
+      const itemsForPush = hasExplicitItems
+        ? (() => {
+          const merged = new Map();
+          for (const oldItem of existingByStrategy.get(key) || []) {
+            merged.set(oldItem.date, oldItem);
+          }
+          for (const newItem of groupedItems) {
+            merged.set(newItem.date, newItem);
+          }
+          return Array.from(merged.values()).sort((a, b) => a.date.localeCompare(b.date));
+        })()
+        : groupedItems;
+
+      if (!Array.isArray(itemsForPush) || itemsForPush.length === 0) {
+        rejectedCount += groupedItems.length;
+        continue;
+      }
+
       const pushed = await adapter.pushRateInventory({
         outRid,
         rateplanCode,
         vendor: env.otaTopVendor || undefined,
-        items: groupedItems
+        items: itemsForPush
       });
-      for (const item of groupedItems) {
+      for (const item of itemsForPush) {
         pushedKeys.add(`${item.platformHotelId}::${item.platformRoomTypeId}::${item.platformChannel}::${item.rateplanCode}::${item.date}`);
       }
       requestResults.push({
@@ -872,7 +915,7 @@ export const otaIntegrationService = {
         platformRoomTypeId,
         platformChannel,
         rateplanCode,
-        count: groupedItems.length,
+        count: itemsForPush.length,
         gidAndRpid: pushed.gidAndRpid || null,
         response: pushed.response || null
       });
