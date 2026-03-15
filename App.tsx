@@ -16,6 +16,7 @@ import { SystemSettings } from './views/SystemSettings';
 import { CryptoLab } from './views/CryptoLab';
 import { PaymentBridge } from './views/PaymentBridge';
 import { OtaPlatform } from './views/OtaPlatform';
+import { FeizhuProductCenter } from './views/FeizhuProductCenter';
 import { SystemUser, UserPermissions } from './types';
 
 interface Tab {
@@ -239,7 +240,7 @@ const App: React.FC = () => {
   const renderComponent = (id: string) => {
     // Role Guard for rendering
     if (userRole === 'USER') {
-        if (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings' || id === 'ota-platform') {
+        if (id === 'dashboard' || id === 'accounts' || id === 'pool-import' || id === 'users' || id === 'settings' || id === 'ota-platform' || id === 'feizhu-product-center') {
             return <div className="p-10 text-center text-gray-500">无权访问此页面</div>;
         }
     }
@@ -262,6 +263,7 @@ const App: React.FC = () => {
       case 'settings': return <SystemSettings />;
       case 'crypto-lab': return <CryptoLab />;
       case 'ota-platform': return <OtaPlatform />;
+      case 'feizhu-product-center': return <FeizhuProductCenter />;
       default: return <div className="p-10">页面不存在</div>;
     }
   };

@@ -7,8 +7,8 @@ const bootWorker = async () => {
     return;
   }
 
-  await taskPlatform.start({ consume: true, strict: true });
-  console.log("[worker] task consumer started");
+  await taskPlatform.start({ consume: true, strict: true, workerMode: env.taskWorkerMode });
+  console.log(`[worker] task consumer started (mode=${env.taskWorkerMode})`);
 
   const shutdown = async () => {
     await taskPlatform.stop().catch(() => undefined);

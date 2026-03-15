@@ -10,6 +10,7 @@ import { hotelsRoutes } from "./hotels.routes.js";
 import { systemRoutes } from "./system.routes.js";
 import { invoicesRoutes } from "./invoices.routes.js";
 import { otaRoutes } from "./ota.routes.js";
+import { otaProductCenterRoutes } from "./ota-product-center.routes.js";
 
 export const apiRoutes = Router();
 
@@ -23,4 +24,5 @@ apiRoutes.use("/blacklist", blacklistRoutes);
 apiRoutes.use("/hotels", hotelsRoutes);
 apiRoutes.use("/system", systemRoutes);
 apiRoutes.use("/invoices", invoicesRoutes);
+apiRoutes.use("/ota/product-center", otaProductCenterRoutes);
 apiRoutes.use("/ota", otaRoutes);

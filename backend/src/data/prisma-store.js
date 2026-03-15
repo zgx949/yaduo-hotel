@@ -1005,12 +1005,31 @@ export const prismaStore = {
     };
   },
   async deletePoolAccount(id) {
-    try {
-      await prisma.poolAccount.delete({ where: { id } });
-      return true;
-    } catch {
-      return false;
+    const accountId = String(id || "").trim();
+    if (!accountId) {
+      return { ok: false, reason: "NOT_FOUND" };
     }
+
+    const existed = await prisma.poolAccount.findUnique({ where: { id: accountId } });
+    if (!existed) {
+      return { ok: false, reason: "NOT_FOUND" };
+    }
+
+    const linkedOrderCount = await prisma.orderItem.count({
+      where: {
+        accountId
+      }
+    });
+    if (linkedOrderCount > 0) {
+      return {
+        ok: false,
+        reason: "ACCOUNT_IN_USE",
+        linkedOrderCount
+      };
+    }
+
+    await prisma.poolAccount.delete({ where: { id: accountId } });
+    return { ok: true, reason: "DELETED" };
   },
   async acquirePoolToken(options = {}) {
     const tier = options.tier ? String(options.tier).toUpperCase() : null;
@@ -1172,6 +1191,28 @@ export const prismaStore = {
     });
     return updated.count > 0;
   },
+  async claimOrderItemForSubmit(itemId) {
+    if (!itemId) {
+      return { applied: false, reason: "MISSING_ID", item: null };
+    }
+    const claimed = await prisma.orderItem.updateMany({
+      where: {
+        id: String(itemId),
+        status: { not: "CANCELLED" },
+        executionStatus: { in: ["QUEUED", "FAILED"] }
+      },
+      data: {
+        executionStatus: "SUBMITTING",
+        status: "PROCESSING"
+      }
+    });
+    const latest = await prisma.orderItem.findUnique({ where: { id: String(itemId) } });
+    return {
+      applied: claimed.count > 0,
+      reason: claimed.count > 0 ? "CLAIMED" : "CONFLICT",
+      item: latest ? projectOrderItem(latest) : null
+    };
+  },
   async applyOrderItemSubmitSuccess(itemId, patch = {}) {
     if (!itemId) {
       throw new Error("order item id required");
@@ -1185,7 +1226,15 @@ export const prismaStore = {
         throw new Error("order item already cancelled");
       }
 
-      const nextAccountId = patch.accountId ? String(patch.accountId) : (existed.accountId ? String(existed.accountId) : null);
+      const submittedPatchAccountId = hasOwn(patch, "accountId")
+        ? (patch.accountId ? String(patch.accountId) : null)
+        : undefined;
+      if (submittedPatchAccountId === null && existed.accountId) {
+        throw new Error("下单成功回写时不允许清空拆单账号");
+      }
+      const nextAccountId = submittedPatchAccountId === undefined
+        ? (existed.accountId ? String(existed.accountId) : null)
+        : submittedPatchAccountId;
       const claimed = await tx.orderItem.updateMany({
         where: {
           id: itemId,
@@ -1194,7 +1243,7 @@ export const prismaStore = {
         },
         data: {
           atourOrderId: hasOwn(patch, "atourOrderId") ? (patch.atourOrderId ? String(patch.atourOrderId) : null) : undefined,
-          accountId: hasOwn(patch, "accountId") ? (patch.accountId ? String(patch.accountId) : null) : undefined,
+          accountId: nextAccountId === undefined ? undefined : nextAccountId,
           accountPhone: hasOwn(patch, "accountPhone") ? (patch.accountPhone ? String(patch.accountPhone) : null) : undefined,
           status: patch.status ? String(patch.status) : undefined,
           executionStatus: patch.executionStatus ? String(patch.executionStatus) : "ORDERED"
@@ -1624,6 +1673,16 @@ export const prismaStore = {
       : hasOwn(patch, "rateCodeId")
         ? (patch.rateCodeId ? String(patch.rateCodeId) : null)
         : undefined;
+    const requestedAccountId = hasOwn(patch, "accountId")
+      ? (patch.accountId ? String(patch.accountId) : null)
+      : undefined;
+    const isSubmittedOrPaid = Boolean(existed.atourOrderId)
+      || ["ORDERED", "DONE"].includes(String(existed.executionStatus || ""))
+      || ["PAID", "REFUNDED"].includes(String(existed.paymentStatus || ""));
+    if (requestedAccountId === null && existed.accountId && isSubmittedOrPaid) {
+      throw new Error("已提交或已支付拆单不允许清空下单账号");
+    }
+
     const item = await prisma.orderItem.update({
       where: { id },
       data: {
@@ -1640,7 +1699,7 @@ export const prismaStore = {
         roomLevelUpCount: hasOwn(patch, "roomLevelUpCount") ? Math.min(1, Math.max(0, Number(patch.roomLevelUpCount) || 0)) : undefined,
         delayedCheckOutCount: hasOwn(patch, "delayedCheckOutCount") ? Math.max(0, Number(patch.delayedCheckOutCount) || 0) : undefined,
         shooseCount: hasOwn(patch, "shooseCount") ? Math.max(0, Number(patch.shooseCount) || 0) : undefined,
-        accountId: hasOwn(patch, "accountId") ? patch.accountId || null : undefined,
+        accountId: requestedAccountId,
         accountPhone: hasOwn(patch, "accountPhone") ? (patch.accountPhone ? String(patch.accountPhone) : null) : undefined,
         status: patch.status ? String(patch.status) : undefined,
         paymentStatus: patch.paymentStatus ? String(patch.paymentStatus) : undefined,
@@ -1954,6 +2013,28 @@ export const prismaStore = {
       updatedAt: task.updatedAt.toISOString()
     };
   },
+  async findInFlightTaskRunByOrderItem(orderItemId) {
+    if (!orderItemId) {
+      return null;
+    }
+    const run = await prisma.taskRun.findFirst({
+      where: {
+        orderItemId: String(orderItemId),
+        state: { in: ["waiting", "active"] }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    if (!run) {
+      return null;
+    }
+    return {
+      ...run,
+      startedAt: run.startedAt ? run.startedAt.toISOString() : null,
+      finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
+      createdAt: run.createdAt.toISOString(),
+      updatedAt: run.updatedAt.toISOString()
+    };
+  },
   async getLatestOrderItemFailure(orderItemId) {
     if (!orderItemId) {
       return null;
@@ -2123,7 +2204,9 @@ export const prismaStore = {
 
       current.count += 1;
       current.records.push(record);
-      (Array.isArray(record.tags) ? record.tags : []).forEach((tag) => current.tags.add(tag));
+      (Array.isArray(record.tags) ? record.tags : []).forEach((tag) => {
+        current.tags.add(tag);
+      });
 
       if (severityWeight[record.severity] > severityWeight[current.maxSeverity]) {
         current.maxSeverity = record.severity;

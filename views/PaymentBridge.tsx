@@ -14,6 +14,16 @@ const decodePayUrl = (raw: string): string => {
 export const PaymentBridge: React.FC = () => {
   const [copied, setCopied] = useState(false);
 
+  const amount = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get('amount') || '').trim();
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      return null;
+    }
+    return value;
+  }, []);
+
   const payUrl = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('payUrl') || '';
@@ -75,6 +85,11 @@ export const PaymentBridge: React.FC = () => {
           <p className="mt-2 text-sm text-gray-600">
             可直接唤起支付宝，也可展示二维码让手机扫码打开。
           </p>
+          {amount ? (
+            <div className="mt-4 inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+              支付金额: {amount.toFixed(2)} 元
+            </div>
+          ) : null}
 
           {!payUrl ? (
             <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700 text-sm">
@@ -84,12 +99,14 @@ export const PaymentBridge: React.FC = () => {
             <>
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
+                  type="button"
                   onClick={openAlipay}
                   className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
                 >
                   直接唤起支付宝
                 </button>
                 <button
+                  type="button"
                   onClick={copyLink}
                   className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
                 >

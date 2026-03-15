@@ -184,9 +184,17 @@ poolRoutes.patch("/accounts/:id", requireAuth, async (req, res) => {
 });
 
 poolRoutes.delete("/accounts/:id", requireAuth, async (req, res) => {
-  const deleted = await prismaStore.deletePoolAccount(req.params.id);
-  if (!deleted) {
+  const result = await prismaStore.deletePoolAccount(req.params.id);
+  if (!result?.ok && result?.reason === "NOT_FOUND") {
     return res.status(404).json({ message: "Pool account not found" });
+  }
+  if (!result?.ok && result?.reason === "ACCOUNT_IN_USE") {
+    return res.status(409).json({
+      message: `该账号仍被 ${result.linkedOrderCount || 0} 条拆单引用，禁止删除（请先停用）`
+    });
+  }
+  if (!result?.ok) {
+    return res.status(400).json({ message: "failed to delete pool account" });
   }
   return res.status(204).send();
 });

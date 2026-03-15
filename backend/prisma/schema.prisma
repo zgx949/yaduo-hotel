@@ -335,6 +335,7 @@ model OtaHotelMapping {
   id               String   @id @default(cuid())
   platform         String
   platformHotelId  String
+  shid             String?
   platformHotelName String
   internalChainId  String
   internalHotelName String
@@ -351,12 +352,19 @@ model OtaRoomMapping {
   platform            String
   platformHotelId     String
   platformRoomTypeId  String
+  srid                String?
   platformRoomTypeName String
   internalRoomTypeId  String
   internalRoomTypeName String
   rateCode            String
   rateCodeId          String?
   rpActivityId        String?
+  breakfastCount      Int      @default(0)
+  guaranteeType       Int      @default(0)
+  cancelPolicyCal     Json?
+  publishStatus       String   @default("DRAFT")
+  lastPublishedAt     DateTime?
+  lastPublishError    String?
   bookingTier         String
   platformChannel     String
   orderSubmitMode     String

@@ -21,6 +21,14 @@ const toBoolean = (value, fallback = false) => {
   return fallback;
 };
 
+const toWorkerMode = (value) => {
+  const normalized = String(value || "all").trim().toLowerCase();
+  if (["all", "realtime", "scheduled"].includes(normalized)) {
+    return normalized;
+  }
+  return "all";
+};
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: toNumber(process.env.PORT, 8787),
@@ -58,6 +66,7 @@ export const env = {
   redisPassword: process.env.REDIS_PASSWORD || "",
   redisDb: toNumber(process.env.REDIS_DB, 0),
   taskPollIntervalMs: toNumber(process.env.TASK_POLL_INTERVAL_MS, 5000),
+  taskWorkerMode: toWorkerMode(process.env.TASK_WORKER_MODE),
   otaWebhookSecret: process.env.OTA_WEBHOOK_SECRET || "",
   otaTopAppKey: process.env.OTA_TOP_APP_KEY || "",
   otaTopAppSecret: process.env.OTA_TOP_APP_SECRET || "",
@@ -65,6 +74,8 @@ export const env = {
   otaTopSession: process.env.OTA_TOP_SESSION || "",
   otaTopUrl: process.env.OTA_TOP_URL || "https://eco.taobao.com/router/rest",
   otaTopVendor: process.env.OTA_TOP_VENDOR || "",
+  otaPublishEnabled: toBoolean(process.env.OTA_PUBLISH_ENABLED, false),
+  otaMockAdapterEnabled: toBoolean(process.env.OTA_MOCK_ADAPTER_ENABLED, (process.env.NODE_ENV || "development") === "test"),
   otaOrderPullLookbackHours: toNumber(process.env.OTA_ORDER_PULL_LOOKBACK_HOURS, 24),
   otaRackSyncDays: toNumber(process.env.OTA_RACK_SYNC_DAYS, 30)
 };

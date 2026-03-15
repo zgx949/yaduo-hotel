@@ -963,10 +963,49 @@ export const runAtourOrderWorkflow = async ({ token, proxy, calculatePayload }) 
 };
 
 export const submitOrderItemToAtour = async ({ orderItemId }) => {
-  const item = await prismaStore.getOrderItemById(orderItemId);
-  if (!item) {
+  const initialItem = await prismaStore.getOrderItemById(orderItemId);
+  if (!initialItem) {
     throw new Error("order item not found");
   }
+  if (initialItem.status === "CANCELLED") {
+    return {
+      skipped: true,
+      alreadyProcessed: true,
+      atourOrderId: initialItem.atourOrderId || null,
+      reason: "order-item-cancelled"
+    };
+  }
+  if (initialItem.atourOrderId || ["ORDERED", "DONE"].includes(String(initialItem.executionStatus || ""))) {
+    return {
+      skipped: true,
+      alreadyProcessed: true,
+      atourOrderId: initialItem.atourOrderId || null,
+      reason: "already-ordered"
+    };
+  }
+
+  const claimed = await prismaStore.claimOrderItemForSubmit(orderItemId);
+  const item = claimed.item || initialItem;
+  if (!claimed.applied) {
+    if (item?.atourOrderId || ["ORDERED", "DONE"].includes(String(item?.executionStatus || ""))) {
+      return {
+        skipped: true,
+        alreadyProcessed: true,
+        atourOrderId: item?.atourOrderId || null,
+        reason: "already-ordered"
+      };
+    }
+    if (String(item?.executionStatus || "") === "SUBMITTING") {
+      return {
+        skipped: true,
+        inProgress: true,
+        atourOrderId: item?.atourOrderId || null,
+        reason: "already-submitting"
+      };
+    }
+    throw new Error("order item submit claim conflict");
+  }
+
   const order = await prismaStore.getOrder(item.groupId);
   if (!order) {
     throw new Error("order not found");
@@ -1043,22 +1082,60 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
   };
 };
 
-const buildAlipayDeepLink = ({ paymentOrderNo, payOrgMerId }) => {
-  const page = encodeURIComponent(`pages/cashier/cashier?p=${paymentOrderNo}&s=app`);
-  const params = new URLSearchParams({
-    appId: ALIPAY_APP_ID,
-    thirdPartSchema: "atourlifeALiPay://",
-    page,
-    bank_switch: "Y"
-  });
-  if (payOrgMerId) {
-    params.set("payOrgMerId", String(payOrgMerId));
+const normalizePaymentLinkRaw = (value) => {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
   }
-  return `alipays://platformapi/startapp?${params.toString()}`;
+  if (
+    (text.startsWith('"') && text.endsWith('"'))
+    || (text.startsWith("'") && text.endsWith("'"))
+  ) {
+    return text.slice(1, -1).trim();
+  }
+  return text;
 };
 
-const buildAlipayPayInfoLink = (payInfo) => {
-  return payInfo;
+const isValidAlipayPaymentLink = (value) => {
+  const link = normalizePaymentLinkRaw(value);
+  if (!link) {
+    return false;
+  }
+  if (!link.startsWith("paalipays://platformapi/startapp?")) {
+    return false;
+  }
+  const appIdMatched = /(?:\?|&)appId=2021003121605466(?:&|$)/.test(link);
+  const schemaMatched = /(?:\?|&)thirdPartSchema=atourlifeALiPay:\/\/(?:&|$)/.test(link);
+  const pageMatched = /(?:\?|&)page=pages\/cashier\/cashier\?p=[^&]+&s=app(?:&|$)/.test(link);
+  return appIdMatched && schemaMatched && pageMatched;
+};
+
+const buildAlipayDeepLink = ({ paymentOrderNo, payOrgMerId }) => {
+  const page = `pages/cashier/cashier?p=${encodeURIComponent(String(paymentOrderNo || ""))}&s=app`;
+  const params = [
+    `appId=${ALIPAY_APP_ID}`,
+    "thirdPartSchema=atourlifeALiPay://",
+    `page=${page}`,
+    "bank_switch=Y"
+  ];
+  if (payOrgMerId) {
+    params.push(`payOrgMerId=${encodeURIComponent(String(payOrgMerId))}`);
+  }
+  return `paalipays://platformapi/startapp?${params.join("&")}`;
+};
+
+const pickValidPaymentLink = ({ payInfo, paymentOrderNo, payOrgMerId }) => {
+  const payInfoLink = normalizePaymentLinkRaw(payInfo);
+  if (isValidAlipayPaymentLink(payInfoLink)) {
+    return {
+      paymentLink: payInfoLink,
+      linkSource: "payInfo"
+    };
+  }
+  return {
+    paymentLink: buildAlipayDeepLink({ paymentOrderNo, payOrgMerId }),
+    linkSource: payInfoLink ? "fallback.deep-link.invalid-payInfo" : "fallback.deep-link.empty-payInfo"
+  };
 };
 
 export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
@@ -1091,80 +1168,105 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
     throw new Error("暂无可用代理节点");
   }
 
-  const payOrderResult = await createPayOrder({
-    token: boundToken,
-    proxy,
-    payload: {
-      chainId: String(order.chainId),
-      source: "order",
-      orderNo: item.atourOrderId,
-      busType: "room_order"
-    }
-  });
+  const maxAttempts = 3;
+  let lastAttempt = null;
 
-  const cashierInformation = await getCashierInformation({
-    token: boundToken,
-    proxy,
-    payload: {
-      appFlag: "1",
-      reqSeqId: String(Date.now()),
-      appVersion: "1.0.3",
-      token: String(payOrderResult.token || ""),
-      payTermType: "APP"
-    }
-  });
-
-  const merConfigList = Array.isArray(cashierInformation.merConfigInfoList)
-    ? cashierInformation.merConfigInfoList
-    : [];
-  const alipayConfig = merConfigList.find((it) => String(it?.payType || "") === "A") || merConfigList[0] || null;
-
-  const paymentOrderNo = String(
-    cashierInformation.paymentOrderNo ||
-    cashierInformation.payOrderNo ||
-    payOrderResult.token ||
-    cashierInformation.busiOrderId ||
-    item.atourOrderId
-  );
-  const payOrgMerId = alipayConfig?.payOrgMerId ? String(alipayConfig.payOrgMerId) : "";
-  const channelType = alipayConfig?.channelType ? String(alipayConfig.channelType) : "I004";
-
-  let payData = null;
-  if (payOrgMerId && payOrderResult.token) {
-    payData = await payByCashier({
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const payOrderResult = await createPayOrder({
       token: boundToken,
       proxy,
       payload: {
-        channelType,
-        payType: "A",
-        isPreAtourAsset: String(cashierInformation.isPreAtourAsset || "N"),
-        partner: payOrgMerId,
-        reqSeqId: String(Date.now()),
-        appId: "",
-        token: String(payOrderResult.token),
-        termType: "APP"
+        chainId: String(order.chainId),
+        source: "order",
+        orderNo: item.atourOrderId,
+        busType: "room_order"
       }
     });
+
+    const cashierInformation = await getCashierInformation({
+      token: boundToken,
+      proxy,
+      payload: {
+        appFlag: "1",
+        reqSeqId: String(Date.now()),
+        appVersion: "1.0.3",
+        token: String(payOrderResult.token || ""),
+        payTermType: "APP"
+      }
+    });
+
+    const merConfigList = Array.isArray(cashierInformation.merConfigInfoList)
+      ? cashierInformation.merConfigInfoList
+      : [];
+    const alipayConfig = merConfigList.find((it) => String(it?.payType || "") === "A") || merConfigList[0] || null;
+
+    const paymentOrderNo = String(
+      cashierInformation.paymentOrderNo ||
+      cashierInformation.payOrderNo ||
+      payOrderResult.token ||
+      cashierInformation.busiOrderId ||
+      item.atourOrderId
+    );
+    const payOrgMerId = alipayConfig?.payOrgMerId ? String(alipayConfig.payOrgMerId) : "";
+    const channelType = alipayConfig?.channelType ? String(alipayConfig.channelType) : "I004";
+
+    let payData = null;
+    if (payOrgMerId && payOrderResult.token) {
+      payData = await payByCashier({
+        token: boundToken,
+        proxy,
+        payload: {
+          channelType,
+          payType: "A",
+          isPreAtourAsset: String(cashierInformation.isPreAtourAsset || "N"),
+          partner: payOrgMerId,
+          reqSeqId: String(Date.now()),
+          appId: "",
+          token: String(payOrderResult.token),
+          termType: "APP"
+        }
+      });
+    }
+
+    const payInfo = payData?.payInfo ? String(payData.payInfo) : "";
+    const picked = pickValidPaymentLink({ payInfo, paymentOrderNo, payOrgMerId });
+    const attemptResult = {
+      paymentLink: picked.paymentLink,
+      paymentOrderNo,
+      payOrgMerId,
+      channelType,
+      payInfo,
+      linkSource: picked.linkSource,
+      payOrderResult,
+      cashierInformation,
+      payData
+    };
+    lastAttempt = attemptResult;
+
+    if (isValidAlipayPaymentLink(attemptResult.paymentLink)) {
+      break;
+    }
   }
 
-  const payInfo = payData?.payInfo ? String(payData.payInfo) : "";
-  const paymentLink = payInfo
-    ? buildAlipayPayInfoLink(payInfo)
-    : buildAlipayDeepLink({ paymentOrderNo, payOrgMerId });
+  if (!lastAttempt) {
+    throw new Error("生成支付链接失败");
+  }
 
   return {
-    paymentLink,
-    paymentOrderNo,
-    payOrgMerId,
-    channelType,
-    payInfo,
+    paymentLink: lastAttempt.paymentLink,
+    paymentOrderNo: lastAttempt.paymentOrderNo,
+    payOrgMerId: lastAttempt.payOrgMerId,
+    channelType: lastAttempt.channelType,
+    payInfo: lastAttempt.payInfo,
+    amount: Number(item.amount) || 0,
+    linkSource: lastAttempt.linkSource,
     tokenSource: "bound-account",
     tokenAccountId: item.accountId,
     proxyId: proxy?.id || null,
     raw: {
-      payOrderResult,
-      cashierInformation,
-      payData
+      payOrderResult: lastAttempt.payOrderResult,
+      cashierInformation: lastAttempt.cashierInformation,
+      payData: lastAttempt.payData
     }
   };
 };

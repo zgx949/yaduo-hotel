@@ -350,7 +350,8 @@ const enqueueOrderItemTask = async (orderItem) => {
       return await taskPlatform.enqueueModule(
         "order.submit",
         { orderItemId: orderItem.id },
-        { orderGroupId: orderItem.groupId, orderItemId: orderItem.id }
+        { orderGroupId: orderItem.groupId, orderItemId: orderItem.id },
+        { jobId: `order.submit:${orderItem.id}` }
       );
     } catch (err) {
       if (env.nodeEnv !== "production") {
@@ -393,13 +394,14 @@ const cancelSingleOrderItem = async (orderItem, options = {}) => {
           reason: options.reason || "OTHER",
           reasonBody: options.reasonBody || ""
         },
-        { orderGroupId: orderItem.groupId, orderItemId: orderItem.id }
+        { orderGroupId: orderItem.groupId, orderItemId: orderItem.id },
+        { jobId: `order.cancel:${orderItem.id}` }
       );
       return {
         itemId: orderItem.id,
         splitIndex: orderItem.splitIndex,
         state: "QUEUED",
-        taskId: task.id
+        taskId: task?.run?.id || task?.jobId || ""
       };
     } catch (err) {
       if (env.nodeEnv !== "production") {
@@ -895,8 +897,9 @@ ordersRoutes.post("/:id/submit", requireAuth, async (req, res) => {
   const result = await prismaStore.submitOrder(order.id);
   const tasks = [];
   for (const item of result.items.filter((it) => it.executionStatus === "QUEUED").sort((a, b) => a.splitIndex - b.splitIndex)) {
+    const existingRun = await prismaStore.findInFlightTaskRunByOrderItem(item.id);
     const existingTask = await prismaStore.findTaskByOrderItem(item.id);
-    if (existingTask && ["waiting", "active"].includes(existingTask.state)) {
+    if (existingRun || (existingTask && ["waiting", "active"].includes(existingTask.state))) {
       continue;
     }
     tasks.push(await enqueueOrderItemTask(item));
@@ -1030,9 +1033,10 @@ ordersRoutes.post("/items/:itemId/confirm-submit", requireAuth, async (req, res)
   }
 
   const submitted = await prismaStore.submitOrderItem(item.id);
+  const existingRun = await prismaStore.findInFlightTaskRunByOrderItem(item.id);
   const existingTask = await prismaStore.findTaskByOrderItem(item.id);
-  let task = existingTask;
-  if (!existingTask || !["waiting", "active"].includes(existingTask.state)) {
+  let task = existingRun || existingTask;
+  if (!existingRun && (!existingTask || !["waiting", "active"].includes(existingTask.state))) {
     task = await enqueueOrderItemTask(submitted);
   }
   await prismaStore.refreshOrderStatus(item.groupId);
@@ -1088,7 +1092,7 @@ ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) =>
 
   const links = await prismaStore.getOrderItemLinks(req.params.itemId);
   if (item.executionStatus !== "ORDERED" && item.executionStatus !== "DONE") {
-    return res.json({ paymentLink: links.paymentLink });
+    return res.json({ paymentLink: links.paymentLink, amount: Number(item.amount) || 0 });
   }
 
   try {
@@ -1098,7 +1102,9 @@ ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) =>
       paymentOrderNo: payment.paymentOrderNo,
       payOrgMerId: payment.payOrgMerId,
       channelType: payment.channelType,
-      payInfo: payment.payInfo
+      payInfo: payment.payInfo,
+      amount: payment.amount,
+      linkSource: payment.linkSource
     });
   } catch (err) {
     const message = String(err?.message || "");
@@ -1126,12 +1132,14 @@ ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) =>
       console.warn("generate payment link failed, fallback to stored link:", err?.message || err);
     }
     const paymentOrderNo = item.atourOrderId || item.id;
-    const page = `pages/cashier/cashier?p=${paymentOrderNo}&s=app`;
-    const fallbackLink = `alipays://platformapi/startapp?appId=2021003121605466&thirdPartSchema=${encodeURIComponent("atourlifeALiPay://")}&page=${encodeURIComponent(page)}&bank_switch=Y`;
+    const page = `pages/cashier/cashier?p=${encodeURIComponent(paymentOrderNo)}&s=app`;
+    const fallbackLink = `paalipays://platformapi/startapp?appId=2021003121605466&thirdPartSchema=atourlifeALiPay://&page=${page}&bank_switch=Y`;
     return res.json({
       paymentLink: fallbackLink,
       paymentOrderNo,
-      payOrgMerId: ""
+      payOrgMerId: "",
+      amount: Number(item.amount) || 0,
+      linkSource: "route-fallback"
     });
   }
 });

@@ -24,6 +24,27 @@ const toInt = (value, fallback = 0) => {
   return Number.isNaN(num) ? fallback : Math.trunc(num);
 };
 
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+
+const toOptionalString = (value) => {
+  const text = String(value || "").trim();
+  return text || null;
+};
+
+const toOptionalDate = (value) => {
+  if (value === null) {
+    return null;
+  }
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+  return parsed;
+};
+
 const normalizeRateplanEntry = (item = {}) => {
   const rateplanCode = String(item.rateplanCode || item.rateplan_code || item.code || "").trim();
   if (!rateplanCode) {
@@ -538,6 +559,7 @@ export const otaPrismaStore = {
   async upsertHotelMapping(payload = {}) {
     const platform = normalizePlatform(payload.platform || "");
     const platformHotelId = String(payload.platformHotelId || "").trim();
+    const nextShid = hasOwn(payload, "shid") ? toOptionalString(payload.shid) : undefined;
     const row = await prisma.otaHotelMapping.upsert({
       where: {
         platform_platformHotelId: {
@@ -545,20 +567,22 @@ export const otaPrismaStore = {
           platformHotelId
         }
       },
-      create: {
-        platform,
-        platformHotelId,
-        platformHotelName: String(payload.platformHotelName || "").trim() || platformHotelId,
-        internalChainId: String(payload.internalChainId || "").trim(),
-        internalHotelName: String(payload.internalHotelName || "").trim(),
-        enabled: payload.enabled !== false
-      },
-      update: {
-        platformHotelName: String(payload.platformHotelName || "").trim() || platformHotelId,
-        internalChainId: String(payload.internalChainId || "").trim(),
-        internalHotelName: String(payload.internalHotelName || "").trim(),
-        enabled: payload.enabled !== false
-      }
+        create: {
+          platform,
+          platformHotelId,
+          shid: nextShid ?? null,
+          platformHotelName: String(payload.platformHotelName || "").trim() || platformHotelId,
+          internalChainId: String(payload.internalChainId || "").trim(),
+          internalHotelName: String(payload.internalHotelName || "").trim(),
+          enabled: payload.enabled !== false
+        },
+        update: {
+          ...(nextShid !== undefined ? { shid: nextShid } : {}),
+          platformHotelName: String(payload.platformHotelName || "").trim() || platformHotelId,
+          internalChainId: String(payload.internalChainId || "").trim(),
+          internalHotelName: String(payload.internalHotelName || "").trim(),
+          enabled: payload.enabled !== false
+        }
     });
 
     await prisma.otaHotel.upsert({
@@ -627,12 +651,19 @@ export const otaPrismaStore = {
         platform,
         platformHotelId,
         platformRoomTypeId,
+        srid: toOptionalString(payload.srid),
         platformRoomTypeName: String(payload.platformRoomTypeName || "").trim() || platformRoomTypeId,
         internalRoomTypeId: String(payload.internalRoomTypeId || "").trim(),
         internalRoomTypeName: String(payload.internalRoomTypeName || "").trim(),
         rateCode,
         rateCodeId: payload.rateCodeId ? String(payload.rateCodeId) : null,
         rpActivityId: payload.rpActivityId ? String(payload.rpActivityId) : null,
+        breakfastCount: Math.max(0, toInt(payload.breakfastCount, 0)),
+        guaranteeType: Math.max(0, toInt(payload.guaranteeType, 0)),
+        cancelPolicyCal: payload.cancelPolicyCal ?? null,
+        publishStatus: String(payload.publishStatus || "DRAFT").trim().toUpperCase() || "DRAFT",
+        lastPublishedAt: toOptionalDate(payload.lastPublishedAt) ?? null,
+        lastPublishError: toOptionalString(payload.lastPublishError),
         bookingTier: String(payload.bookingTier || "NORMAL").trim(),
         platformChannel,
         orderSubmitMode: String(payload.orderSubmitMode || "MANUAL").trim().toUpperCase(),
@@ -658,6 +689,27 @@ export const otaPrismaStore = {
         autoSyncFutureDays: Math.max(1, toInt(payload.autoSyncFutureDays, 30)),
         enabled: payload.enabled !== false
       };
+    if (hasOwn(payload, "srid")) {
+      updateData.srid = toOptionalString(payload.srid);
+    }
+    if (hasOwn(payload, "breakfastCount")) {
+      updateData.breakfastCount = Math.max(0, toInt(payload.breakfastCount, 0));
+    }
+    if (hasOwn(payload, "guaranteeType")) {
+      updateData.guaranteeType = Math.max(0, toInt(payload.guaranteeType, 0));
+    }
+    if (hasOwn(payload, "cancelPolicyCal")) {
+      updateData.cancelPolicyCal = payload.cancelPolicyCal ?? null;
+    }
+    if (hasOwn(payload, "publishStatus")) {
+      updateData.publishStatus = String(payload.publishStatus || "DRAFT").trim().toUpperCase() || "DRAFT";
+    }
+    if (hasOwn(payload, "lastPublishedAt")) {
+      updateData.lastPublishedAt = toOptionalDate(payload.lastPublishedAt);
+    }
+    if (hasOwn(payload, "lastPublishError")) {
+      updateData.lastPublishError = toOptionalString(payload.lastPublishError);
+    }
 
     const existed = await prisma.otaRoomMapping.findFirst({
       where: {
@@ -806,6 +858,175 @@ export const otaPrismaStore = {
         updatedAt: it.updatedAt.toISOString()
       };
     });
+  },
+
+  async getProductCenterTree(filters = {}) {
+    const platform = normalizePlatform(filters.platform || "");
+    const where = {
+      platform: platform || undefined
+    };
+    const [hotels, hotelMappings, roomTypes, roomMappings] = await Promise.all([
+      prisma.otaHotel.findMany({
+        where,
+        orderBy: [{ platform: "asc" }, { platformHotelId: "asc" }]
+      }),
+      prisma.otaHotelMapping.findMany({
+        where,
+        orderBy: [{ platform: "asc" }, { platformHotelId: "asc" }]
+      }),
+      prisma.otaRoomType.findMany({
+        where,
+        orderBy: [{ platform: "asc" }, { platformHotelId: "asc" }, { platformRoomTypeId: "asc" }]
+      }),
+      prisma.otaRoomMapping.findMany({
+        where,
+        orderBy: [
+          { platform: "asc" },
+          { platformHotelId: "asc" },
+          { platformRoomTypeId: "asc" },
+          { platformChannel: "asc" },
+          { rateCode: "asc" }
+        ]
+      })
+    ]);
+
+    const hotelMap = new Map();
+    for (const hotel of hotels) {
+      const key = `${hotel.platform}::${hotel.platformHotelId}`;
+      hotelMap.set(key, {
+        platform: hotel.platform,
+        platformHotelId: hotel.platformHotelId,
+        hotelName: hotel.hotelName,
+        city: hotel.city || "",
+        status: hotel.status,
+        source: hotel.source,
+        rawPayload: hotel.rawPayload || null,
+        updatedAt: hotel.updatedAt.toISOString(),
+        mapping: null,
+        rooms: []
+      });
+    }
+
+    const hotelNameFallbackMap = new Map();
+    for (const mapping of hotelMappings) {
+      const key = `${mapping.platform}::${mapping.platformHotelId}`;
+      const mappedName = String(mapping.platformHotelName || mapping.internalHotelName || mapping.platformHotelId || "").trim();
+      if (mappedName) {
+        hotelNameFallbackMap.set(key, mappedName);
+      }
+    }
+
+    for (const mapping of hotelMappings) {
+      const key = `${mapping.platform}::${mapping.platformHotelId}`;
+      const current = hotelMap.get(key) || {
+        platform: mapping.platform,
+        platformHotelId: mapping.platformHotelId,
+        hotelName: mapping.platformHotelName || mapping.platformHotelId,
+        city: "",
+        status: "ONLINE",
+        source: "MAPPING",
+        rawPayload: null,
+        updatedAt: mapping.updatedAt.toISOString(),
+        mapping: null,
+        rooms: []
+      };
+      if ((!current.hotelName || current.hotelName === current.platformHotelId) && String(mapping.platformHotelName || "").trim()) {
+        current.hotelName = String(mapping.platformHotelName || "").trim();
+      }
+      if ((!current.hotelName || current.hotelName === current.platformHotelId) && String(mapping.internalHotelName || "").trim()) {
+        current.hotelName = String(mapping.internalHotelName || "").trim();
+      }
+      current.mapping = {
+        ...mapping,
+        createdAt: mapping.createdAt.toISOString(),
+        updatedAt: mapping.updatedAt.toISOString()
+      };
+      hotelMap.set(key, current);
+    }
+
+    const roomMap = new Map();
+    for (const room of roomTypes) {
+      const hotelKey = `${room.platform}::${room.platformHotelId}`;
+      const roomKey = `${room.platform}::${room.platformHotelId}::${room.platformRoomTypeId}`;
+      const hotelNode = hotelMap.get(hotelKey) || {
+        platform: room.platform,
+        platformHotelId: room.platformHotelId,
+        hotelName: hotelNameFallbackMap.get(hotelKey) || room.platformHotelId,
+        city: "",
+        status: "ONLINE",
+        source: "SYNC",
+        rawPayload: null,
+        updatedAt: room.updatedAt.toISOString(),
+        mapping: null,
+        rooms: []
+      };
+      hotelMap.set(hotelKey, hotelNode);
+      const roomNode = {
+        platformRoomTypeId: room.platformRoomTypeId,
+        roomTypeName: room.roomTypeName,
+        bedType: room.bedType || "",
+        gid: room.gid || "",
+        rpid: room.rpid || "",
+        outRid: room.outRid || "",
+        rateplanCode: room.rateplanCode || "",
+        vendor: room.vendor || "",
+        rawPayload: room.rawPayload || null,
+        updatedAt: room.updatedAt.toISOString(),
+        strategies: []
+      };
+      hotelNode.rooms.push(roomNode);
+      roomMap.set(roomKey, roomNode);
+    }
+
+    for (const mapping of roomMappings) {
+      const hotelKey = `${mapping.platform}::${mapping.platformHotelId}`;
+      const roomKey = `${mapping.platform}::${mapping.platformHotelId}::${mapping.platformRoomTypeId}`;
+      const hotelNode = hotelMap.get(hotelKey) || {
+        platform: mapping.platform,
+        platformHotelId: mapping.platformHotelId,
+        hotelName: hotelNameFallbackMap.get(hotelKey) || mapping.platformHotelId,
+        city: "",
+        status: "ONLINE",
+        source: "MAPPING",
+        rawPayload: null,
+        updatedAt: mapping.updatedAt.toISOString(),
+        mapping: null,
+        rooms: []
+      };
+      hotelMap.set(hotelKey, hotelNode);
+
+      let roomNode = roomMap.get(roomKey);
+      if (!roomNode) {
+        roomNode = {
+          platformRoomTypeId: mapping.platformRoomTypeId,
+          roomTypeName: mapping.platformRoomTypeName || mapping.internalRoomTypeName || mapping.rateCode || mapping.platformRoomTypeId,
+          bedType: "",
+          gid: "",
+          rpid: "",
+          outRid: mapping.platformRoomTypeId,
+          rateplanCode: mapping.rateCode,
+          vendor: "",
+          rawPayload: null,
+          updatedAt: mapping.updatedAt.toISOString(),
+          strategies: []
+        };
+        roomMap.set(roomKey, roomNode);
+        hotelNode.rooms.push(roomNode);
+      } else if ((!roomNode.roomTypeName || roomNode.roomTypeName === roomNode.platformRoomTypeId)
+        && String(mapping.platformRoomTypeName || mapping.internalRoomTypeName || "").trim()) {
+        roomNode.roomTypeName = String(mapping.platformRoomTypeName || mapping.internalRoomTypeName || "").trim();
+      }
+
+      const formula = readStrategyFormula(roomNode.rawPayload && typeof roomNode.rawPayload === "object" ? roomNode.rawPayload : {}, mapping.platformChannel, mapping.rateCode);
+      roomNode.strategies.push({
+        ...mapping,
+        ...formula,
+        createdAt: mapping.createdAt.toISOString(),
+        updatedAt: mapping.updatedAt.toISOString()
+      });
+    }
+
+    return Array.from(hotelMap.values());
   },
 
   async getRoomMapping(params = {}) {

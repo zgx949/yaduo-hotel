@@ -32,9 +32,17 @@ export const orderSubmitTask = async ({ payload }) => {
     throw new Error(permissionCheck.message || "余额不足");
   }
 
-  await prismaStore.updateOrderItem(orderItemId, { executionStatus: "SUBMITTING", status: "PROCESSING" });
-  await wait(200);
+  await wait(120);
   const result = await submitOrderItemToAtour({ orderItemId });
+  if (result?.alreadyProcessed || result?.inProgress) {
+    return {
+      ok: true,
+      orderItemId,
+      skipped: true,
+      reason: result.alreadyProcessed ? "already-processed" : "already-in-progress",
+      atourOrderId: result?.atourOrderId || item.atourOrderId || null
+    };
+  }
   return {
     ok: true,
     orderItemId,

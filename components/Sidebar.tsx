@@ -64,7 +64,8 @@ export const MENU_GROUPS: MenuGroup[] = [
     id: 'ota-platform',
     label: 'OTA平台',
     items: [
-      { id: 'ota-platform', label: 'OTA中台', icon: 'M3 7l9-4 9 4-9 4-9-4zm0 5l9 4 9-4m-18 5l9 4 9-4' }
+      { id: 'ota-platform', label: 'OTA中台', icon: 'M3 7l9-4 9 4-9 4-9-4zm0 5l9 4 9-4m-18 5l9 4 9-4' },
+      { id: 'feizhu-product-center', label: '飞猪商品管理', icon: 'M4 6h16M4 12h16M4 18h16' }
     ]
   }
 ];
@@ -203,6 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onTabChange(item.id);
                     onClose(); // Close sidebar on mobile selection
                   }}
+                  data-testid={item.id === 'feizhu-product-center' ? 'menu-feizhu-product-center' : undefined}
                   title={isCollapsed ? item.label : ''}
                   className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
                     activeTab === item.id

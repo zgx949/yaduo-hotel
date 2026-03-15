@@ -362,12 +362,13 @@ export const Orders: React.FC<OrdersProps> = ({ currentUser }) => {
     try {
       const data = await fetchWithAuth(`/api/orders/items/${item.id}/payment-link`);
       const link = data.paymentLink || item.paymentLink;
+      const amount = Number(data.amount ?? item.amount ?? 0) || 0;
       if (!link || (item.executionStatus !== 'ORDERED' && item.executionStatus !== 'DONE')) {
         setError('该拆单当前无可用支付链接');
         setNotice('');
         return;
       }
-      const bridgeUrl = `/payment-bridge?payUrl=${encodeURIComponent(link)}`;
+      const bridgeUrl = `/payment-bridge?payUrl=${encodeURIComponent(link)}&amount=${encodeURIComponent(String(amount))}`;
       window.open(bridgeUrl, '_blank', 'noopener,noreferrer');
       setNotice('支付链接已生成并打开新窗口');
     } catch (err) {

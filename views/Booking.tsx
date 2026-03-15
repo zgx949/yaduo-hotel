@@ -301,7 +301,8 @@ export const Booking: React.FC = () => {
     }
 
     setPayingItemId(item.itemId);
-    const bridgeUrl = `/payment-bridge?payUrl=${encodeURIComponent(item.paymentLink)}`;
+    const amount = Number(item.amount ?? 0) || 0;
+    const bridgeUrl = `/payment-bridge?payUrl=${encodeURIComponent(item.paymentLink)}&amount=${encodeURIComponent(String(amount))}`;
     const newWindow = window.open(bridgeUrl, '_blank', 'noopener,noreferrer');
     if (!newWindow) {
       setPayingItemId('');

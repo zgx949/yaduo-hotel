@@ -27,6 +27,24 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      TASK_WORKER_MODE: realtime
+    command: ["npm", "run", "start:worker"]
+    depends_on:
+      redis:
+        condition: service_started
+    restart: always
+
+  worker-scheduled:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skyhotel-worker-scheduled
+    env_file:
+      - ./backend/.env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      TASK_WORKER_MODE: scheduled
     command: ["npm", "run", "start:worker"]
     depends_on:
       redis:

@@ -8,6 +8,8 @@
     "dev:worker": "nodemon src/worker.js",
     "start": "node src/server.js",
     "start:worker": "node src/worker.js",
+    "test": "DATABASE_URL=postgresql://test:test@127.0.0.1:5432/test?schema=public NODE_ENV=test node --test",
+    "test:watch": "DATABASE_URL=postgresql://test:test@127.0.0.1:5432/test?schema=public NODE_ENV=test node --test --watch",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
@@ -38,7 +40,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.10",
-    "prisma": "^6.4.1"
+    "prisma": "^6.4.1",
+    "supertest": "^7.1.4"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

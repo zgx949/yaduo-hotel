@@ -3,11 +3,15 @@ import { env } from "../config/env.js";
 import { otaPrismaStore } from "../data/ota-prisma-store.js";
 import { prismaStore } from "../data/prisma-store.js";
 import { getInternalRequestContext } from "./internal-resource.service.js";
+import { fliggyMockAdapter } from "./ota/fliggy-mock.adapter.js";
 import { taobaoTopAdapter } from "./ota/taobao-top.adapter.js";
 import { fetchWithProxy } from "./proxied-fetch.service.js";
 
 const ADAPTERS = {
-  FLIGGY: taobaoTopAdapter
+  FLIGGY: {
+    real: taobaoTopAdapter,
+    mock: fliggyMockAdapter
+  }
 };
 
 const normalizePlatform = (value = "FLIGGY") => String(value || "FLIGGY").trim().toUpperCase();
@@ -36,11 +40,37 @@ const normalizeDateTimeText = (value) => {
 
 const getAdapter = (platform = "FLIGGY") => {
   const normalized = normalizePlatform(platform);
-  const adapter = ADAPTERS[normalized];
-  if (!adapter) {
+  const adapterGroup = ADAPTERS[normalized];
+  if (!adapterGroup) {
     throw new Error(`unsupported ota platform: ${normalized}`);
   }
-  return { platform: normalized, adapter };
+  const useMockAdapter = env.otaMockAdapterEnabled === true;
+  const adapter = useMockAdapter ? adapterGroup.mock : adapterGroup.real;
+  const mode = useMockAdapter ? "MOCK" : "REAL";
+  return { platform: normalized, adapter, mode };
+};
+
+const createPublishValidationError = ({ level = "UNKNOWN", field = "", message = "invalid publish payload", details = {} } = {}) => {
+  const err = new Error(message);
+  err.name = "ValidationError";
+  err.code = "OTA_PUBLISH_VALIDATION_ERROR";
+  err.statusCode = 400;
+  err.level = String(level || "UNKNOWN").trim().toUpperCase();
+  err.field = String(field || "").trim() || null;
+  err.details = details;
+  return err;
+};
+
+const createPublishDisabledError = () => {
+  const err = new Error("publish is disabled by OTA_PUBLISH_ENABLED=false");
+  err.name = "ValidationError";
+  err.code = "PUBLISH_DISABLED";
+  err.statusCode = 400;
+  err.details = {
+    env: "OTA_PUBLISH_ENABLED",
+    disabled: true
+  };
+  return err;
 };
 
 const resolveInboundOrderSubmitPolicy = ({ roomMapping, channelMapping }) => {
@@ -137,6 +167,15 @@ const buildAtourApiOrigin = () => {
   } catch {
     return "https://api2.yaduo.com";
   }
+};
+
+const buildAtourRoomOuterId = ({ chainId = "", roomTypeId = "" } = {}) => {
+  const hotelId = String(chainId || "").trim();
+  const roomId = String(roomTypeId || "").trim();
+  if (!hotelId || !roomId) {
+    return "";
+  }
+  return `ATOUR${hotelId}_${roomId}`;
 };
 
 function addOneDay(dateText) {
@@ -317,7 +356,8 @@ const enqueueBindingForInboundOrder = async ({ normalizedPlatform, inbound }) =>
 
 export const otaIntegrationService = {
   listPlatforms() {
-    return Object.keys(ADAPTERS).map((platform) => ({ platform, enabled: true, mode: "REAL" }));
+    const mode = env.otaMockAdapterEnabled === true ? "MOCK" : "REAL";
+    return Object.keys(ADAPTERS).map((platform) => ({ platform, enabled: true, mode }));
   },
 
   async syncPublishedHotels({ platform = "FLIGGY" } = {}) {
@@ -816,6 +856,460 @@ export const otaIntegrationService = {
 
   async listRoomMappings({ platform } = {}) {
     return otaPrismaStore.listRoomMappings({ platform: normalizePlatform(platform || "") });
+  },
+
+  async importAtourHotel({ platform = "FLIGGY", atour = {} } = {}) {
+    const normalizedPlatform = normalizePlatform(platform || "FLIGGY");
+    const source = atour && typeof atour === "object" ? atour : {};
+    const chainId = String(source.chainId || source.platformHotelId || "").trim();
+
+    if (!chainId) {
+      throw createPublishValidationError({
+        level: "HOTEL",
+        field: "chainId",
+        message: "chainId is required for Atour import",
+        details: {
+          requiredAnyOf: ["chainId", "platformHotelId"]
+        }
+      });
+    }
+
+    const hotelName = String(source.chainName || source.title || source.name || chainId).trim() || chainId;
+    const cityName = String(source.cityName || source.city || "").trim();
+    const importDate = normalizeDateText(source.date || new Date().toISOString().slice(0, 10)) || new Date().toISOString().slice(0, 10);
+
+    let rooms = [];
+    let fetchError = null;
+
+    try {
+      const roomList = await fetchAtourHotelDetailForDate({
+        chainId,
+        date: importDate
+      });
+
+      const roomMap = new Map();
+      for (const room of Array.isArray(roomList) ? roomList : []) {
+        const roomInfo = room?.roomTypeInfoResponse && typeof room.roomTypeInfoResponse === "object"
+          ? room.roomTypeInfoResponse
+          : {};
+        const originalRoomTypeId = String(
+          roomInfo.roomTypeId || room.roomTypeId || room.rid || room.id || ""
+        ).trim();
+        const platformRoomTypeId = buildAtourRoomOuterId({
+          chainId,
+          roomTypeId: originalRoomTypeId
+        });
+        if (!platformRoomTypeId) {
+          continue;
+        }
+        if (roomMap.has(platformRoomTypeId)) {
+          continue;
+        }
+
+        const roomTypeName = String(
+          roomInfo.roomTypeName || roomInfo.roomName || room.roomTypeName || room.name || originalRoomTypeId || platformRoomTypeId
+        ).trim() || originalRoomTypeId || platformRoomTypeId;
+
+        roomMap.set(platformRoomTypeId, {
+          platformRoomTypeId,
+          roomTypeName,
+          bedType: String(roomInfo.bedTypeName || roomInfo.bedName || room.bedType || "").trim(),
+          outRid: platformRoomTypeId,
+          rawPayload: {
+            ...(room && typeof room === "object" ? room : {}),
+            originalRoomTypeId
+          }
+        });
+      }
+      rooms = Array.from(roomMap.values());
+    } catch (err) {
+      fetchError = err instanceof Error ? err.message : "fetch atour chain detail failed";
+    }
+
+    await otaPrismaStore.upsertPublishedHotels({
+      platform: normalizedPlatform,
+      source: "ATOUR_IMPORT",
+      hotels: [
+        {
+          platformHotelId: chainId,
+          hotelName,
+          city: cityName,
+          status: "ONLINE",
+          rawPayload: {
+            source: "ATOUR_IMPORT",
+            atour: source,
+            importDate,
+            fetchError
+          },
+          rooms
+        }
+      ]
+    });
+
+    await otaPrismaStore.appendSyncLog({
+      type: "PRODUCT_CENTER_ATOUR_IMPORT",
+      platform: normalizedPlatform,
+      result: {
+        platformHotelId: chainId,
+        hotelName,
+        cityName,
+        roomCount: rooms.length,
+        importedAt: new Date().toISOString(),
+        fetchError
+      }
+    });
+
+    return {
+      platform: normalizedPlatform,
+      platformHotelId: chainId,
+      hotelName,
+      cityName,
+      roomCount: rooms.length,
+      rooms,
+      fetchError
+    };
+  },
+
+  validatePublishPayload({ level = "", platform = "FLIGGY", product = {} } = {}) {
+    const normalizedLevel = String(level || "").trim().toUpperCase();
+    const normalizedPlatform = normalizePlatform(platform || "FLIGGY");
+    const sourceProduct = product && typeof product === "object" ? product : {};
+
+    if (!normalizedLevel) {
+      throw createPublishValidationError({
+        level: "UNKNOWN",
+        field: "level",
+        message: "level is required",
+        details: {
+          acceptedLevels: ["HOTEL", "ROOM_TYPE", "RATEPLAN"]
+        }
+      });
+    }
+
+    const platformHotelId = String(
+      sourceProduct.platformHotelId || sourceProduct.hotel_outer_id || sourceProduct.hotelOuterId || sourceProduct.outer_id || sourceProduct.hid || sourceProduct.hotel_id || ""
+    ).trim();
+    const platformRoomTypeId = String(
+      sourceProduct.platformRoomTypeId || sourceProduct.room_outer_id || sourceProduct.roomOuterId || sourceProduct.out_rid || sourceProduct.outRid || sourceProduct.outer_id || ""
+    ).trim();
+    const rateplanCode = String(sourceProduct.rateplanCode || sourceProduct.rateplan_code || "").trim();
+
+    if (normalizedLevel === "HOTEL" && !platformHotelId) {
+      throw createPublishValidationError({
+        level: normalizedLevel,
+        field: "platformHotelId",
+        message: "platformHotelId is required for hotel publish",
+        details: {
+          requiredAnyOf: ["platformHotelId", "outer_id", "hid", "hotel_id"]
+        }
+      });
+    }
+
+    if (normalizedLevel === "ROOM_TYPE") {
+      if (!platformHotelId) {
+        throw createPublishValidationError({
+          level: normalizedLevel,
+          field: "platformHotelId",
+          message: "platformHotelId is required for room type publish",
+          details: {
+            requiredAnyOf: ["platformHotelId", "hotel_outer_id", "hid", "hotel_id"]
+          }
+        });
+      }
+      if (!platformRoomTypeId) {
+        throw createPublishValidationError({
+          level: normalizedLevel,
+          field: "platformRoomTypeId",
+          message: "platformRoomTypeId is required for room type publish",
+          details: {
+            requiredAnyOf: ["platformRoomTypeId", "room_outer_id", "out_rid", "outer_id"]
+          }
+        });
+      }
+    }
+
+    if (normalizedLevel === "RATEPLAN") {
+      if (!platformHotelId) {
+        throw createPublishValidationError({
+          level: normalizedLevel,
+          field: "platformHotelId",
+          message: "platformHotelId is required for rateplan publish",
+          details: {
+            requiredAnyOf: ["platformHotelId", "hotel_outer_id", "hid", "hotel_id"]
+          }
+        });
+      }
+      if (!platformRoomTypeId) {
+        throw createPublishValidationError({
+          level: normalizedLevel,
+          field: "platformRoomTypeId",
+          message: "platformRoomTypeId is required for rateplan publish",
+          details: {
+            requiredAnyOf: ["platformRoomTypeId", "room_outer_id", "out_rid", "outer_id"]
+          }
+        });
+      }
+      if (!rateplanCode) {
+        throw createPublishValidationError({
+          level: normalizedLevel,
+          field: "rateplanCode",
+          message: "rateplanCode is required for rateplan publish",
+          details: {
+            requiredAnyOf: ["rateplanCode", "rateplan_code"]
+          }
+        });
+      }
+    }
+
+    if (!["HOTEL", "ROOM_TYPE", "RATEPLAN"].includes(normalizedLevel)) {
+      throw createPublishValidationError({
+        level: normalizedLevel,
+        field: "level",
+        message: "unsupported publish level",
+        details: {
+          acceptedLevels: ["HOTEL", "ROOM_TYPE", "RATEPLAN"]
+        }
+      });
+    }
+
+    return {
+      level: normalizedLevel,
+      platform: normalizedPlatform,
+      product: {
+        ...sourceProduct,
+        platformHotelId,
+        platformRoomTypeId,
+        rateplanCode
+      }
+    };
+  },
+
+  async publishHotelProduct({ platform = "FLIGGY", product = {} } = {}) {
+    if (!env.otaPublishEnabled) {
+      throw createPublishDisabledError();
+    }
+    const validated = this.validatePublishPayload({ level: "HOTEL", platform, product });
+    const { adapter } = getAdapter(validated.platform);
+    const result = await adapter.upsertHotelProduct({
+      product: {
+        ...validated.product,
+        outer_id: validated.product.outer_id || validated.product.platformHotelId,
+        vendor: validated.product.vendor || env.otaTopVendor || undefined
+      }
+    });
+    return {
+      platform: validated.platform,
+      level: "HOTEL",
+      platformHotelId: validated.product.platformHotelId,
+      response: result.response || null,
+      result
+    };
+  },
+
+  async publishRoomTypeProduct({ platform = "FLIGGY", product = {} } = {}) {
+    if (!env.otaPublishEnabled) {
+      throw createPublishDisabledError();
+    }
+    const validated = this.validatePublishPayload({ level: "ROOM_TYPE", platform, product });
+    const { adapter } = getAdapter(validated.platform);
+    const result = await adapter.upsertRoomTypeProduct({
+      product: {
+        ...validated.product,
+        platformHotelId: validated.product.platformHotelId,
+        platformRoomTypeId: validated.product.platformRoomTypeId,
+        hotel_outer_id: validated.product.hotel_outer_id || validated.product.platformHotelId,
+        room_outer_id: validated.product.room_outer_id || validated.product.platformRoomTypeId,
+        out_rid: validated.product.out_rid || validated.product.platformRoomTypeId,
+        outer_id: validated.product.outer_id || validated.product.platformRoomTypeId,
+        vendor: validated.product.vendor || env.otaTopVendor || undefined
+      }
+    });
+    return {
+      platform: validated.platform,
+      level: "ROOM_TYPE",
+      platformHotelId: validated.product.platformHotelId,
+      platformRoomTypeId: validated.product.platformRoomTypeId,
+      response: result.response || null,
+      result
+    };
+  },
+
+  async publishRatePlanProduct({ platform = "FLIGGY", product = {} } = {}) {
+    if (!env.otaPublishEnabled) {
+      throw createPublishDisabledError();
+    }
+    const validated = this.validatePublishPayload({ level: "RATEPLAN", platform, product });
+    const { adapter } = getAdapter(validated.platform);
+    const result = await adapter.upsertRatePlanProduct({
+      product: {
+        ...validated.product,
+        platformHotelId: validated.product.platformHotelId,
+        platformRoomTypeId: validated.product.platformRoomTypeId,
+        rateplanCode: validated.product.rateplanCode,
+        out_rid: validated.product.out_rid || validated.product.platformRoomTypeId,
+        vendor: validated.product.vendor || env.otaTopVendor || undefined
+      }
+    });
+    return {
+      platform: validated.platform,
+      level: "RATEPLAN",
+      platformHotelId: validated.product.platformHotelId,
+      platformRoomTypeId: validated.product.platformRoomTypeId,
+      rateplanCode: validated.product.rateplanCode,
+      response: result.response || null,
+      result
+    };
+  },
+
+  async saveStrategyAndAutoPublish({
+    platform = "FLIGGY",
+    strategy = {},
+    publishProduct = {}
+  } = {}) {
+    const normalizedPlatform = normalizePlatform(platform);
+    const draftPayload = {
+      ...strategy,
+      platform: normalizedPlatform,
+      platformChannel: String(strategy.platformChannel || "DEFAULT").trim().toUpperCase(),
+      publishStatus: "DRAFT",
+      lastPublishError: null,
+      lastPublishedAt: null
+    };
+
+    const persisted = await otaPrismaStore.upsertRoomMapping(draftPayload);
+    const platformHotelId = String(persisted.platformHotelId || strategy.platformHotelId || "").trim();
+    const platformRoomTypeId = String(persisted.platformRoomTypeId || strategy.platformRoomTypeId || "").trim();
+    const rateplanCode = String(persisted.rateCode || strategy.rateCode || publishProduct.rateplanCode || "").trim();
+
+    if (!env.otaPublishEnabled) {
+      const strategyAfterSave = await otaPrismaStore.upsertRoomMapping({
+        ...draftPayload,
+        platformHotelId,
+        platformRoomTypeId,
+        rateCode: rateplanCode,
+        srid: strategy.srid,
+        publishStatus: "DRAFT",
+        lastPublishError: null,
+        lastPublishedAt: null
+      });
+
+      await otaPrismaStore.appendSyncLog({
+        type: "PRODUCT_CENTER_STRATEGY_SAVE_AND_PUBLISH",
+        platform: normalizedPlatform,
+        result: {
+          success: true,
+          platformHotelId,
+          platformRoomTypeId,
+          platformChannel: strategyAfterSave.platformChannel,
+          rateplanCode,
+          publishStatus: strategyAfterSave.publishStatus,
+          srid: strategyAfterSave.srid || null,
+          publish: {
+            code: "PUBLISH_DISABLED",
+            disabled: true
+          }
+        }
+      });
+
+      return {
+        platform: normalizedPlatform,
+        strategy: strategyAfterSave,
+        publish: {
+          code: "PUBLISH_DISABLED",
+          disabled: true
+        }
+      };
+    }
+
+    const strategyPayload = {
+      ...draftPayload,
+      publishStatus: "PUBLISHING"
+    };
+
+    try {
+      await otaPrismaStore.upsertRoomMapping({
+        ...strategyPayload,
+        platformHotelId,
+        platformRoomTypeId,
+        rateCode: rateplanCode,
+        srid: strategy.srid
+      });
+
+      const publishResult = await this.publishRatePlanProduct({
+        platform: normalizedPlatform,
+        product: {
+          ...publishProduct,
+          platformHotelId,
+          platformRoomTypeId,
+          rateplanCode,
+          vendor: publishProduct.vendor || env.otaTopVendor || undefined
+        }
+      });
+
+      const strategyAfterPublish = await otaPrismaStore.upsertRoomMapping({
+        ...strategyPayload,
+        platformHotelId,
+        platformRoomTypeId,
+        rateCode: rateplanCode,
+        srid: strategy.srid,
+        publishStatus: "PUBLISHED",
+        lastPublishedAt: new Date().toISOString(),
+        lastPublishError: null
+      });
+
+      await otaPrismaStore.appendSyncLog({
+        type: "PRODUCT_CENTER_STRATEGY_SAVE_AND_PUBLISH",
+        platform: normalizedPlatform,
+        result: {
+          success: true,
+          platformHotelId,
+          platformRoomTypeId,
+          platformChannel: strategyAfterPublish.platformChannel,
+          rateplanCode,
+          publishStatus: strategyAfterPublish.publishStatus,
+          srid: strategyAfterPublish.srid || null
+        }
+      });
+
+      return {
+        platform: normalizedPlatform,
+        strategy: strategyAfterPublish,
+        publish: publishResult
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "publish failed";
+      const strategyAfterPublish = await otaPrismaStore.upsertRoomMapping({
+        ...strategyPayload,
+        platformHotelId,
+        platformRoomTypeId,
+        rateCode: rateplanCode,
+        srid: strategy.srid,
+        publishStatus: "FAILED",
+        lastPublishError: message,
+        lastPublishedAt: null
+      });
+
+      await otaPrismaStore.appendSyncLog({
+        type: "PRODUCT_CENTER_STRATEGY_SAVE_AND_PUBLISH",
+        platform: normalizedPlatform,
+        result: {
+          success: false,
+          platformHotelId,
+          platformRoomTypeId,
+          platformChannel: strategyAfterPublish.platformChannel,
+          rateplanCode,
+          publishStatus: strategyAfterPublish.publishStatus,
+          srid: strategyAfterPublish.srid || null,
+          error: {
+            name: err?.name || "Error",
+            message,
+            code: err?.code || null,
+            details: err?.details || null
+          }
+        }
+      });
+      throw err;
+    }
   },
 
   async upsertChannelMapping(payload = {}) {
