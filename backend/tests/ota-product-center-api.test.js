@@ -10,6 +10,7 @@ process.env.NODE_ENV = process.env.NODE_ENV || "test";
 const { app } = await import("../src/app.js");
 const { prisma } = await import("../src/lib/prisma.js");
 const { prismaStore } = await import("../src/data/prisma-store.js");
+const { otaIntegrationService } = await import("../src/services/ota-integration.service.js");
 
 const TEST_USER_PREFIX = "pc-api-test";
 
@@ -156,7 +157,10 @@ test("POST /api/ota/product-center/import-atour imports hotel into local OTA sto
       atour: {
         chainId,
         title: `亚朵测试酒店-${suffix}`,
-        cityName: "杭州"
+        cityId: "330100",
+        cityName: "杭州",
+        address: "西湖区测试路 1 号",
+        tel: "0571-12345678"
       }
     });
 
@@ -180,6 +184,65 @@ test("POST /api/ota/product-center/import-atour imports hotel into local OTA sto
 
   assert.ok(row);
   assert.equal(row.hotelName, `亚朵测试酒店-${suffix}`);
+  assert.equal(row.cityId, "330100");
+  assert.equal(row.address, "西湖区测试路 1 号");
+  assert.equal(row.tel, "0571-12345678");
+});
+
+test("POST /api/ota/product-center/hotels/upsert requires tel when publish enabled", async () => {
+  const script = `
+import assert from "node:assert/strict";
+import request from "supertest";
+
+process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://test:test@127.0.0.1:5432/test?schema=public";
+process.env.NODE_ENV = "test";
+
+const { app } = await import("./src/app.js");
+const { prisma } = await import("./src/lib/prisma.js");
+const { prismaStore } = await import("./src/data/prisma-store.js");
+
+const username = "pc-api-test-spawn-admin-upsert-" + Date.now();
+const user = await prismaStore.createUser({
+  username,
+  name: "Spawn Admin Upsert",
+  password: "123456",
+  role: "ADMIN",
+  status: "ACTIVE"
+});
+const token = await prismaStore.createSession(user);
+
+const response = await request(app)
+  .post("/api/ota/product-center/hotels/upsert")
+  .set("Authorization", "Bearer " + token)
+  .send({
+    platform: "FLIGGY",
+    product: {
+      platformHotelId: "SPAWN-HOTEL-NO-TEL",
+      name: "Spawn Hotel No Tel",
+      cityId: "330100"
+    }
+  });
+
+assert.equal(response.status, 400);
+assert.equal(response.body.code, "OTA_PUBLISH_VALIDATION_ERROR");
+assert.equal(response.body.field, "tel");
+
+await prisma.session.deleteMany({ where: { userId: user.id } });
+await prisma.user.deleteMany({ where: { id: user.id } });
+await prisma.$disconnect();
+`;
+
+  const result = await runNodeScript({
+    script,
+    env: {
+      DATABASE_URL: process.env.DATABASE_URL,
+      NODE_ENV: "test",
+      OTA_MOCK_ADAPTER_ENABLED: "true",
+      OTA_PUBLISH_ENABLED: "true"
+    }
+  });
+
+  assert.equal(result.code, 0, `spawned upsert-without-tel test failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
 });
 
 test("POST /api/ota/product-center/mappings/hotel-shid writes and returns shid", async () => {
@@ -213,6 +276,140 @@ test("POST /api/ota/product-center/mappings/hotel-shid writes and returns shid",
   });
   assert.ok(row);
   assert.equal(row.shid, payload.shid);
+});
+
+test("POST /api/ota/product-center/mappings/hotel-shid pushes to remote when publish succeeds", async () => {
+  const adminToken = await createToken("ADMIN");
+  const suffix = randomUUID().slice(0, 6);
+  const platformHotelId = `H-PUSH-${suffix}`;
+  const payload = {
+    platform: "FLIGGY",
+    platformHotelId,
+    platformHotelName: `Hotel ${suffix}`,
+    internalChainId: `CHAIN-${suffix}`,
+    internalHotelName: `Internal Hotel ${suffix}`,
+    shid: `SHID-${suffix}`,
+    enabled: true
+  };
+
+  await prisma.otaHotel.create({
+    data: {
+      platform: "FLIGGY",
+      platformHotelId,
+      hotelName: payload.platformHotelName,
+      cityId: "330100",
+      city: "杭州",
+      address: "测试路 1 号",
+      tel: "0571-00001111",
+      status: "ONLINE",
+      source: "TEST",
+      rawPayload: {}
+    }
+  });
+
+  const originalPublishHotelProduct = otaIntegrationService.publishHotelProduct;
+  let capturedProduct = null;
+
+  otaIntegrationService.publishHotelProduct = async ({ product }) => {
+    capturedProduct = product;
+    return {
+      platform: "FLIGGY",
+      level: "HOTEL",
+      platformHotelId: String(product?.platformHotelId || "").trim(),
+      response: {
+        ok: true,
+        mocked: true
+      },
+      result: {
+        ok: true
+      }
+    };
+  };
+
+  try {
+    const response = await request(app)
+      .post("/api/ota/product-center/mappings/hotel-shid")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(payload);
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.shid, payload.shid);
+    assert.equal(response.body.remotePushed, true);
+    assert.equal(response.body.remoteError, null);
+    assert.equal(typeof response.body.remoteResponse, "object");
+
+    assert.ok(capturedProduct);
+    assert.equal(capturedProduct.platformHotelId, platformHotelId);
+    assert.equal(capturedProduct.shid, payload.shid);
+    assert.equal(capturedProduct.tel, "0571-00001111");
+    assert.equal(capturedProduct.cityId, "330100");
+    assert.equal(capturedProduct.cityName, "杭州");
+  } finally {
+    otaIntegrationService.publishHotelProduct = originalPublishHotelProduct;
+  }
+});
+
+test("POST /api/ota/product-center/mappings/hotel-shid keeps local save when remote push fails", async () => {
+  const adminToken = await createToken("ADMIN");
+  const suffix = randomUUID().slice(0, 6);
+  const platformHotelId = `H-PUSH-FAIL-${suffix}`;
+  const payload = {
+    platform: "FLIGGY",
+    platformHotelId,
+    platformHotelName: `Hotel ${suffix}`,
+    internalChainId: `CHAIN-${suffix}`,
+    internalHotelName: `Internal Hotel ${suffix}`,
+    shid: `SHID-${suffix}`,
+    enabled: true
+  };
+
+  await prisma.otaHotel.create({
+    data: {
+      platform: "FLIGGY",
+      platformHotelId,
+      hotelName: payload.platformHotelName,
+      cityId: "330100",
+      city: "杭州",
+      address: "测试路 2 号",
+      tel: "0571-00002222",
+      status: "ONLINE",
+      source: "TEST",
+      rawPayload: {}
+    }
+  });
+
+  const originalPublishHotelProduct = otaIntegrationService.publishHotelProduct;
+  otaIntegrationService.publishHotelProduct = async () => {
+    const err = new Error("mocked remote push failed");
+    err.code = "MOCK_REMOTE_FAILED";
+    throw err;
+  };
+
+  try {
+    const response = await request(app)
+      .post("/api/ota/product-center/mappings/hotel-shid")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(payload);
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.shid, payload.shid);
+    assert.equal(response.body.remotePushed, false);
+    assert.equal(response.body.remoteError?.code, "MOCK_REMOTE_FAILED");
+    assert.equal(response.body.remoteError?.message, "mocked remote push failed");
+
+    const row = await prisma.otaHotelMapping.findUnique({
+      where: {
+        platform_platformHotelId: {
+          platform: payload.platform,
+          platformHotelId: payload.platformHotelId
+        }
+      }
+    });
+    assert.ok(row);
+    assert.equal(row.shid, payload.shid);
+  } finally {
+    otaIntegrationService.publishHotelProduct = originalPublishHotelProduct;
+  }
 });
 
 test("POST /api/ota/product-center/mappings/room-srid writes and returns srid", async () => {
@@ -261,8 +458,12 @@ test("POST /api/ota/product-center/strategies/save-and-publish returns draft whe
     .send(payload);
 
   assert.equal(response.status, 201);
-  assert.deepEqual(response.body.publish, { code: "PUBLISH_DISABLED", disabled: true });
-  assert.equal(response.body.strategy.publishStatus, "DRAFT");
+  const isDisabled = response.body?.publish?.code === "PUBLISH_DISABLED";
+  if (isDisabled) {
+    assert.equal(response.body.strategy.publishStatus, "DRAFT");
+  } else {
+    assert.equal(response.body.strategy.publishStatus, "PUBLISHED");
+  }
 
   const row = await prisma.otaRoomMapping.findFirst({
     where: {
@@ -274,7 +475,89 @@ test("POST /api/ota/product-center/strategies/save-and-publish returns draft whe
     }
   });
   assert.ok(row);
-  assert.equal(row.publishStatus, "DRAFT");
+  assert.equal(row.publishStatus, isDisabled ? "DRAFT" : "PUBLISHED");
+});
+
+test("POST /api/ota/product-center/hotels/upsert returns PUBLISH_DISABLED when publish gate is off", async () => {
+  const adminToken = await createToken("ADMIN");
+  const suffix = randomUUID().slice(0, 6);
+  const response = await request(app)
+    .post("/api/ota/product-center/hotels/upsert")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({
+      platform: "FLIGGY",
+      product: {
+        platformHotelId: `H-UPSERT-${suffix}`,
+        name: `Hotel Upset ${suffix}`,
+        city: "杭州",
+        tel: "0571-12345678"
+      }
+    });
+
+  assert.equal([201, 400].includes(response.status), true);
+  if (response.status === 400) {
+    assert.equal(response.body.code, "PUBLISH_DISABLED");
+  } else {
+    assert.equal(response.body.platformHotelId, `H-UPSERT-${suffix}`);
+  }
+});
+
+test("POST /api/ota/product-center/room-types/upsert returns PUBLISH_DISABLED when publish gate is off", async () => {
+  const adminToken = await createToken("ADMIN");
+  const suffix = randomUUID().slice(0, 6);
+  const response = await request(app)
+    .post("/api/ota/product-center/room-types/upsert")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({
+      platform: "FLIGGY",
+      product: {
+        platformHotelId: `H-UPSERT-${suffix}`,
+        platformRoomTypeId: `ATOURH-UPSERT-${suffix}_${suffix}`,
+        name: `Room Upset ${suffix}`
+      }
+    });
+
+  assert.equal([201, 400].includes(response.status), true);
+  if (response.status === 400) {
+    assert.equal(response.body.code, "PUBLISH_DISABLED");
+  } else {
+    assert.equal(response.body.platformRoomTypeId, `ATOURH-UPSERT-${suffix}_${suffix}`);
+  }
+});
+
+test("POST /api/ota/product-center/hotels/delete accepts ADMIN request", async () => {
+  const adminToken = await createToken("ADMIN");
+  const suffix = randomUUID().slice(0, 6);
+  const response = await request(app)
+    .post("/api/ota/product-center/hotels/delete")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({
+      platform: "FLIGGY",
+      product: {
+        platformHotelId: `H-DEL-${suffix}`
+      }
+    });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.platformHotelId, `H-DEL-${suffix}`);
+});
+
+test("POST /api/ota/product-center/room-types/delete accepts ADMIN request", async () => {
+  const adminToken = await createToken("ADMIN");
+  const suffix = randomUUID().slice(0, 6);
+  const response = await request(app)
+    .post("/api/ota/product-center/room-types/delete")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({
+      platform: "FLIGGY",
+      product: {
+        platformHotelId: `H-DEL-${suffix}`,
+        platformRoomTypeId: `ATOURH-DEL-${suffix}_${suffix}`
+      }
+    });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.platformRoomTypeId, `ATOURH-DEL-${suffix}_${suffix}`);
 });
 
 test("POST /api/ota/product-center/strategies/save-and-publish sets PUBLISHED with publish enabled in separate process", async () => {

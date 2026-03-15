@@ -1,0 +1,2918 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link [ref=e7] [cursor=pointer]:
+          - /url: //open.taobao.com
+        - link "文档中心 ·" [ref=e8] [cursor=pointer]:
+          - /url: https://open.taobao.com/docCenter
+        - generic [ref=e10]: API文档
+      - link "登录" [ref=e12] [cursor=pointer]:
+        - /url: https://login.taobao.com/member/login.jhtml?f=top&sub=true&redirectURL=https%3A%2F%2Fopen.taobao.com%2Fapi.htm%3FdocId%3D22665%26docType%3D2
+      - generic [ref=e13]:
+        - list
+        - generic [ref=e15]:
+          - img [ref=e17]
+          - textbox "搜索" [ref=e18]
+    - generic [ref=e19]:
+      - generic [ref=e23]:
+        - generic [ref=e24]:
+          - generic [ref=e25] [cursor=pointer]:
+            - text: 目录
+            - generic [ref=e26]: 
+          - list:
+            - listitem:
+              - link "淘宝交易API" [ref=e27] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝用户API" [ref=e28] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝商品API" [ref=e29] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝物流API" [ref=e30] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝退款API" [ref=e31] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "用户API" [ref=e32] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "类目API" [ref=e33] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "商品API" [ref=e34] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "交易API" [ref=e35] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "评价API" [ref=e36] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "物流API" [ref=e37] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "店铺API" [ref=e38] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "分销API" [ref=e39] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "旺旺API" [ref=e40] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝客API" [ref=e41] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "工具API" [ref=e42] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "物流宝API" [ref=e43] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "直通车API" [ref=e44] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "机票API" [ref=e45] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ONS消息服务" [ref=e46] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "营销API" [ref=e47] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "数据API" [ref=e48] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店API" [ref=e49] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "店铺会员管理API" [ref=e50] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "多媒体平台API" [ref=e51] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "子账号管理API" [ref=e52] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "服务平台API" [ref=e53] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "退款API" [ref=e54] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "质检品控API" [ref=e55] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫服务商品API" [ref=e56] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫精品库API" [ref=e57] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "聚石塔API" [ref=e58] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "电子物流API" [ref=e59] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "彩票API" [ref=e60] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "账务API" [ref=e61] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "拍卖API" [ref=e62] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "千牛接口" [ref=e63] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "消息服务API" [ref=e64] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "本地生活API" [ref=e65] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里云ocsAPI" [ref=e66] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝同城API" [ref=e67] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "房产API" [ref=e68] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "YunOS" [ref=e69] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里云API" [ref=e70] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "火车票API" [ref=e71] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "Tanx API" [ref=e72] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "手淘开放API" [ref=e73] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里高德" [ref=e74] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "宝点API" [ref=e75] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "汽车票API" [ref=e76] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "码上淘API" [ref=e77] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "游戏激励平台API" [ref=e78] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝抽奖平台API" [ref=e79] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫国际API" [ref=e80] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "司法拍卖" [ref=e81] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "虾米API" [ref=e82] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫互动接口" [ref=e83] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "生活服务API" [ref=e84] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "物联API" [ref=e85] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店导购API" [ref=e86] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "保险API" [ref=e87] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫美妆API" [ref=e88] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "电子面单API" [ref=e89] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "电影票API" [ref=e90] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里通信API" [ref=e91] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里妈妈API" [ref=e92] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "openimAPI" [ref=e93] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "DSP-API" [ref=e94] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "虚拟院线API" [ref=e95] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "知识库API" [ref=e96] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "反欺诈风控API" [ref=e97] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际站外贸直通车API" [ref=e98] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫服务数据API" [ref=e99] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "智能设备" [ref=e100] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "百川" [ref=e101] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "百川推送" [ref=e102] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际站商品API" [ref=e103] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝游戏API" [ref=e104] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "聚安全API" [ref=e105] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "喵街API" [ref=e106] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟仓配API" [ref=e107] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "网上法庭对外API" [ref=e108] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "五道口API" [ref=e109] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里大于API" [ref=e110] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝内容API" [ref=e111] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "旅行用车API" [ref=e112] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "门票-商品管理API" [ref=e113] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟无线API" [ref=e114] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "奇门仓储API" [ref=e115] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "yunos推送服务api" [ref=e116] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "生活汇API" [ref=e117] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "tv支付" [ref=e118] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟集货API" [ref=e119] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "地动仪" [ref=e120] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康药API" [ref=e121] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "法务诉讼对外API" [ref=e122] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "度假-商品管理API" [ref=e123] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店商品API" [ref=e124] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店在线预订API" [ref=e125] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店官网信用住API" [ref=e126] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店线下信用住API" [ref=e127] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "全渠道API" [ref=e128] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "珠宝认证数据导入" [ref=e129] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际机票政策API" [ref=e130] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际机票订单API" [ref=e131] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国内机票订单API" [ref=e132] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "度假&门票-交易管理API" [ref=e133] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里体育API" [ref=e134] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "电子发票" [ref=e135] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "SCM_五道口API" [ref=e136] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里翻译API" [ref=e137] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际站数据管家" [ref=e138] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "Yunos Account API" [ref=e139] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟裹裹API" [ref=e140] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝直播API" [ref=e141] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "度假-签证管理API" [ref=e142] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "服务API" [ref=e143] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "体检机构API" [ref=e144] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "1688推客API" [ref=e145] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "商户API" [ref=e146] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "桌面API" [ref=e147] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "电动车API" [ref=e148] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝在线教育" [ref=e149] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "新零售API" [ref=e150] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "SCM API" [ref=e151] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "百川-ctg" [ref=e152] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "汇金API" [ref=e153] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "数娱媒资输出" [ref=e154] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "商旅API" [ref=e155] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "零售plus" [ref=e156] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫门店API" [ref=e157] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "AILAB图像算法API" [ref=e158] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫供应链" [ref=e159] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "欢行开发平台API" [ref=e160] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "迎客松牌照审核接口" [ref=e161] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "IoTI API" [ref=e162] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝卡券平台" [ref=e163] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "智慧门店" [ref=e164] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝定制行业API" [ref=e165] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼" [ref=e166] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "库存API" [ref=e167] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "aliExpress" [ref=e168] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "来疯API" [ref=e169] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "YunOS-广告" [ref=e170] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "司法开放平台" [ref=e171] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "全球速卖通" [ref=e172] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康追溯码" [ref=e173] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "会员中心API" [ref=e174] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-会员管理" [ref=e175] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "店小蜜API" [ref=e176] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "品效API" [ref=e177] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "小蜜API" [ref=e178] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "大麦票务云分销API" [ref=e179] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘票票数据平台" [ref=e180] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫精灵开放API" [ref=e181] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU卖家API" [ref=e182] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "智慧园区API" [ref=e183] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店会员API" [ref=e184] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "大麦API" [ref=e185] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "换货API" [ref=e186] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "商家营销中心API" [ref=e187] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "产品中心API" [ref=e188] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU－数据管家" [ref=e189] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU－物流" [ref=e190] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU－一达通" [ref=e191] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU－RFQ" [ref=e192] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU－信保" [ref=e193] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU－商品" [ref=e194] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪POI数据API" [ref=e195] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪行政区划API" [ref=e196] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "零售终端API" [ref=e197] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "手淘用户增长" [ref=e198] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ALiOS应用中心" [ref=e199] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "法务服务API" [ref=e200] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "b2b认证平台api" [ref=e201] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "企业运营平台-集团财务" [ref=e202] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼租房" [ref=e203] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里巴巴供应链平台API" [ref=e204] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫新零售" [ref=e205] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店团购套餐API" [ref=e206] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里影业云智API" [ref=e207] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "渠道中心API" [ref=e208] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-疫苗API" [ref=e209] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "教育账号 API" [ref=e210] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "用户增长" [ref=e211] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "AE-供应链" [ref=e212] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪机票前台类目" [ref=e213] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "平台治理API" [ref=e214] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫超市前台API" [ref=e215] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康医生" [ref=e216] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪酒店标准库" [ref=e217] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "AE-Dropshipper" [ref=e218] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "银泰scm-openapi" [ref=e219] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "信息平台-采购" [ref=e220] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "手淘互动API" [ref=e221] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝小程序API" [ref=e222] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ott支付" [ref=e223] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫汽车" [ref=e224] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "麦座API" [ref=e225] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ALIOS广告平台" [ref=e226] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "业务平台新零售" [ref=e227] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "大麦第三方商家接入API" [ref=e228] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫权益平台api" [ref=e229] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU商品api" [ref=e230] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "神鲸应用API" [ref=e231] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里影业灯塔" [ref=e232] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "激励API" [ref=e233] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "优酷-媒资" [ref=e234] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪会员API" [ref=e235] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "优酷网盟" [ref=e236] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康API" [ref=e237] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "pos交易api" [ref=e238] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "新制造API" [ref=e239] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "五道口商品API" [ref=e240] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "零售通订单履行" [ref=e241] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫线下大屏" [ref=e242] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "AE-Oversea-Solution" [ref=e243] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里精灵基础能力接口" [ref=e244] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康新零售" [ref=e245] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼发布" [ref=e246] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪酒店签约中心" [ref=e247] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "人工智能实验室开放平台API" [ref=e248] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪会员互通API" [ref=e249] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MOZI账号API" [ref=e250] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU-橱窗" [ref=e251] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "云码API" [ref=e252] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MOZI权限API" [ref=e253] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪商家平台" [ref=e254] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "新零售POS" [ref=e255] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "资质共享API" [ref=e256] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "业务平台事业部-税务平台API" [ref=e257] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MOZI 租户" [ref=e258] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫U先API" [ref=e259] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "公益三小时公共" [ref=e260] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "脚模API" [ref=e261] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康处方药平台" [ref=e262] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "优酷播控幻影API" [ref=e263] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫汽车金融" [ref=e264] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "miniapp开放API" [ref=e265] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝闪购联盟广告API" [ref=e266] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "信息流API" [ref=e267] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝C2M" [ref=e268] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "新零售供应链API" [ref=e269] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "AliOS支付API" [ref=e270] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟控制塔API" [ref=e271] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "群聊开放三方工具API" [ref=e272] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "银泰OPENAPI" [ref=e273] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "小程序API" [ref=e274] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟末端商业" [ref=e275] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康挂号号源直连" [ref=e276] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "千牛业务API" [ref=e277] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "AE-UserOpen-Recommend" [ref=e278] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "Efficient Tools" [ref=e279] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "Data Reports" [ref=e280] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "Promotion Creatives" [ref=e281] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟国际出口" [ref=e282] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "全域会员通" [ref=e283] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "交易猫API" [ref=e284] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "影城自运营开放Api" [ref=e285] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "商家应用云" [ref=e286] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际火车票API" [ref=e287] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫校园API" [ref=e288] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "消息API" [ref=e289] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "菜鸟发货工作台API" [ref=e290] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "五道口-物流-自提API" [ref=e291] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "船票API" [ref=e292] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪-综合交通api" [ref=e293] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "iHome CBD API" [ref=e294] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "新零售开放API" [ref=e295] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "云游戏API" [ref=e296] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际虚拟API" [ref=e297] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "交易开放" [ref=e298] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "本地生活商户基础API" [ref=e299] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "消息amp通道" [ref=e300] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "口碑综合体API" [ref=e301] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际站内容-视频" [ref=e302] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "IoT售后解决方案API" [ref=e303] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "装企端" [ref=e304] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "视觉开放API(viapi)" [ref=e305] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "曲库开放平台歌曲API" [ref=e306] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康三方机构" [ref=e307] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-检测检验-预约" [ref=e308] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫精灵供应链网关API" [ref=e309] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "曲库开放平台TraceAPI" [ref=e310] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "CRM猎户座前台" [ref=e311] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪发票" [ref=e312] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "同城零售全渠道" [ref=e313] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里高德打车API" [ref=e314] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "斑马小程序" [ref=e315] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "五棱镜任务API" [ref=e316] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "零售通交易API" [ref=e317] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "零售通结算API" [ref=e318] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "AE任务开放平台" [ref=e319] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪玩法平台API" [ref=e320] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "本地生活内容API" [ref=e321] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "国际化中台服务域保险" [ref=e322] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "出库实操API" [ref=e323] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-健康证" [ref=e324] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "隐私保护API" [ref=e325] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU-DropShipping" [ref=e326] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康保险-信息交互" [ref=e327] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "周期购API" [ref=e328] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼已验货" [ref=e329] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "租户API" [ref=e330] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿信-交易API" [ref=e331] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪商业化API" [ref=e332] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫好房交易API" [ref=e333] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MMC中心仓出库实操API" [ref=e334] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫优品" [ref=e335] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿信-基础数据" [ref=e336] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康公益线API" [ref=e337] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "鸟潮物流API" [ref=e338] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "银泰开放平台" [ref=e339] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "海南离岛对外API" [ref=e340] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪-菲住联盟" [ref=e341] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "自动驾驶API" [ref=e342] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MMC五盘货项目" [ref=e343] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "逛逛API" [ref=e344] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "书旗内容文巢" [ref=e345] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "海外-淘宝客API" [ref=e346] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "mos-hr-员工" [ref=e347] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "银泰开放平台(内部)" [ref=e348] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "乌鸫API" [ref=e349] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-本地医疗-青少年健康" [ref=e350] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-本地医疗-通用预约服务" [ref=e351] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MMC店仓项目" [ref=e352] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "自动驾驶内部API" [ref=e353] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MTP项目" [ref=e354] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "IT智慧园区" [ref=e355] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "千帆计划" [ref=e356] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康孔雀翎WMS" [ref=e357] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪交易平台API" [ref=e358] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-本地医疗-通用渠道" [ref=e359] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫校园共享前端类目" [ref=e360] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝闪购联盟-单店推广API" [ref=e361] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-本地医疗-通用订单服务" [ref=e362] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "蚂蚁采购" [ref=e363] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-消费医疗-电子凭证服务" [ref=e364] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-消费医疗-商品门店服务" [ref=e365] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "洞窝_api" [ref=e366] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "代发管理" [ref=e367] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "补发场景" [ref=e368] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫校园零售" [ref=e369] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康&一树-孔雀翎WMS" [ref=e370] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "MMC物流域项目" [ref=e371] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝互动平台开放招募" [ref=e372] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "点淘API" [ref=e373] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "我的小窝玩法前端类目" [ref=e374] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "盒马航头仓" [ref=e375] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康&一树-电商中台对接" [ref=e376] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "猫超卡活动API" [ref=e377] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "瓴羊客服云" [ref=e378] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪推广平台" [ref=e379] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "斑马新能源充电互联互通接口Api" [ref=e380] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-消费医疗-保险合作" [ref=e381] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "本地生活客资平台-客资API" [ref=e382] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里妈妈-媒体开放平台" [ref=e383] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里妈妈-UniDesk" [ref=e384] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康&一树-ERP信息同步" [ref=e385] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "斑马新能源充电微信小程序插件API" [ref=e386] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "FC3D" [ref=e387] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店交易API" [ref=e388] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "机构API" [ref=e389] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫好房平台服务API" [ref=e390] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "斑马充电中台开放API" [ref=e391] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "盒马CRM" [ref=e392] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "银泰物流平台" [ref=e393] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫校园供应链" [ref=e394] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "斑马新能源充电平台cms接口API" [ref=e395] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "本地生活用户增长互动业务" [ref=e396] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天淘海外服务平台" [ref=e397] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "moss" [ref=e398] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "智能应用系统类目" [ref=e399] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "设计家权益API" [ref=e400] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼电商SAAS" [ref=e401] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘特互动任务API" [ref=e402] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "服务开放平台API" [ref=e403] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "万相台无界API" [ref=e404] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪服务平台" [ref=e405] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "原力平台API" [ref=e406] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "业务平台事业部-网关平台API" [ref=e407] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫家装API" [ref=e408] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘分销API" [ref=e409] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "优酷CRP" [ref=e410] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "橙狮体育课程视频生产" [ref=e411] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "小活动开放API" [ref=e412] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里体育智能运动api" [ref=e413] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼物流" [ref=e414] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "盒马配送API" [ref=e415] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝买菜次日达-快递送达" [ref=e416] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝闪购联盟-卡券API" [ref=e417] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "TanxBP API" [ref=e418] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝闪购联盟-采购单API" [ref=e419] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "以旧换新-信用付" [ref=e420] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘天物流API" [ref=e421] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼循环商店-前台" [ref=e422] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪大交通顺风车api" [ref=e423] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝直播AI开放" [ref=e424] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼彩票" [ref=e425] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU-直播" [ref=e426] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘天仓储API" [ref=e427] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘天跨境API" [ref=e428] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "探号API" [ref=e429] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "商品质量分API" [ref=e430] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "商家财务api" [ref=e431] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "绘蛙API" [ref=e432] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼房源-前台" [ref=e433] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲客联盟" [ref=e434] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "场景金融服务" [ref=e435] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "生态开放API" [ref=e436] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝小时达履约" [ref=e437] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "酒店营销api" [ref=e438] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "以旧换新-溯源码" [ref=e439] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫APP互动" [ref=e440] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "ICBU-物流" [ref=e441] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼质检报告" [ref=e442] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝闪购联盟-商品API" [ref=e443] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "以旧换新-国补" [ref=e444] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "飞猪金融API" [ref=e445] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "三方AI项目" [ref=e446] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫APP用增" [ref=e447] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼用增" [ref=e448] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "本地生活信贷金融API" [ref=e449] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "采购宝API" [ref=e450] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "盒马门店数字化" [ref=e451] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼游戏" [ref=e452] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "行业-宠物-API" [ref=e453] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "淘宝服饰" [ref=e454] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "采购宝开放API" [ref=e455] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫家享行业" [ref=e456] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼奢品寄卖" [ref=e457] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "补寄API" [ref=e458] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "闲鱼商业化" [ref=e459] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "灵犀互娱_云智能应用_ADC" [ref=e460] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "三方接入API" [ref=e461] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "以旧换新订单" [ref=e462] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "天猫超市储值卡API" [ref=e463] [cursor=pointer]:
+                - /url: javascript:;
+            - listitem:
+              - link "阿里健康-消费医疗-通用toB业务" [ref=e464] [cursor=pointer]:
+                - /url: javascript:;
+        - generic [ref=e465]: 酒店商品API
+        - generic [ref=e466]:
+          - link "taobao.xhotel.roomtype.get 房型查询接口" [ref=e468] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e469]:
+              - text: taobao.xhotel.roomtype.get
+              - generic [ref=e470]: 房型查询接口
+          - link "taobao.xhotel.roomtype.update 房型更新接口（ID不存在自动新增）" [ref=e472] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e473]:
+              - text: taobao.xhotel.roomtype.update
+              - generic [ref=e474]: 房型更新接口（ID不存在自动新增）
+          - link "taobao.xhotel.roomtype.add 房型新增接口（ID重复变更新）" [ref=e476] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e477]:
+              - text: taobao.xhotel.roomtype.add
+              - generic [ref=e478]: 房型新增接口（ID重复变更新）
+          - link "taobao.xhotel.get 酒店查询接口" [ref=e480] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e481]:
+              - text: taobao.xhotel.get
+              - generic [ref=e482]: 酒店查询接口
+          - link "taobao.xhotel.update 酒店更新接口（ID不存在自动新增）" [ref=e484] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e485]:
+              - text: taobao.xhotel.update
+              - generic [ref=e486]: 酒店更新接口（ID不存在自动新增）
+          - link "taobao.xhotel.add 酒店新增接口（ID重复自动更新）" [ref=e488] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e489]:
+              - text: taobao.xhotel.add
+              - generic [ref=e490]: 酒店新增接口（ID重复自动更新）
+          - link "taobao.xhotel.room.get room实体查询" [ref=e492] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e493]:
+              - text: taobao.xhotel.room.get
+              - generic [ref=e494]: room实体查询
+          - link "taobao.xhotel.rateplan.get 价格计划rateplan查询" [ref=e496] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e497]:
+              - text: taobao.xhotel.rateplan.get
+              - generic [ref=e498]: 价格计划rateplan查询
+          - link "taobao.xhotel.rooms.update 房型共享库存推送接口（批量全量）" [ref=e500] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e501]:
+              - text: taobao.xhotel.rooms.update
+              - generic [ref=e502]: 房型共享库存推送接口（批量全量）
+          - link "taobao.xhotel.room.update 房型库存推送接口（全量推送）" [ref=e504] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e505]:
+              - text: taobao.xhotel.room.update
+              - generic [ref=e506]: 房型库存推送接口（全量推送）
+          - link "taobao.xhotel.rates.update 价格推送接口（批量全量）" [ref=e508] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e509]:
+              - text: taobao.xhotel.rates.update
+              - generic [ref=e510]: 价格推送接口（批量全量）
+          - link "taobao.xhotel.rate.update 价格推送接口（全量更新）" [ref=e512] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e513]:
+              - text: taobao.xhotel.rate.update
+              - generic [ref=e514]: 价格推送接口（全量更新）
+          - link "taobao.xhotel.rate.get 酒店产品库rate查询" [ref=e516] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e517]:
+              - text: taobao.xhotel.rate.get
+              - generic [ref=e518]: 酒店产品库rate查询
+          - link "taobao.xhotel.rate.add 新增专享房价" [ref=e520] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e521]:
+              - text: taobao.xhotel.rate.add
+              - generic [ref=e522]: 新增专享房价
+          - link "taobao.xhotel.rateplan.update 价格计划rateplan更新或添加" [ref=e524] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e525]:
+              - text: taobao.xhotel.rateplan.update
+              - generic [ref=e526]: 价格计划rateplan更新或添加
+          - link "taobao.xhotel.rateplan.add 酒店产品库rateplan添加" [ref=e528] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e529]:
+              - text: taobao.xhotel.rateplan.add
+              - generic [ref=e530]: 酒店产品库rateplan添加
+          - link "taobao.xhotel.rates.increment 价格推送接口（批量增量）" [ref=e532] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e533]:
+              - text: taobao.xhotel.rates.increment
+              - generic [ref=e534]: 价格推送接口（批量增量）
+          - link "taobao.xhotel.rooms.increment 房型库存推送接口（批量增量）" [ref=e536] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e537]:
+              - text: taobao.xhotel.rooms.increment
+              - generic [ref=e538]: 房型库存推送接口（批量增量）
+          - link "taobao.xhotel.rate.relationshipwithrp.get 根据gid查询卖家下所有的rpId" [ref=e540] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e541]:
+              - text: taobao.xhotel.rate.relationshipwithrp.get
+              - generic [ref=e542]: 根据gid查询卖家下所有的rpId
+          - link "taobao.xhotel.rate.relationshipwithroom.get 查询rpId" [ref=e544] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e545]:
+              - text: taobao.xhotel.rate.relationshipwithroom.get
+              - generic [ref=e546]: 查询rpId
+          - link "taobao.xhotel.increment.info.get 酒店状态增量查询接口" [ref=e548] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e549]:
+              - text: taobao.xhotel.increment.info.get
+              - generic [ref=e550]: 酒店状态增量查询接口
+          - link "taobao.xhotel.multiplerate.get 复杂房价查询接口" [ref=e552] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e553]:
+              - text: taobao.xhotel.multiplerate.get
+              - generic [ref=e554]: 复杂房价查询接口
+          - link "taobao.xhotel.multiplerates.update 复杂价格推送接口（批量全量）" [ref=e556] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e557]:
+              - text: taobao.xhotel.multiplerates.update
+              - generic [ref=e558]: 复杂价格推送接口（批量全量）
+          - link "taobao.xhotel.multiplerate.update 复杂价格推送接口（全量更新）" [ref=e560] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e561]:
+              - text: taobao.xhotel.multiplerate.update
+              - generic [ref=e562]: 复杂价格推送接口（全量更新）
+          - link "taobao.xhotel.multiplerates.increment 复杂房价推送接口（批量增量）" [ref=e564] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e565]:
+              - text: taobao.xhotel.multiplerates.increment
+              - generic [ref=e566]: 复杂房价推送接口（批量增量）
+          - link "taobao.xhotel.baseinfo.get 酒店基础信息查询接口" [ref=e568] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e569]:
+              - text: taobao.xhotel.baseinfo.get
+              - generic [ref=e570]: 酒店基础信息查询接口
+          - link "taobao.xhotel.rateplan.delete 价格计划rateplan删除" [ref=e572] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e573]:
+              - text: taobao.xhotel.rateplan.delete
+              - generic [ref=e574]: 价格计划rateplan删除
+          - link "taobao.xhotel.rate.delete rate删除接口" [ref=e576] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e577]:
+              - text: taobao.xhotel.rate.delete
+              - generic [ref=e578]: rate删除接口
+          - link "taobao.xhotel.multiplerate.delete 复杂价格删除" [ref=e580] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e581]:
+              - text: taobao.xhotel.multiplerate.delete
+              - generic [ref=e582]: 复杂价格删除
+          - link "taobao.xhotel.baseinfo.room.get 酒店房型与房价查询" [ref=e584] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e585]:
+              - text: taobao.xhotel.baseinfo.room.get
+              - generic [ref=e586]: 酒店房型与房价查询
+          - link "taobao.xhotel.city.coordinates.batch.upload 上传信息计算飞猪国际城市" [ref=e588] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e589]:
+              - text: taobao.xhotel.city.coordinates.batch.upload
+              - generic [ref=e590]: 上传信息计算飞猪国际城市
+          - link "taobao.xhotel.city.coordinates.batch.download 下载飞猪国际城市结果" [ref=e592] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e593]:
+              - text: taobao.xhotel.city.coordinates.batch.download
+              - generic [ref=e594]: 下载飞猪国际城市结果
+          - link "taobao.xhotel.entity.config 飞猪商品各实体通用配置" [ref=e596] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e597]:
+              - text: taobao.xhotel.entity.config
+              - generic [ref=e598]: 飞猪商品各实体通用配置
+          - link "taobao.xhotel.house.add 非标准民宿房源添加" [ref=e600] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e601]:
+              - text: taobao.xhotel.house.add
+              - generic [ref=e602]: 非标准民宿房源添加
+          - link "taobao.xhotel.house.roomtype.add 民宿房型信息添加" [ref=e604] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e605]:
+              - text: taobao.xhotel.house.roomtype.add
+              - generic [ref=e606]: 民宿房型信息添加
+          - link "taobao.xhotel.servicetime.update 飞猪酒店多维度服务时间维护接口" [ref=e608] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e609]:
+              - text: taobao.xhotel.servicetime.update
+              - generic [ref=e610]: 飞猪酒店多维度服务时间维护接口
+          - link "taobao.xhotel.servicetime.get 查询实体对应的服务时间数据" [ref=e612] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e613]:
+              - text: taobao.xhotel.servicetime.get
+              - generic [ref=e614]: 查询实体对应的服务时间数据
+          - link "taobao.xhotel.delete 删除酒店接口" [ref=e616] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e617]:
+              - text: taobao.xhotel.delete
+              - generic [ref=e618]: 删除酒店接口
+          - link "taobao.xhotel.roomtype.delete.public 商家删除房型数据接口" [ref=e620] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e621]:
+              - text: taobao.xhotel.roomtype.delete.public
+              - generic [ref=e622]: 商家删除房型数据接口
+          - link "taobao.xhotel.quota.update 库存更新接口" [ref=e624] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e625]:
+              - text: taobao.xhotel.quota.update
+              - generic [ref=e626]: 库存更新接口
+          - link "taobao.xhotel.rates.lite.incr.update 酒店价格库存轻量级增量接口" [ref=e628] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e629]:
+              - text: taobao.xhotel.rates.lite.incr.update
+              - generic [ref=e630]: 酒店价格库存轻量级增量接口
+          - link "taobao.xhotel.item.selection.seller.stat.summary 商家数据-选品整体概况" [ref=e632] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e633]:
+              - text: taobao.xhotel.item.selection.seller.stat.summary
+              - generic [ref=e634]: 商家数据-选品整体概况
+          - link "taobao.xhotel.item.selection.seller.stat.exposure 选品曝光趋势" [ref=e636] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e637]:
+              - text: taobao.xhotel.item.selection.seller.stat.exposure
+              - generic [ref=e638]: 选品曝光趋势
+          - link "taobao.xhotel.item.selection.seller.stat.hotshid 供应链选品热销标准酒店覆盖情况" [ref=e640] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e641]:
+              - text: taobao.xhotel.item.selection.seller.stat.hotshid
+              - generic [ref=e642]: 供应链选品热销标准酒店覆盖情况
+          - link "taobao.xhotel.roomtype.conflict.data 商家床型冲突数据接口" [ref=e644] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e645]:
+              - text: taobao.xhotel.roomtype.conflict.data
+              - generic [ref=e646]: 商家床型冲突数据接口
+          - link "taobao.xhotel.get.entity.by.tag 根据标签查询实体" [ref=e648] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e649]:
+              - text: taobao.xhotel.get.entity.by.tag
+              - generic [ref=e650]: 根据标签查询实体
+          - link "taobao.xhotel.bnbroomtype.add 民宿新增房源" [ref=e652] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e653]:
+              - text: taobao.xhotel.bnbroomtype.add
+              - generic [ref=e654]: 民宿新增房源
+          - link "taobao.xhotel.bnbhouse.add 民宿门店信息添加" [ref=e656] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e657]:
+              - text: taobao.xhotel.bnbhouse.add
+              - generic [ref=e658]: 民宿门店信息添加
+          - link "taobao.xhotel.bnbowner.add 民宿房东信息添加" [ref=e660] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e661]:
+              - text: taobao.xhotel.bnbowner.add
+              - generic [ref=e662]: 民宿房东信息添加
+          - link "taobao.xhotel.bnbowner.delete 民宿房东删除接口" [ref=e664] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e665]:
+              - text: taobao.xhotel.bnbowner.delete
+              - generic [ref=e666]: 民宿房东删除接口
+          - link "taobao.xhotel.bnbhouse.delete 民宿门店删除接口" [ref=e668] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e669]:
+              - text: taobao.xhotel.bnbhouse.delete
+              - generic [ref=e670]: 民宿门店删除接口
+          - link "taobao.xhotel.bnbroomtype.delete 民宿房源删除接口" [ref=e672] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e673]:
+              - text: taobao.xhotel.bnbroomtype.delete
+              - generic [ref=e674]: 民宿房源删除接口
+          - link "taobao.xhotel.bnbpromo.delete 民宿卖家活动删除" [ref=e676] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e677]:
+              - text: taobao.xhotel.bnbpromo.delete
+              - generic [ref=e678]: 民宿卖家活动删除
+          - link "taobao.xhotel.bnbpromo.get 民宿查询营销活动" [ref=e680] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e681]:
+              - text: taobao.xhotel.bnbpromo.get
+              - generic [ref=e682]: 民宿查询营销活动
+          - link "taobao.xhotel.bnbpromo.add 自促活动申请接口" [ref=e684] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e685]:
+              - text: taobao.xhotel.bnbpromo.add
+              - generic [ref=e686]: 自促活动申请接口
+          - link "taobao.xhotel.bnbpromo.bind 自促活动绑定接口" [ref=e688] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e689]:
+              - text: taobao.xhotel.bnbpromo.bind
+              - generic [ref=e690]: 自促活动绑定接口
+          - link "taobao.xhotel.bnbpromo.unbind 自促活动解绑接口" [ref=e692] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e693]:
+              - text: taobao.xhotel.bnbpromo.unbind
+              - generic [ref=e694]: 自促活动解绑接口
+          - link "taobao.xhotel.bnbreview.add 对外开放评论接口" [ref=e696] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e697]:
+              - text: taobao.xhotel.bnbreview.add
+              - generic [ref=e698]: 对外开放评论接口
+          - link "taobao.xhotel.bnbcommon.add 通用调用top接口" [ref=e700] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e701]:
+              - text: taobao.xhotel.bnbcommon.add
+              - generic [ref=e702]: 通用调用top接口
+          - link "taobao.xhotel.xitem.delete 删除 x 元素" [ref=e704] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e705]:
+              - text: taobao.xhotel.xitem.delete
+              - generic [ref=e706]: 删除 x 元素
+          - link "taobao.xhotel.xitem.query 查询 x 元素" [ref=e708] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e709]:
+              - text: taobao.xhotel.xitem.query
+              - generic [ref=e710]: 查询 x 元素
+          - link "taobao.xhotel.status.update 酒店状态更新" [ref=e712] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e713]:
+              - text: taobao.xhotel.status.update
+              - generic [ref=e714]: 酒店状态更新
+          - link "taobao.roomtype.status.update top房型状态修改" [ref=e716] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e717]:
+              - text: taobao.roomtype.status.update
+              - generic [ref=e718]: top房型状态修改
+          - link "taobao.xhotel.distribution.feed.hotel.query 飞猪酒店分销-静态信息-酒店-查询" [ref=e720] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e721]:
+              - text: taobao.xhotel.distribution.feed.hotel.query
+              - generic [ref=e722]: 飞猪酒店分销-静态信息-酒店-查询
+          - link "taobao.xhotel.distribution.ari.availability 飞猪酒店分销-ARI-availability" [ref=e724] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e725]:
+              - text: taobao.xhotel.distribution.ari.availability
+              - generic [ref=e726]: 飞猪酒店分销-ARI-availability
+          - link "taobao.xhotel.bnbreview.reply 对外开放评论接口" [ref=e728] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e729]:
+              - text: taobao.xhotel.bnbreview.reply
+              - generic [ref=e730]: 对外开放评论接口
+          - link "taobao.xhotel.bnbstatusxbot.send 民宿状态外呼确认接口" [ref=e732] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e733]:
+              - text: taobao.xhotel.bnbstatusxbot.send
+              - generic [ref=e734]: 民宿状态外呼确认接口
+          - link "taobao.xhotel.bnbhotel.data.sync 进酒自动化同步房源打标" [ref=e736] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e737]:
+              - text: taobao.xhotel.bnbhotel.data.sync
+              - generic [ref=e738]: 进酒自动化同步房源打标
+          - link "taobao.xhotel.bnb.agg.sync 进酒聚合房源同步多房源关联关系" [ref=e740] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e741]:
+              - text: taobao.xhotel.bnb.agg.sync
+              - generic [ref=e742]: 进酒聚合房源同步多房源关联关系
+          - link "taobao.xhotel.agg.increment.rp.sync 民宿聚合房源增量rp同步" [ref=e744] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e745]:
+              - text: taobao.xhotel.agg.increment.rp.sync
+              - generic [ref=e746]: 民宿聚合房源增量rp同步
+          - link "taobao.xhotel.bnbllm.query 民宿大模型通用调用" [ref=e748] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e749]:
+              - text: taobao.xhotel.bnbllm.query
+              - generic [ref=e750]: 民宿大模型通用调用
+          - link "taobao.xhotel.bnbllm.poll.query 民宿大模型轮询结果" [ref=e752] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e753]:
+              - text: taobao.xhotel.bnbllm.poll.query
+              - generic [ref=e754]: 民宿大模型轮询结果
+          - link "taobao.xhotel.bnbpoi.get 民宿POI查询接口" [ref=e756] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e757]:
+              - text: taobao.xhotel.bnbpoi.get
+              - generic [ref=e758]: 民宿POI查询接口
+          - link "taobao.xhotel.bnbxbot.record 民宿xbot录音链接获取接口" [ref=e760] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e761]:
+              - text: taobao.xhotel.bnbxbot.record
+              - generic [ref=e762]: 民宿xbot录音链接获取接口
+          - link "taobao.xhotel.bnbprice.get 民宿价格查询接口" [ref=e764] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e765]:
+              - text: taobao.xhotel.bnbprice.get
+              - generic [ref=e766]: 民宿价格查询接口
+          - link "taobao.xhotel.bnb.promo.get 民宿房源报名营销活动查询" [ref=e768] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e769]:
+              - text: taobao.xhotel.bnb.promo.get
+              - generic [ref=e770]: 民宿房源报名营销活动查询
+          - link "taobao.xhotel.bnb.ai.customer.message 智能客服接收消息接口" [ref=e772] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e773]:
+              - text: taobao.xhotel.bnb.ai.customer.message
+              - generic [ref=e774]: 智能客服接收消息接口
+          - link "taobao.xhotel.bnbxbot.callback ai智能房东外呼回调" [ref=e776] [cursor=pointer]:
+            - /url: javascript:;
+            - generic [ref=e777]:
+              - text: taobao.xhotel.bnbxbot.callback
+              - generic [ref=e778]: ai智能房东外呼回调
+      - generic [ref=e781]:
+        - generic [ref=e782]:
+          - generic [ref=e783]:
+            - text: taobao.xhotel.add( 酒店新增接口（ID重复自动更新） )
+            - generic [ref=e784]:
+              - link "￥开放平台免费API" [ref=e786] [cursor=pointer]:
+                - /url: https://open.taobao.com/v2/doc#/abilityToOpen?docType=1&docId=104559&treeId=775
+              - link "必须用户授权" [ref=e788] [cursor=pointer]:
+                - /url: https://open.taobao.com/v2/doc#/abilityToOpen?docId=121222&docType=1
+            - generic [ref=e789]: 添加酒店或更新酒店
+          - group "评分选项" [ref=e791]:
+            - generic [ref=e792] [cursor=pointer]:
+              - generic [ref=e793]:
+                - generic [ref=e795]: 
+                - generic [ref=e797]: 
+                - generic [ref=e799]: 
+                - generic [ref=e801]: 
+                - generic [ref=e803]: 
+              - generic [ref=e804]:
+                - generic [ref=e806]: 
+                - generic [ref=e808]: 
+                - generic [ref=e810]: 
+                - generic [ref=e812]: 
+                - generic [ref=e814]: 
+        - generic [ref=e815]:
+          - heading "公共参数" [level=2] [ref=e817]
+          - generic [ref=e819]:
+            - generic [ref=e820]: "请求地址:"
+            - table [ref=e822]:
+              - rowgroup [ref=e827]:
+                - row "环境 HTTP地址 HTTPS地址" [ref=e828]:
+                  - gridcell "环境" [ref=e829]:
+                    - generic [ref=e830]: 环境
+                  - gridcell "HTTP地址" [ref=e831]:
+                    - generic [ref=e832]: HTTP地址
+                  - gridcell "HTTPS地址" [ref=e833]:
+                    - generic [ref=e834]: HTTPS地址
+              - rowgroup [ref=e835]:
+                - row "正式环境 http://gw.api.taobao.com/router/rest https://eco.taobao.com/router/rest" [ref=e836]:
+                  - gridcell "正式环境" [ref=e837]:
+                    - generic [ref=e838]: 正式环境
+                  - gridcell "http://gw.api.taobao.com/router/rest" [ref=e839]:
+                    - generic [ref=e840]: http://gw.api.taobao.com/router/rest
+                  - gridcell "https://eco.taobao.com/router/rest" [ref=e841]:
+                    - generic [ref=e842]: https://eco.taobao.com/router/rest
+            - generic [ref=e843]: "公共请求参数:"
+            - table [ref=e845]:
+              - rowgroup [ref=e851]:
+                - row "名称 类型 必须 描述" [ref=e852]:
+                  - gridcell "名称" [ref=e853]:
+                    - generic [ref=e854]: 名称
+                  - gridcell "类型" [ref=e855]:
+                    - generic [ref=e856]: 类型
+                  - gridcell "必须" [ref=e857]:
+                    - generic [ref=e858]: 必须
+                  - gridcell "描述" [ref=e859]:
+                    - generic [ref=e860]: 描述
+              - rowgroup [ref=e861]:
+                - row "method String 是 API接口名称，例如:taobao.xhotel.add" [ref=e862]:
+                  - gridcell "method" [ref=e863]:
+                    - generic [ref=e864]: method
+                  - gridcell "String" [ref=e865]:
+                    - generic [ref=e866]: String
+                  - gridcell "是" [ref=e867]:
+                    - generic [ref=e868]: 是
+                  - gridcell "API接口名称，例如:taobao.xhotel.add" [ref=e869]:
+                    - generic [ref=e870]: API接口名称，例如:taobao.xhotel.add
+                - row "app_key String 是 TOP分配给应用的AppKey，例如：12345678" [ref=e871]:
+                  - gridcell "app_key" [ref=e872]:
+                    - generic [ref=e873]: app_key
+                  - gridcell "String" [ref=e874]:
+                    - generic [ref=e875]: String
+                  - gridcell "是" [ref=e876]:
+                    - generic [ref=e877]: 是
+                  - gridcell "TOP分配给应用的AppKey，例如：12345678" [ref=e878]:
+                    - generic [ref=e879]: TOP分配给应用的AppKey，例如：12345678
+                - row "session String 否 用户登录授权成功后，TOP颁发给应用的授权信息，详细介绍请点击这里。当此API的标签上注明：“需要授权”，则此参数必传；“不需要授权”，则此参数不需要传；“可选授权”，则此参数为可选" [ref=e880]:
+                  - gridcell "session" [ref=e881]:
+                    - generic [ref=e882]: session
+                  - gridcell "String" [ref=e883]:
+                    - generic [ref=e884]: String
+                  - gridcell "否" [ref=e885]:
+                    - generic [ref=e886]: 否
+                  - gridcell "用户登录授权成功后，TOP颁发给应用的授权信息，详细介绍请点击这里。当此API的标签上注明：“需要授权”，则此参数必传；“不需要授权”，则此参数不需要传；“可选授权”，则此参数为可选" [ref=e887]:
+                    - generic [ref=e889]:
+                      - text: 用户登录授权成功后，TOP颁发给应用的授权信息，详细介绍请
+                      - link "点击这里" [ref=e890] [cursor=pointer]:
+                        - /url: http://open.taobao.com/docs/doc.htm?docType=1&articleId=102635&treeId=1
+                      - text: 。当此API的标签上注明：“需要授权”，则此参数必传；“不需要授权”，则此参数不需要传；“可选授权”，则此参数为可选
+                - row "timestamp String 是 时间戳，格式为yyyy-MM-dd HH:mm:ss，时区为GMT+8，例如：2015-01-01 12:00:00。淘宝API服务端允许客户端请求最大时间误差为10分钟" [ref=e891]:
+                  - gridcell "timestamp" [ref=e892]:
+                    - generic [ref=e893]: timestamp
+                  - gridcell "String" [ref=e894]:
+                    - generic [ref=e895]: String
+                  - gridcell "是" [ref=e896]:
+                    - generic [ref=e897]: 是
+                  - gridcell "时间戳，格式为yyyy-MM-dd HH:mm:ss，时区为GMT+8，例如：2015-01-01 12:00:00。淘宝API服务端允许客户端请求最大时间误差为10分钟" [ref=e898]:
+                    - generic [ref=e899]: 时间戳，格式为yyyy-MM-dd HH:mm:ss，时区为GMT+8，例如：2015-01-01 12:00:00。淘宝API服务端允许客户端请求最大时间误差为10分钟
+                - row "v String 是 API协议版本，可选值：2.0" [ref=e900]:
+                  - gridcell "v" [ref=e901]:
+                    - generic [ref=e902]: v
+                  - gridcell "String" [ref=e903]:
+                    - generic [ref=e904]: String
+                  - gridcell "是" [ref=e905]:
+                    - generic [ref=e906]: 是
+                  - gridcell "API协议版本，可选值：2.0" [ref=e907]:
+                    - generic [ref=e908]: API协议版本，可选值：2.0
+                - row "sign_method String 是 签名的摘要算法，可选值为：hmac，md5，hmac-sha256。" [ref=e909]:
+                  - gridcell "sign_method" [ref=e910]:
+                    - generic [ref=e911]: sign_method
+                  - gridcell "String" [ref=e912]:
+                    - generic [ref=e913]: String
+                  - gridcell "是" [ref=e914]:
+                    - generic [ref=e915]: 是
+                  - gridcell "签名的摘要算法，可选值为：hmac，md5，hmac-sha256。" [ref=e916]:
+                    - generic [ref=e917]: 签名的摘要算法，可选值为：hmac，md5，hmac-sha256。
+                - row "sign String 是 API输入参数签名结果，签名算法介绍请点击这里" [ref=e918]:
+                  - gridcell "sign" [ref=e919]:
+                    - generic [ref=e920]: sign
+                  - gridcell "String" [ref=e921]:
+                    - generic [ref=e922]: String
+                  - gridcell "是" [ref=e923]:
+                    - generic [ref=e924]: 是
+                  - gridcell "API输入参数签名结果，签名算法介绍请点击这里" [ref=e925]:
+                    - generic [ref=e927]:
+                      - text: API输入参数签名结果，签名算法介绍请
+                      - link "点击这里" [ref=e928] [cursor=pointer]:
+                        - /url: http://open.taobao.com/docs/doc.htm?articleId=101617&docType=1&treeId=1
+                - row "format String 否 响应格式。默认为xml格式，可选值：xml，json。" [ref=e929]:
+                  - gridcell "format" [ref=e930]:
+                    - generic [ref=e931]: format
+                  - gridcell "String" [ref=e932]:
+                    - generic [ref=e933]: String
+                  - gridcell "否" [ref=e934]:
+                    - generic [ref=e935]: 否
+                  - gridcell "响应格式。默认为xml格式，可选值：xml，json。" [ref=e936]:
+                    - generic [ref=e937]: 响应格式。默认为xml格式，可选值：xml，json。
+                - row "simplify Boolean 否 是否采用精简JSON返回格式，仅当format=json时有效，默认值为：false" [ref=e938]:
+                  - gridcell "simplify" [ref=e939]:
+                    - generic [ref=e940]: simplify
+                  - gridcell "Boolean" [ref=e941]:
+                    - generic [ref=e942]: Boolean
+                  - gridcell "否" [ref=e943]:
+                    - generic [ref=e944]: 否
+                  - gridcell "是否采用精简JSON返回格式，仅当format=json时有效，默认值为：false" [ref=e945]:
+                    - generic [ref=e946]: 是否采用精简JSON返回格式，仅当format=json时有效，默认值为：false
+            - generic [ref=e947]: "公共响应参数:"
+            - table [ref=e949]:
+              - rowgroup [ref=e954]:
+                - row "名称 类型 描述" [ref=e955]:
+                  - gridcell "名称" [ref=e956]:
+                    - generic [ref=e957]: 名称
+                  - gridcell "类型" [ref=e958]:
+                    - generic [ref=e959]: 类型
+                  - gridcell "描述" [ref=e960]:
+                    - generic [ref=e961]: 描述
+              - rowgroup [ref=e962]:
+                - row "request_id String 平台颁发的每次请求访问的唯一标识" [ref=e963]:
+                  - gridcell "request_id" [ref=e964]:
+                    - generic [ref=e965]: request_id
+                  - gridcell "String" [ref=e966]:
+                    - generic [ref=e967]: String
+                  - gridcell "平台颁发的每次请求访问的唯一标识" [ref=e968]:
+                    - generic [ref=e969]: 平台颁发的每次请求访问的唯一标识
+                - row "error_response String 请求访问失败时返回的根节点" [ref=e970]:
+                  - gridcell "error_response" [ref=e971]:
+                    - generic [ref=e972]: error_response
+                  - gridcell "String" [ref=e973]:
+                    - generic [ref=e974]: String
+                  - gridcell "请求访问失败时返回的根节点" [ref=e975]:
+                    - generic [ref=e976]: 请求访问失败时返回的根节点
+                - row "code String 请求失败返回的错误码" [ref=e977]:
+                  - gridcell "code" [ref=e978]:
+                    - generic [ref=e979]: code
+                  - gridcell "String" [ref=e980]:
+                    - generic [ref=e981]: String
+                  - gridcell "请求失败返回的错误码" [ref=e982]:
+                    - generic [ref=e983]: 请求失败返回的错误码
+                - row "msg String 请求失败返回的错误信息" [ref=e984]:
+                  - gridcell "msg" [ref=e985]:
+                    - generic [ref=e986]: msg
+                  - gridcell "String" [ref=e987]:
+                    - generic [ref=e988]: String
+                  - gridcell "请求失败返回的错误信息" [ref=e989]:
+                    - generic [ref=e990]: 请求失败返回的错误信息
+                - row "sub_code String 请求失败返回的子错误码" [ref=e991]:
+                  - gridcell "sub_code" [ref=e992]:
+                    - generic [ref=e993]: sub_code
+                  - gridcell "String" [ref=e994]:
+                    - generic [ref=e995]: String
+                  - gridcell "请求失败返回的子错误码" [ref=e996]:
+                    - generic [ref=e997]: 请求失败返回的子错误码
+                - row "sub_msg String 请求失败返回的子错误信息" [ref=e998]:
+                  - gridcell "sub_msg" [ref=e999]:
+                    - generic [ref=e1000]: sub_msg
+                  - gridcell "String" [ref=e1001]:
+                    - generic [ref=e1002]: String
+                  - gridcell "请求失败返回的子错误信息" [ref=e1003]:
+                    - generic [ref=e1004]: 请求失败返回的子错误信息
+                - row "***_response String 请求成功返回的根节点，'***' 为API名称的下划线模式" [ref=e1005]:
+                  - gridcell "***_response" [ref=e1006]:
+                    - generic [ref=e1007]: "***_response"
+                  - gridcell "String" [ref=e1008]:
+                    - generic [ref=e1009]: String
+                  - gridcell "请求成功返回的根节点，'***' 为API名称的下划线模式" [ref=e1010]:
+                    - generic [ref=e1011]: 请求成功返回的根节点，'***' 为API名称的下划线模式
+        - generic [ref=e1012]:
+          - heading "请求参数" [level=2] [ref=e1014]
+          - generic [ref=e1017]:
+            - generic [ref=e1019] [cursor=pointer]:
+              - generic [ref=e1020]: 名称
+              - generic [ref=e1021]: 类型
+              - generic [ref=e1022]: 必须
+              - generic [ref=e1023]: 示例值
+              - generic [ref=e1024]: 描述
+            - generic [ref=e1025]:
+              - generic [ref=e1026] [cursor=pointer]:
+                - generic [ref=e1028]: outer_id
+                - generic [ref=e1030]: String
+                - generic [ref=e1031]: "true"
+                - generic [ref=e1032]: "12312313"
+                - generic [ref=e1033]: 外部酒店ID, 这是卖家自己系统中的ID
+              - generic [ref=e1034] [cursor=pointer]:
+                - generic [ref=e1036]: name
+                - generic [ref=e1038]: String
+                - generic [ref=e1039]: "true"
+                - generic [ref=e1040]: 北京饭店
+                - generic [ref=e1041]: 酒店名称,国内酒店请传中文名称
+              - generic [ref=e1042] [cursor=pointer]:
+                - generic [ref=e1044]: used_name
+                - generic [ref=e1046]: String
+                - generic [ref=e1047]: "false"
+                - generic [ref=e1048]: 北京饭店
+                - generic [ref=e1049]: 酒店曾用名
+              - generic [ref=e1050] [cursor=pointer]:
+                - generic [ref=e1052]: domestic
+                - generic [ref=e1054]: Number
+                - generic [ref=e1055]: "false"
+                - generic [ref=e1056]: "0"
+                - generic [ref=e1057]: 是否国内酒店。0:国内;1:国外。默认是国内
+              - generic [ref=e1058] [cursor=pointer]:
+                - generic [ref=e1060]: country
+                - generic [ref=e1062]: String
+                - generic [ref=e1063]: "false"
+                - generic [ref=e1064]: China
+                - generic [ref=e1065]: domestic为0时，固定China； domestic为1时，必须传定义的海外国家编码值。参见：http://hotel.alitrip.com/area.htm
+              - generic [ref=e1066] [cursor=pointer]:
+                - generic [ref=e1068]: province
+                - generic [ref=e1070]: Number
+                - generic [ref=e1071]: "false"
+                - generic [ref=e1072]: "110000"
+                - generic [ref=e1073]: 省份编码。选填，不填入的时候已city字段为准.参见：http://hotel.alitrip.com/area.htm，domestic为false时默认为0
+              - generic [ref=e1074] [cursor=pointer]:
+                - generic [ref=e1076]: city
+                - generic [ref=e1078]: Number
+                - generic [ref=e1079]: "true"
+                - generic [ref=e1080]: "110100"
+                - generic [ref=e1081]: 城市编码。参见：http://hotel.alitrip.com/area.htm，domestic为false时，输入对应国家的海外城市编码，可调用海外城市查询接口获取；（更新酒店时为可选）
+              - generic [ref=e1082] [cursor=pointer]:
+                - generic [ref=e1084]: district
+                - generic [ref=e1086]: Number
+                - generic [ref=e1087]: "false"
+                - generic [ref=e1088]: "110101"
+                - generic [ref=e1089]: 区域（县级市）编码。参见：http://hotel.alitrip.com/area.htm
+              - generic [ref=e1090] [cursor=pointer]:
+                - generic [ref=e1092]: business
+                - generic [ref=e1094]: String
+                - generic [ref=e1095]: "false"
+                - generic [ref=e1096]: aaa
+                - generic [ref=e1097]: 商业区（圈）长度不超过20字
+              - generic [ref=e1098] [cursor=pointer]:
+                - generic [ref=e1100]: address
+                - generic [ref=e1102]: String
+                - generic [ref=e1103]: "true"
+                - generic [ref=e1104]: 西直门
+                - generic [ref=e1105]: 酒店地址。长度不能超过255。不填入会导致不能自动匹配。
+              - generic [ref=e1106] [cursor=pointer]:
+                - generic [ref=e1108]: longitude
+                - generic [ref=e1110]: String
+                - generic [ref=e1111]: "false"
+                - generic [ref=e1112]: "111.13"
+                - generic [ref=e1113]: 经度
+              - generic [ref=e1114] [cursor=pointer]:
+                - generic [ref=e1116]: latitude
+                - generic [ref=e1118]: String
+                - generic [ref=e1119]: "false"
+                - generic [ref=e1120]: "111.1222"
+                - generic [ref=e1121]: 纬度
+              - generic [ref=e1122] [cursor=pointer]:
+                - generic [ref=e1124]: position_type
+                - generic [ref=e1126]: String
+                - generic [ref=e1127]: "false"
+                - generic [ref=e1128]: G
+                - generic [ref=e1129]: 坐标类型，现在支持：G – GoogleB – 百度A – 高德M – MapbarL – 灵图
+              - generic [ref=e1130] [cursor=pointer]:
+                - generic [ref=e1132]: tel
+                - generic [ref=e1134]: String
+                - generic [ref=e1135]: "true"
+                - generic [ref=e1136]: 0086#010#12345678
+                - generic [ref=e1137]: 酒店电话。格式：国家代码（最长6位）#区号（最长4位）#电话（最长20位）。国家代码提示：中国大陆0086、香港00852、澳门00853、台湾00886
+              - generic [ref=e1138] [cursor=pointer]:
+                - generic [ref=e1140]: extend
+                - generic [ref=e1142]: String
+                - generic [ref=e1143]: "false"
+                - generic [ref=e1144]: "{\"keyword\":”上地”}"
+                - generic [ref=e1145]: 扩展信息的JSON。注：此字段的值需要ISV在接入前与淘宝沟通，且确认能解析
+              - generic [ref=e1146] [cursor=pointer]:
+                - generic [ref=e1148]: shid
+                - generic [ref=e1150]: Number
+                - generic [ref=e1151]: "false"
+                - generic [ref=e1152]: "123123"
+                - generic [ref=e1153]: 该字段只有确定的时候，才允许填入。用于标示和淘宝酒店的匹配关系。目前尚未启动该字段。
+              - generic [ref=e1154] [cursor=pointer]:
+                - generic [ref=e1156]: vendor
+                - generic [ref=e1158]: String
+                - generic [ref=e1159]: "false"
+                - generic [ref=e1160]: taobao
+                - generic [ref=e1161]: 对接系统商名称：可为空不要乱填，需要申请后使用
+              - generic [ref=e1162] [cursor=pointer]:
+                - generic [ref=e1164]: star
+                - generic [ref=e1166]: String
+                - generic [ref=e1167]: "false"
+                - generic [ref=e1168]: "1"
+                - generic [ref=e1169]: 酒店档次，星级。取值范围为1,1.5,2,2.5,3,3.5,4,4.5,5
+              - generic [ref=e1170] [cursor=pointer]:
+                - generic [ref=e1172]: opening_time
+                - generic [ref=e1174]: String
+                - generic [ref=e1175]: "false"
+                - generic [ref=e1176]: 2015-01-01
+                - generic [ref=e1177]: 开业时间，格式为2015-01-01
+              - generic [ref=e1178] [cursor=pointer]:
+                - generic [ref=e1180]: decorate_time
+                - generic [ref=e1182]: String
+                - generic [ref=e1183]: "false"
+                - generic [ref=e1184]: 2015-01-01
+                - generic [ref=e1185]: 装修时间，格式为2015-01-01装修时间
+              - generic [ref=e1186] [cursor=pointer]:
+                - generic [ref=e1188]: floors
+                - generic [ref=e1190]: String
+                - generic [ref=e1191]: "false"
+                - generic [ref=e1192]: 4-6层
+                - generic [ref=e1193]: 楼层信息。
+              - generic [ref=e1194] [cursor=pointer]:
+                - generic [ref=e1196]: rooms
+                - generic [ref=e1198]: Number
+                - generic [ref=e1199]: "false"
+                - generic [ref=e1200]: "10"
+                - generic [ref=e1201]: 房间数 0~9999之内的数字
+              - generic [ref=e1202] [cursor=pointer]:
+                - generic [ref=e1204]: description
+                - generic [ref=e1206]: String
+                - generic [ref=e1207]: "false"
+                - generic [ref=e1208]: 酒店描述
+                - generic [ref=e1209]: 酒店描述
+              - generic [ref=e1210] [cursor=pointer]:
+                - generic [ref=e1212]: pics
+                - generic [ref=e1214]: String
+                - generic [ref=e1215]: "false"
+                - generic [ref=e1216]: "[{\"url\":\"http://123.jpg\",\"ismain\":\"false\",\"type\":\"大堂\",\"attribute\":\"普通图\"},{\"url\":\"http://456.jpg\",\"ismain\":\"true\",\"type\":\"公共区域\",\"attribute\":\"全景图\"},{\"url\":\"http://789.jpg\",\"ismain\":\"false\",\"type\":\"大堂\",\"attribute\":\"普通图\"}]"
+                - generic [ref=e1217]: "酒店图片只支持远程图片，格式如下：[{\"url\":\"http://123.jpg\",\"ismain\":\"false\",\"type\":\"大堂\",\"attribute\":\"普通图\"},{\"url\":\"http://456.jpg\",\"ismain\":\"true\",\"type\":\"公共区域\",\"attribute\":\"全景图\"},{\"url\":\"http://789.jpg\",\"ismain\":\"false\",\"type\":\"大堂\",\"attribute\":\"普通图\"}] 其中url是远程图片的访问地址（URL地址必须是合法的，否则会报错），main是是否为主图（主图只能有一个，如果有多个或者没有，则会报错）,attribute表示图片属性，取值范围只能是：[普通图, 平面图, 全景图] ,type表示图片类型，取值范围只能是：[周边, 外观, 商务中心, 其他,餐厅, 浴室, 客房, 公共区域, 娱乐设施, 大堂]，图片数量最多是能是10张。"
+              - generic [ref=e1218] [cursor=pointer]:
+                - generic [ref=e1220]: brand
+                - generic [ref=e1222]: String
+                - generic [ref=e1223]: "false"
+                - generic [ref=e1224]: "1"
+                - generic [ref=e1225]: 酒店品牌。取值为数字。枚举见链接：https://open.alitrip.com/docs/doc.htm?spm=0.0.0.0.S16vXH&docType=1&articleId=120180
+              - generic [ref=e1226] [cursor=pointer]:
+                - generic [ref=e1228]: postal_code
+                - generic [ref=e1230]: String
+                - generic [ref=e1231]: "false"
+                - generic [ref=e1232]: 邮编
+                - generic [ref=e1233]: 邮政编码。
+              - generic [ref=e1234] [cursor=pointer]:
+                - generic [ref=e1236]: booking_notice
+                - generic [ref=e1238]: String
+                - generic [ref=e1239]: "false"
+                - generic [ref=e1240]: "{\"hotelInMountaintop\":1,\"needBoat\":1,\"hotelInScenicSpot\":1,\"extraBed\":\"加床收费xx元\",\"extraCharge\":\"\",\"arrivalTime\":\"入住日18点前\",\"extend\":\"\"}"
+                - generic [ref=e1241]: 预订须知。json字段描述：hotelInMountaintop 酒店位于山顶 1在山顶、0不在；needBoat 酒店需要坐船前往 1需要、0不需要；酒店位于景区内 1在景区、0不在；extraBed 加床收费；extraCharge 额外收费；arrivalTime 到店时间；extend 其他补充项
+              - generic [ref=e1242] [cursor=pointer]:
+                - generic [ref=e1244]: credit_card_types
+                - generic [ref=e1246]: String
+                - generic [ref=e1247]: "false"
+                - generic [ref=e1248]: 1,2,3
+                - generic [ref=e1249]: 逗号分隔的字符串 1visa；2万事达卡；3美国运通卡；4发现卡；5大来卡；6JCB卡；7银联卡
+              - generic [ref=e1250] [cursor=pointer]:
+                - generic [ref=e1252]: orbit_track
+                - generic [ref=e1254]: String
+                - generic [ref=e1255]: "false"
+                - generic [ref=e1256]: "{ \"orbitTrack\":[ { \"platform\":\"飞猪\", \"ways\":\"直连\" }, { \"platform\":\"去哪儿\", \"ways\":\"直连\" } { \"platform\":\"如家\", \"ways\":\"电话\" }, { \"platform\":\"如家西湖店\", \"ways\":\"人工\" } ] }"
+                - generic [ref=e1257]: 扩展信息的JSON。 orbitTrack 业务字段是指从飞猪到酒店说经过平台名以及方式的一个数组，按顺序，从飞猪，再经过若干平台，最后到酒店， platform是指定当前平台名，ways 是指通过哪种方式到该平台 其中，飞猪到下一个平台里, ways 字段只能是【直连】、【人工】两个方式之一； 从最后一个平台到酒店的ways字段只能是【电话】、【传真】、【人工】、【系统】之一； 第一个 飞猪平台 和 最后具体酒店是至少得填的
+              - generic [ref=e1258] [cursor=pointer]:
+                - generic [ref=e1260]: name_e
+                - generic [ref=e1262]: String
+                - generic [ref=e1263]: "false"
+                - generic [ref=e1264]: Beijing hotel
+                - generic [ref=e1265]: 卖家酒店英文名称
+              - generic [ref=e1266] [cursor=pointer]:
+                - generic [ref=e1268]: supplier
+                - generic [ref=e1270]: String
+                - generic [ref=e1271]: "false"
+                - generic [ref=e1272]: abc
+                - generic [ref=e1273]: 供应商标识，需要提前开通权限，如果需要对接请联系技术支持，请谨慎使用。注：如商家申请的应用类型为“飞猪-新业务”，此项则必填。
+              - generic [ref=e1274] [cursor=pointer]:
+                - generic [ref=e1276]: settlement_currency
+                - generic [ref=e1278]: String
+                - generic [ref=e1279]: "false"
+                - generic [ref=e1280]: HKD
+                - generic [ref=e1281]: 结算过程中的结算币种符合，如需对接请联系飞猪技术支持，请谨慎使用
+              - generic [ref=e1282] [cursor=pointer]:
+                - generic [ref=e1284]: standard_amuse_facilities
+                - generic [ref=e1286]: String
+                - generic [ref=e1287]: "false"
+                - generic [ref=e1288]: "{\"dataVersion\":\"2.0.0\",\"facilityList\":[{\"75\":true}]}"
+                - generic [ref=e1289]: 标准娱乐设施,参考文档https://open.alitrip.com/docs/doc.htm?docType=1&articleId=108891
+              - generic [ref=e1290] [cursor=pointer]:
+                - generic [ref=e1292]: standard_room_facilities
+                - generic [ref=e1294]: String
+                - generic [ref=e1295]: "false"
+                - generic [ref=e1296]: 废弃
+                - generic [ref=e1297]: 已废弃(房型设施信息请在房型上推送)
+              - generic [ref=e1298] [cursor=pointer]:
+                - generic [ref=e1300]: standard_hotel_service
+                - generic [ref=e1302]: String
+                - generic [ref=e1303]: "false"
+                - generic [ref=e1304]: "{\"dataVersion\":\"2.0.0\",\"facilityList\":[{\"12\":true,\"free\":true}]}"
+                - generic [ref=e1305]: 标准酒店服务,参考文档https://open.alitrip.com/docs/doc.htm?docType=1&articleId=108891
+              - generic [ref=e1306] [cursor=pointer]:
+                - generic [ref=e1308]: standard_hotel_facilities
+                - generic [ref=e1310]: String
+                - generic [ref=e1311]: "false"
+                - generic [ref=e1312]: "{\"dataVersion\":\"2.0.0\",\"facilityList\":[{\"51\":true,\"option\":\"2\"}]}"
+                - generic [ref=e1313]: 标准酒店设施,参考文档https://open.alitrip.com/docs/doc.htm?docType=1&articleId=108891
+              - generic [ref=e1314] [cursor=pointer]:
+                - generic [ref=e1316]: standard_booking_notice
+                - generic [ref=e1318]: String
+                - generic [ref=e1319]: "false"
+                - generic [ref=e1320]: "{\"dataVersion\":\"2.0.0\",\"facilityList\":[{\"500\":true,\"free\":true}]}"
+                - generic [ref=e1321]: 标准预订须知,参考文档https://open.alitrip.com/docs/doc.htm?docType=1&articleId=108891
+              - generic [ref=e1322] [cursor=pointer]:
+                - generic [ref=e1324]: service_type
+                - generic [ref=e1326]: Number
+                - generic [ref=e1327]: "false"
+                - generic [ref=e1328]: "0"
+                - generic [ref=e1329]: 0:可以接待外宾；1:仅内宾
+              - generic [ref=e1330] [cursor=pointer]:
+                - generic [ref=e1332]: hotel_type
+                - generic [ref=e1334]: Number
+                - generic [ref=e1335]: "false"
+                - generic [ref=e1336]: "0"
+                - generic [ref=e1337]: 0:酒店；1:客栈
+              - generic [ref=e1338] [cursor=pointer]:
+                - generic [ref=e1340]: coordinate_system
+                - generic [ref=e1342]: String
+                - generic [ref=e1343]: "false"
+                - generic [ref=e1344]: WGS84
+                - generic [ref=e1345]: 标识坐标系类型。WGS84，表示地球坐标系 ；GCJ02，表示火星坐标系
+              - generic [ref=e1346] [cursor=pointer]:
+                - generic [ref=e1348]: room_facilities
+                - generic [ref=e1350]: String
+                - generic [ref=e1351]: "false"
+                - generic [ref=e1352]: 废弃
+                - generic [ref=e1353]: 废弃
+              - generic [ref=e1354] [cursor=pointer]:
+                - generic [ref=e1356]: service
+                - generic [ref=e1358]: String
+                - generic [ref=e1359]: "false"
+                - generic [ref=e1360]: 废弃
+                - generic [ref=e1361]: 废弃
+              - generic [ref=e1362] [cursor=pointer]:
+                - generic [ref=e1364]: hotel_facilities
+                - generic [ref=e1366]: String
+                - generic [ref=e1367]: "false"
+                - generic [ref=e1368]: 废弃
+                - generic [ref=e1369]: 废弃
+              - generic [ref=e1370] [cursor=pointer]:
+                - generic [ref=e1372]: hotel_policies
+                - generic [ref=e1374]: String
+                - generic [ref=e1375]: "false"
+                - generic [ref=e1376]: 废弃
+                - generic [ref=e1377]: 废弃
+        - generic [ref=e1378]:
+          - heading "响应参数" [level=2] [ref=e1380]
+          - generic [ref=e1383]:
+            - generic [ref=e1385] [cursor=pointer]:
+              - generic [ref=e1386]: 名称
+              - generic [ref=e1387]: 类型
+              - generic [ref=e1388]: 示例值
+              - generic [ref=e1389]: 描述
+            - generic [ref=e1390]:
+              - generic [ref=e1391] [cursor=pointer]:
+                - generic [ref=e1393]: xhotel
+                - generic [ref=e1395]: XHotel
+                - generic [ref=e1397]: 酒店信息
+              - generic [ref=e1398] [cursor=pointer]:
+                - generic [ref=e1400]: hid
+                - generic [ref=e1402]: Number
+                - generic [ref=e1403]: "123456"
+                - generic [ref=e1404]: 酒店ID
+              - generic [ref=e1405] [cursor=pointer]:
+                - generic [ref=e1407]: status
+                - generic [ref=e1409]: Number
+                - generic [ref=e1410]: "0"
+                - generic [ref=e1411]: "酒店状态：0: 正常;-2:停售；-1：删除"
+              - generic [ref=e1412] [cursor=pointer]:
+                - generic [ref=e1414]: s_hotel
+                - generic [ref=e1416]: SHotel
+                - generic [ref=e1418]: 淘宝标准酒店信息
+              - generic [ref=e1419] [cursor=pointer]:
+                - generic [ref=e1421]: shid
+                - generic [ref=e1423]: Number
+                - generic [ref=e1424]: "123456"
+                - generic [ref=e1425]: 酒店ID
+              - generic [ref=e1426] [cursor=pointer]:
+                - generic [ref=e1428]: name
+                - generic [ref=e1430]: String
+                - generic [ref=e1431]: "60"
+                - generic [ref=e1432]: name
+              - generic [ref=e1433] [cursor=pointer]:
+                - generic [ref=e1435]: used_name
+                - generic [ref=e1437]: String
+                - generic [ref=e1438]: aaa
+                - generic [ref=e1439]: used_name
+              - generic [ref=e1440] [cursor=pointer]:
+                - generic [ref=e1442]: type
+                - generic [ref=e1444]: String
+                - generic [ref=e1445]: 连锁品牌，家庭旅馆
+                - generic [ref=e1446]: 酒店类型
+              - generic [ref=e1447] [cursor=pointer]:
+                - generic [ref=e1449]: domestic
+                - generic [ref=e1451]: Number
+                - generic [ref=e1452]: "0"
+                - generic [ref=e1453]: 0:国内;1:国外
+              - generic [ref=e1454] [cursor=pointer]:
+                - generic [ref=e1456]: country
+                - generic [ref=e1458]: String
+                - generic [ref=e1459]: China
+                - generic [ref=e1460]: 国家编码
+              - generic [ref=e1461] [cursor=pointer]:
+                - generic [ref=e1463]: city_tag
+                - generic [ref=e1465]: String
+                - generic [ref=e1466]: 11,33
+                - generic [ref=e1467]: 地区标签
+              - generic [ref=e1468] [cursor=pointer]:
+                - generic [ref=e1470]: province
+                - generic [ref=e1472]: Number
+                - generic [ref=e1473]: "110000"
+                - generic [ref=e1474]: 省份编码
+              - generic [ref=e1475] [cursor=pointer]:
+                - generic [ref=e1477]: city
+                - generic [ref=e1479]: Number
+                - generic [ref=e1480]: "110100"
+                - generic [ref=e1481]: 城市编码
+              - generic [ref=e1482] [cursor=pointer]:
+                - generic [ref=e1484]: district
+                - generic [ref=e1486]: Number
+                - generic [ref=e1487]: "110101"
+                - generic [ref=e1488]: 区域编码
+              - generic [ref=e1489] [cursor=pointer]:
+                - generic [ref=e1491]: business
+                - generic [ref=e1493]: String
+                - generic [ref=e1494]: aaa
+                - generic [ref=e1495]: business
+              - generic [ref=e1496] [cursor=pointer]:
+                - generic [ref=e1498]: address
+                - generic [ref=e1500]: String
+                - generic [ref=e1501]: 王府井
+                - generic [ref=e1502]: 酒店地址
+              - generic [ref=e1503] [cursor=pointer]:
+                - generic [ref=e1505]: level
+                - generic [ref=e1507]: String
+                - generic [ref=e1508]: A
+                - generic [ref=e1509]: 酒店级别
+              - generic [ref=e1510] [cursor=pointer]:
+                - generic [ref=e1512]: longitude
+                - generic [ref=e1514]: String
+                - generic [ref=e1515]: "2222.44"
+                - generic [ref=e1516]: longitude
+              - generic [ref=e1517] [cursor=pointer]:
+                - generic [ref=e1519]: latitude
+                - generic [ref=e1521]: String
+                - generic [ref=e1522]: "123456.777"
+                - generic [ref=e1523]: latitude
+              - generic [ref=e1524] [cursor=pointer]:
+                - generic [ref=e1526]: position_type
+                - generic [ref=e1528]: Number
+                - generic [ref=e1529]: "1"
+                - generic [ref=e1530]: position_type
+              - generic [ref=e1531] [cursor=pointer]:
+                - generic [ref=e1533]: tel
+                - generic [ref=e1535]: String
+                - generic [ref=e1536]: 0086#010#12345678
+                - generic [ref=e1537]: 酒店电话
+              - generic [ref=e1538] [cursor=pointer]:
+                - generic [ref=e1540]: fax
+                - generic [ref=e1542]: String
+                - generic [ref=e1543]: 0086#010#12345678
+                - generic [ref=e1544]: 传真
+              - generic [ref=e1545] [cursor=pointer]:
+                - generic [ref=e1547]: opening_time
+                - generic [ref=e1549]: String
+                - generic [ref=e1550]: "2012"
+                - generic [ref=e1551]: 开业年份
+              - generic [ref=e1552] [cursor=pointer]:
+                - generic [ref=e1554]: decorate_time
+                - generic [ref=e1556]: String
+                - generic [ref=e1557]: "2013"
+                - generic [ref=e1558]: 装修年份
+              - generic [ref=e1559] [cursor=pointer]:
+                - generic [ref=e1561]: storeys
+                - generic [ref=e1563]: String
+                - generic [ref=e1564]: "11"
+                - generic [ref=e1565]: 楼层数
+              - generic [ref=e1566] [cursor=pointer]:
+                - generic [ref=e1568]: extend
+                - generic [ref=e1570]: String
+                - generic [ref=e1571]: "{\"keyword\":”上地”}"
+                - generic [ref=e1572]: 扩展信息的JSON
+              - generic [ref=e1573] [cursor=pointer]:
+                - generic [ref=e1575]: rooms
+                - generic [ref=e1577]: Number
+                - generic [ref=e1578]: "100"
+                - generic [ref=e1579]: 房间数
+              - generic [ref=e1580] [cursor=pointer]:
+                - generic [ref=e1582]: desc
+                - generic [ref=e1584]: String
+                - generic [ref=e1585]: 北京饭店在王府井位于XXX
+                - generic [ref=e1586]: 酒店介绍
+              - generic [ref=e1587] [cursor=pointer]:
+                - generic [ref=e1589]: service
+                - generic [ref=e1591]: String
+                - generic [ref=e1592]: "{\"airportShuttle\":true}"
+                - generic [ref=e1593]: 交通距离与设施服务。JSON格式。
+              - generic [ref=e1594] [cursor=pointer]:
+                - generic [ref=e1596]: hotel_facilities
+                - generic [ref=e1598]: String
+                - generic [ref=e1599]: "{\"会议室\":true,\"中式餐厅\":true}"
+                - generic [ref=e1600]: 酒店设施
+              - generic [ref=e1601] [cursor=pointer]:
+                - generic [ref=e1603]: room_facilities
+                - generic [ref=e1605]: String
+                - generic [ref=e1606]: "{\"宽带上网\":true,\"空调\":true}"
+                - generic [ref=e1607]: 房间设施
+              - generic [ref=e1608] [cursor=pointer]:
+                - generic [ref=e1610]: pic_url
+                - generic [ref=e1612]: String
+                - generic [ref=e1613]: http://img01.taobaocdn.com/bao/uploaded/i3/T1Ym4bXeJBXXbPV7.9_104339.jpg
+                - generic [ref=e1614]: 酒店图片url
+              - generic [ref=e1615] [cursor=pointer]:
+                - generic [ref=e1617]: created_time
+                - generic [ref=e1619]: Date
+                - generic [ref=e1620]: 2000-01-01 00:00:00
+                - generic [ref=e1621]: 创建时间
+              - generic [ref=e1622] [cursor=pointer]:
+                - generic [ref=e1624]: modified_time
+                - generic [ref=e1626]: Date
+                - generic [ref=e1627]: 2000-01-01 00:00:00
+                - generic [ref=e1628]: 修改时间
+              - generic [ref=e1629] [cursor=pointer]:
+                - generic [ref=e1631]: status
+                - generic [ref=e1633]: Number
+                - generic [ref=e1634]: "1"
+                - generic [ref=e1635]: 0,营业中；-1，筹建中；-2，暂停营业；-3，已停业；默认为0
+              - generic [ref=e1636] [cursor=pointer]:
+                - generic [ref=e1638]: postal_code
+                - generic [ref=e1640]: String
+                - generic [ref=e1641]: "100072"
+                - generic [ref=e1642]: 邮编
+              - generic [ref=e1643] [cursor=pointer]:
+                - generic [ref=e1645]: brand
+                - generic [ref=e1647]: String
+                - generic [ref=e1648]: aaa
+                - generic [ref=e1649]: brand
+              - generic [ref=e1650] [cursor=pointer]:
+                - generic [ref=e1652]: outer_id
+                - generic [ref=e1654]: String
+                - generic [ref=e1655]: "1111111"
+                - generic [ref=e1656]: 卖家自己系统的id
+              - generic [ref=e1657] [cursor=pointer]:
+                - generic [ref=e1659]: name
+                - generic [ref=e1661]: String
+                - generic [ref=e1662]: 北京饭店
+                - generic [ref=e1663]: 酒店名称
+              - generic [ref=e1664] [cursor=pointer]:
+                - generic [ref=e1666]: domestic
+                - generic [ref=e1668]: Number
+                - generic [ref=e1669]: "0"
+                - generic [ref=e1670]: 0:国内;1:国外
+              - generic [ref=e1671] [cursor=pointer]:
+                - generic [ref=e1673]: country
+                - generic [ref=e1675]: String
+                - generic [ref=e1676]: China
+                - generic [ref=e1677]: 国家编码
+              - generic [ref=e1678] [cursor=pointer]:
+                - generic [ref=e1680]: used_name
+                - generic [ref=e1682]: String
+                - generic [ref=e1683]: 北京大酒店
+                - generic [ref=e1684]: 曾用名
+              - generic [ref=e1685] [cursor=pointer]:
+                - generic [ref=e1687]: province
+                - generic [ref=e1689]: Number
+                - generic [ref=e1690]: "110100"
+                - generic [ref=e1691]: 省份编码
+              - generic [ref=e1692] [cursor=pointer]:
+                - generic [ref=e1694]: city
+                - generic [ref=e1696]: Number
+                - generic [ref=e1697]: "110101"
+                - generic [ref=e1698]: 城市编码
+              - generic [ref=e1699] [cursor=pointer]:
+                - generic [ref=e1701]: district
+                - generic [ref=e1703]: Number
+                - generic [ref=e1704]: "110101"
+                - generic [ref=e1705]: 地区编码
+              - generic [ref=e1706] [cursor=pointer]:
+                - generic [ref=e1708]: business
+                - generic [ref=e1710]: String
+                - generic [ref=e1711]: aaa
+                - generic [ref=e1712]: 商圈信息
+              - generic [ref=e1713] [cursor=pointer]:
+                - generic [ref=e1715]: address
+                - generic [ref=e1717]: String
+                - generic [ref=e1718]: 北京市朝阳区
+                - generic [ref=e1719]: 酒店地址
+              - generic [ref=e1720] [cursor=pointer]:
+                - generic [ref=e1722]: longitude
+                - generic [ref=e1724]: String
+                - generic [ref=e1725]: "100.122"
+                - generic [ref=e1726]: 经度
+              - generic [ref=e1727] [cursor=pointer]:
+                - generic [ref=e1729]: latitude
+                - generic [ref=e1731]: String
+                - generic [ref=e1732]: "110.122"
+                - generic [ref=e1733]: 纬度
+              - generic [ref=e1734] [cursor=pointer]:
+                - generic [ref=e1736]: position_type
+                - generic [ref=e1738]: String
+                - generic [ref=e1739]: A
+                - generic [ref=e1740]: 坐标类型
+              - generic [ref=e1741] [cursor=pointer]:
+                - generic [ref=e1743]: tel
+                - generic [ref=e1745]: String
+                - generic [ref=e1746]: 0086#010#12345678
+                - generic [ref=e1747]: 酒店电话
+              - generic [ref=e1748] [cursor=pointer]:
+                - generic [ref=e1750]: extend
+                - generic [ref=e1752]: String
+                - generic [ref=e1753]: "{\"keyword\":”上地”}"
+                - generic [ref=e1754]: 扩展信息
+              - generic [ref=e1755] [cursor=pointer]:
+                - generic [ref=e1757]: match_status
+                - generic [ref=e1759]: Number
+                - generic [ref=e1760]: "1"
+                - generic [ref=e1761]: 此字段已废弃
+              - generic [ref=e1762] [cursor=pointer]:
+                - generic [ref=e1764]: error_info
+                - generic [ref=e1766]: String
+                - generic [ref=e1767]: 酒店不存在
+                - generic [ref=e1768]: 未通过时的拒绝原因等。
+              - generic [ref=e1769] [cursor=pointer]:
+                - generic [ref=e1771]: credit_card_types
+                - generic [ref=e1773]: String
+                - generic [ref=e1774]: 1,2,3
+                - generic [ref=e1775]: 逗号分隔的字符串 1visa；2万事达卡；3美国运通卡；4发现卡；5大来卡；6JCB卡；7银联卡
+              - generic [ref=e1776] [cursor=pointer]:
+                - generic [ref=e1778]: name_e
+                - generic [ref=e1780]: String
+                - generic [ref=e1781]: Beijing hotel
+                - generic [ref=e1782]: 卖家酒店英文名称
+        - generic [ref=e1783]:
+          - heading "请求示例" [level=2] [ref=e1785]
+          - generic [ref=e1788]:
+            - generic [ref=e1790]:
+              - tablist [ref=e1791]:
+                - generic [ref=e1792]:
+                  - generic [ref=e1794]: 
+                  - generic [ref=e1796] [cursor=pointer]: 
+                  - generic [ref=e1799]:
+                    - tab "JAVA" [selected] [ref=e1800] [cursor=pointer]
+                    - tab "PHP" [ref=e1801] [cursor=pointer]
+                    - tab ".NET" [ref=e1802] [cursor=pointer]
+                    - tab "CURL" [ref=e1803] [cursor=pointer]
+                    - tab "Python" [ref=e1804] [cursor=pointer]
+                    - tab "NodeJS" [ref=e1805] [cursor=pointer]
+                    - tab "C/C++" [ref=e1806] [cursor=pointer]
+                    - tab "Python3" [ref=e1807] [cursor=pointer]
+                    - tab "GO" [ref=e1808] [cursor=pointer]
+                    - tab "PHP7" [ref=e1809] [cursor=pointer]
+                    - tab "JAVA8" [ref=e1810] [cursor=pointer]
+                    - tab ".NET6" [ref=e1811] [cursor=pointer]
+              - generic:
+                - tabpanel
+            - code [ref=e1814]: "TaobaoClient client = new DefaultTaobaoClient(url, appkey, secret); XhotelAddRequest req = new XhotelAddRequest(); req.setOuterId(\"12312313\"); req.setName(\"北京饭店\"); req.setUsedName(\"北京饭店\"); req.setDomestic(0L); req.setCountry(\"China\"); req.setProvince(110000L); req.setCity(110100L); req.setDistrict(110101L); req.setBusiness(\"aaa\"); req.setAddress(\"西直门\"); req.setLongitude(\"111.13\"); req.setLatitude(\"111.1222\"); req.setPositionType(\"G\"); req.setTel(\"0086#010#12345678\"); req.setExtend(\"{\\\"keyword\\\":”上地”}\"); req.setShid(123123L); req.setVendor(\"taobao\"); req.setStar(\"1\"); req.setOpeningTime(\"2015-01-01\"); req.setDecorateTime(\"2015-01-01\"); req.setFloors(\"4-6层\"); req.setRooms(10L); req.setDescription(\"酒店描述\"); req.setPics(\"[{\\\"url\\\":\\\"http://123.jpg\\\",\\\"ismain\\\":\\\"false\\\",\\\"type\\\":\\\"大堂\\\",\\\"attribute\\\":\\\"普通图\\\"},{\\\"url\\\":\\\"http://456.jpg\\\",\\\"ismain\\\":\\\"true\\\",\\\"type\\\":\\\"公共区域\\\",\\\"attribute\\\":\\\"全景图\\\"},{\\\"url\\\":\\\"http://789.jpg\\\",\\\"ismain\\\":\\\"false\\\",\\\"type\\\":\\\"大堂\\\",\\\"attribute\\\":\\\"普通图\\\"}]\"); req.setBrand(\"1\"); req.setPostalCode(\"邮编\"); req.setBookingNotice(\"{\\\"hotelInMountaintop\\\":1,\\\"needBoat\\\":1,\\\"hotelInScenicSpot\\\":1,\\\"extraBed\\\":\\\"加床收费xx元\\\",\\\"extraCharge\\\":\\\"\\\",\\\"arrivalTime\\\":\\\"入住日18点前\\\",\\\"extend\\\":\\\"\\\"}\"); req.setCreditCardTypes(\"1,2,3\"); req.setOrbitTrack(\"{ \\\"orbitTrack\\\":[ { \\\"platform\\\":\\\"飞猪\\\", \\\"ways\\\":\\\"直连\\\" }, { \\\"platform\\\":\\\"去哪儿\\\", \\\"ways\\\":\\\"直连\\\" } { \\\"platform\\\":\\\"如家\\\", \\\"ways\\\":\\\"电话\\\" }, { \\\"platform\\\":\\\"如家西湖店\\\", \\\"ways\\\":\\\"人工\\\" } ] }\"); req.setNameE(\"Beijing hotel\"); req.setSupplier(\"abc\"); req.setSettlementCurrency(\"HKD\"); req.setStandardAmuseFacilities(\"{\\\"dataVersion\\\":\\\"2.0.0\\\",\\\"facilityList\\\":[{\\\"75\\\":true}]}\"); req.setStandardRoomFacilities(\"废弃\"); req.setStandardHotelService(\"{\\\"dataVersion\\\":\\\"2.0.0\\\",\\\"facilityList\\\":[{\\\"12\\\":true,\\\"free\\\":true}]}\"); req.setStandardHotelFacilities(\"{\\\"dataVersion\\\":\\\"2.0.0\\\",\\\"facilityList\\\":[{\\\"51\\\":true,\\\"option\\\":\\\"2\\\"}]}\"); req.setStandardBookingNotice(\"{\\\"dataVersion\\\":\\\"2.0.0\\\",\\\"facilityList\\\":[{\\\"500\\\":true,\\\"free\\\":true}]}\"); req.setServiceType(0L); req.setHotelType(0L); req.setCoordinateSystem(\"WGS84\"); req.setRoomFacilities(\"废弃\"); req.setService(\"废弃\"); req.setHotelFacilities(\"废弃\"); req.setHotelPolicies(\"废弃\"); XhotelAddResponse rsp = client.execute(req, sessionKey); System.out.println(rsp.getBody());"
+        - generic [ref=e1815]:
+          - heading "响应示例" [level=2] [ref=e1817]
+          - generic [ref=e1820]:
+            - generic [ref=e1822]:
+              - tablist [ref=e1823]:
+                - generic [ref=e1824]:
+                  - generic:
+                    - generic: 
+                  - generic:
+                    - generic: 
+                  - generic [ref=e1827]:
+                    - tab "XML" [selected] [ref=e1828] [cursor=pointer]
+                    - tab "JSON" [ref=e1829] [cursor=pointer]
+              - generic:
+                - tabpanel
+            - code [ref=e1832]:
+              - generic [ref=e1833]: <xhotel_add_response>
+              - generic [ref=e1834]: <xhotel>
+              - generic [ref=e1835]: <hid>
+              - text: "123456"
+              - generic [ref=e1836]: </hid>
+              - generic [ref=e1837]: <status>
+              - text: "0"
+              - generic [ref=e1838]: </status>
+              - generic [ref=e1839]: <s_hotel>
+              - generic [ref=e1840]: <shid>
+              - text: "123456"
+              - generic [ref=e1841]: </shid>
+              - generic [ref=e1842]: <name>
+              - text: "60"
+              - generic [ref=e1843]: </name>
+              - generic [ref=e1844]: <used_name>
+              - text: aaa
+              - generic [ref=e1845]: </used_name>
+              - generic [ref=e1846]: <type>
+              - text: 连锁品牌，家庭旅馆
+              - generic [ref=e1847]: </type>
+              - generic [ref=e1848]: <domestic>
+              - text: "0"
+              - generic [ref=e1849]: </domestic>
+              - generic [ref=e1850]: <country>
+              - text: China
+              - generic [ref=e1851]: </country>
+              - generic [ref=e1852]: <city_tag>
+              - text: 11,33
+              - generic [ref=e1853]: </city_tag>
+              - generic [ref=e1854]: <province>
+              - text: "110000"
+              - generic [ref=e1855]: </province>
+              - generic [ref=e1856]: <city>
+              - text: "110100"
+              - generic [ref=e1857]: </city>
+              - generic [ref=e1858]: <district>
+              - text: "110101"
+              - generic [ref=e1859]: </district>
+              - generic [ref=e1860]: <business>
+              - text: aaa
+              - generic [ref=e1861]: </business>
+              - generic [ref=e1862]: <address>
+              - text: 王府井
+              - generic [ref=e1863]: </address>
+              - generic [ref=e1864]: <level>
+              - text: A
+              - generic [ref=e1865]: </level>
+              - generic [ref=e1866]: <longitude>
+              - text: "2222.44"
+              - generic [ref=e1867]: </longitude>
+              - generic [ref=e1868]: <latitude>
+              - text: "123456.777"
+              - generic [ref=e1869]: </latitude>
+              - generic [ref=e1870]: <position_type>
+              - text: "1"
+              - generic [ref=e1871]: </position_type>
+              - generic [ref=e1872]: <tel>
+              - text: 0086#010#12345678
+              - generic [ref=e1873]: </tel>
+              - generic [ref=e1874]: <fax>
+              - text: 0086#010#12345678
+              - generic [ref=e1875]: </fax>
+              - generic [ref=e1876]: <opening_time>
+              - text: "2012"
+              - generic [ref=e1877]: </opening_time>
+              - generic [ref=e1878]: <decorate_time>
+              - text: "2013"
+              - generic [ref=e1879]: </decorate_time>
+              - generic [ref=e1880]: <storeys>
+              - text: "11"
+              - generic [ref=e1881]: </storeys>
+              - generic [ref=e1882]: <extend>
+              - text: "{&quot;keyword&quot;:”上地”}"
+              - generic [ref=e1883]: </extend>
+              - generic [ref=e1884]: <rooms>
+              - text: "100"
+              - generic [ref=e1885]: </rooms>
+              - generic [ref=e1886]: <desc>
+              - text: 北京饭店在王府井位于XXX
+              - generic [ref=e1887]: </desc>
+              - generic [ref=e1888]: <service>
+              - text: "{&quot;airportShuttle&quot;:true}"
+              - generic [ref=e1889]: </service>
+              - generic [ref=e1890]: <hotel_facilities>
+              - text: "{&quot;会议室&quot;:true,&quot;中式餐厅&quot;:true}"
+              - generic [ref=e1891]: </hotel_facilities>
+              - generic [ref=e1892]: <room_facilities>
+              - text: "{&quot;宽带上网&quot;:true,&quot;空调&quot;:true}"
+              - generic [ref=e1893]: </room_facilities>
+              - generic [ref=e1894]: <pic_url>
+              - text: http://img01.taobaocdn.com/bao/uploaded/i3/T1Ym4bXeJBXXbPV7.9_104339.jpg
+              - generic [ref=e1895]: </pic_url>
+              - generic [ref=e1896]: <created_time>
+              - text: 2000-01-01 00:00:00
+              - generic [ref=e1897]: </created_time>
+              - generic [ref=e1898]: <modified_time>
+              - text: 2000-01-01 00:00:00
+              - generic [ref=e1899]: </modified_time>
+              - generic [ref=e1900]: <status>
+              - text: "1"
+              - generic [ref=e1901]: </status>
+              - generic [ref=e1902]: <postal_code>
+              - text: "100072"
+              - generic [ref=e1903]: </postal_code>
+              - generic [ref=e1904]: <brand>
+              - text: aaa
+              - generic [ref=e1905]: </brand>
+              - generic [ref=e1906]: </s_hotel>
+              - generic [ref=e1907]: <outer_id>
+              - text: "1111111"
+              - generic [ref=e1908]: </outer_id>
+              - generic [ref=e1909]: <name>
+              - text: 北京饭店
+              - generic [ref=e1910]: </name>
+              - generic [ref=e1911]: <domestic>
+              - text: "0"
+              - generic [ref=e1912]: </domestic>
+              - generic [ref=e1913]: <country>
+              - text: China
+              - generic [ref=e1914]: </country>
+              - generic [ref=e1915]: <used_name>
+              - text: 北京大酒店
+              - generic [ref=e1916]: </used_name>
+              - generic [ref=e1917]: <province>
+              - text: "110100"
+              - generic [ref=e1918]: </province>
+              - generic [ref=e1919]: <city>
+              - text: "110101"
+              - generic [ref=e1920]: </city>
+              - generic [ref=e1921]: <district>
+              - text: "110101"
+              - generic [ref=e1922]: </district>
+              - generic [ref=e1923]: <business>
+              - text: aaa
+              - generic [ref=e1924]: </business>
+              - generic [ref=e1925]: <address>
+              - text: 北京市朝阳区
+              - generic [ref=e1926]: </address>
+              - generic [ref=e1927]: <longitude>
+              - text: "100.122"
+              - generic [ref=e1928]: </longitude>
+              - generic [ref=e1929]: <latitude>
+              - text: "110.122"
+              - generic [ref=e1930]: </latitude>
+              - generic [ref=e1931]: <position_type>
+              - text: A
+              - generic [ref=e1932]: </position_type>
+              - generic [ref=e1933]: <tel>
+              - text: 0086#010#12345678
+              - generic [ref=e1934]: </tel>
+              - generic [ref=e1935]: <extend>
+              - text: "{&quot;keyword&quot;:”上地”}"
+              - generic [ref=e1936]: </extend>
+              - generic [ref=e1937]: <match_status>
+              - text: "1"
+              - generic [ref=e1938]: </match_status>
+              - generic [ref=e1939]: <error_info>
+              - text: 酒店不存在
+              - generic [ref=e1940]: </error_info>
+              - generic [ref=e1941]: <credit_card_types>
+              - text: 1,2,3
+              - generic [ref=e1942]: </credit_card_types>
+              - generic [ref=e1943]: <name_e>
+              - text: Beijing hotel
+              - generic [ref=e1944]: </name_e>
+              - generic [ref=e1945]: </xhotel>
+              - generic [ref=e1946]: </xhotel_add_response>
+        - generic [ref=e1947]:
+          - heading "异常示例" [level=2] [ref=e1949]
+          - generic [ref=e1952]:
+            - generic [ref=e1954]:
+              - tablist [ref=e1955]:
+                - generic [ref=e1956]:
+                  - generic:
+                    - generic: 
+                  - generic:
+                    - generic: 
+                  - generic [ref=e1959]:
+                    - tab "XML" [selected] [ref=e1960] [cursor=pointer]
+                    - tab "JSON" [ref=e1961] [cursor=pointer]
+              - generic:
+                - tabpanel
+            - code [ref=e1964]:
+              - generic [ref=e1965]: <error_response>
+              - generic [ref=e1966]: <code>
+              - text: "50"
+              - generic [ref=e1967]: </code>
+              - generic [ref=e1968]: <msg>
+              - text: Remote service error
+              - generic [ref=e1969]: </msg>
+              - generic [ref=e1970]: <sub_code>
+              - text: isv.invalid-parameter
+              - generic [ref=e1971]: </sub_code>
+              - generic [ref=e1972]: <sub_msg>
+              - text: 非法参数
+              - generic [ref=e1973]: </sub_msg>
+              - generic [ref=e1974]: </error_response>
+        - generic [ref=e1975]:
+          - heading "错误码解释" [level=2] [ref=e1977]
+          - table [ref=e1981]:
+            - rowgroup [ref=e1986]:
+              - row "错误码 错误消息 解决方案" [ref=e1987]:
+                - gridcell "错误码" [ref=e1988]:
+                  - generic [ref=e1989]: 错误码
+                - gridcell "错误消息" [ref=e1990]:
+                  - generic [ref=e1991]: 错误消息
+                - gridcell "解决方案" [ref=e1992]:
+                  - generic [ref=e1993]: 解决方案
+            - rowgroup [ref=e1994]:
+              - row "isv.invalid-parameter:NOTNULL 参数不能为空 请检查参数" [ref=e1995]:
+                - gridcell "isv.invalid-parameter:NOTNULL" [ref=e1996]:
+                  - generic [ref=e1997]: isv.invalid-parameter:NOTNULL
+                - gridcell "参数不能为空" [ref=e1998]:
+                  - generic [ref=e1999]: 参数不能为空
+                - gridcell "请检查参数" [ref=e2000]:
+                  - generic [ref=e2001]: 请检查参数
+              - row "isv.invalid-parameter:ERROR 参数不正确 请检查参数" [ref=e2002]:
+                - gridcell "isv.invalid-parameter:ERROR" [ref=e2003]:
+                  - generic [ref=e2004]: isv.invalid-parameter:ERROR
+                - gridcell "参数不正确" [ref=e2005]:
+                  - generic [ref=e2006]: 参数不正确
+                - gridcell "请检查参数" [ref=e2007]:
+                  - generic [ref=e2008]: 请检查参数
+              - row "isv.biz-error:STATUS_NOT_CORRECT 状态不正确 请检查状态" [ref=e2009]:
+                - gridcell "isv.biz-error:STATUS_NOT_CORRECT" [ref=e2010]:
+                  - generic [ref=e2011]: isv.biz-error:STATUS_NOT_CORRECT
+                - gridcell "状态不正确" [ref=e2012]:
+                  - generic [ref=e2013]: 状态不正确
+                - gridcell "请检查状态" [ref=e2014]:
+                  - generic [ref=e2015]: 请检查状态
+              - row "isv.biz-error:NOT_RIGHTS_TO_PUBLISH_ERROR 非消保酒店卖家不能发布修改酒店、房型或宝贝 请使用消保酒店卖家操作" [ref=e2016]:
+                - gridcell "isv.biz-error:NOT_RIGHTS_TO_PUBLISH_ERROR" [ref=e2017]:
+                  - generic [ref=e2018]: isv.biz-error:NOT_RIGHTS_TO_PUBLISH_ERROR
+                - gridcell "非消保酒店卖家不能发布修改酒店、房型或宝贝" [ref=e2019]:
+                  - generic [ref=e2020]: 非消保酒店卖家不能发布修改酒店、房型或宝贝
+                - gridcell "请使用消保酒店卖家操作" [ref=e2021]:
+                  - generic [ref=e2022]: 请使用消保酒店卖家操作
+              - row "isv.biz-error:HAS_NOT_MATCH_SHOTEL 酒店尚未匹配到标准酒店 请先进行酒店匹配" [ref=e2023]:
+                - gridcell "isv.biz-error:HAS_NOT_MATCH_SHOTEL" [ref=e2024]:
+                  - generic [ref=e2025]: isv.biz-error:HAS_NOT_MATCH_SHOTEL
+                - gridcell "酒店尚未匹配到标准酒店" [ref=e2026]:
+                  - generic [ref=e2027]: 酒店尚未匹配到标准酒店
+                - gridcell "请先进行酒店匹配" [ref=e2028]:
+                  - generic [ref=e2029]: 请先进行酒店匹配
+              - row "isv.biz-error:HAS_NOT_CONFRIM_HOTEL 酒店匹配结果尚未确认 请先进行酒店匹配结果确认" [ref=e2030]:
+                - gridcell "isv.biz-error:HAS_NOT_CONFRIM_HOTEL" [ref=e2031]:
+                  - generic [ref=e2032]: isv.biz-error:HAS_NOT_CONFRIM_HOTEL
+                - gridcell "酒店匹配结果尚未确认" [ref=e2033]:
+                  - generic [ref=e2034]: 酒店匹配结果尚未确认
+                - gridcell "请先进行酒店匹配结果确认" [ref=e2035]:
+                  - generic [ref=e2036]: 请先进行酒店匹配结果确认
+              - row "isv.invalid-parameter:HOTEL_EXIST 酒店已经存在 请不要重复添加酒店" [ref=e2037]:
+                - gridcell "isv.invalid-parameter:HOTEL_EXIST" [ref=e2038]:
+                  - generic [ref=e2039]: isv.invalid-parameter:HOTEL_EXIST
+                - gridcell "酒店已经存在" [ref=e2040]:
+                  - generic [ref=e2041]: 酒店已经存在
+                - gridcell "请不要重复添加酒店" [ref=e2042]:
+                  - generic [ref=e2043]: 请不要重复添加酒店
+              - row "isv.invalid-parameter:HOTEL_NOT_EXIST 酒店不存在 请检查输入参数" [ref=e2044]:
+                - gridcell "isv.invalid-parameter:HOTEL_NOT_EXIST" [ref=e2045]:
+                  - generic [ref=e2046]: isv.invalid-parameter:HOTEL_NOT_EXIST
+                - gridcell "酒店不存在" [ref=e2047]:
+                  - generic [ref=e2048]: 酒店不存在
+                - gridcell "请检查输入参数" [ref=e2049]:
+                  - generic [ref=e2050]: 请检查输入参数
+              - row "isv.biz-error:UPDATE_HOTEL_ERROR 更新酒店失败 请稍后重试" [ref=e2051]:
+                - gridcell "isv.biz-error:UPDATE_HOTEL_ERROR" [ref=e2052]:
+                  - generic [ref=e2053]: isv.biz-error:UPDATE_HOTEL_ERROR
+                - gridcell "更新酒店失败" [ref=e2054]:
+                  - generic [ref=e2055]: 更新酒店失败
+                - gridcell "请稍后重试" [ref=e2056]:
+                  - generic [ref=e2057]: 请稍后重试
+              - row "isv.biz-error:CAN_NOT_UPDATE_HOTEL 酒店处于待匹配待确认或已确认成功状态无法更新 请检查匹配状态或稍后重试" [ref=e2058]:
+                - gridcell "isv.biz-error:CAN_NOT_UPDATE_HOTEL" [ref=e2059]:
+                  - generic [ref=e2060]: isv.biz-error:CAN_NOT_UPDATE_HOTEL
+                - gridcell "酒店处于待匹配待确认或已确认成功状态无法更新" [ref=e2061]:
+                  - generic [ref=e2062]: 酒店处于待匹配待确认或已确认成功状态无法更新
+                - gridcell "请检查匹配状态或稍后重试" [ref=e2063]:
+                  - generic [ref=e2064]: 请检查匹配状态或稍后重试
+              - row "isv.invalid-parameter:BUSINESS_AREA_NOT_EXIST 商圈不存在 请检查商圈信息" [ref=e2065]:
+                - gridcell "isv.invalid-parameter:BUSINESS_AREA_NOT_EXIST" [ref=e2066]:
+                  - generic [ref=e2067]: isv.invalid-parameter:BUSINESS_AREA_NOT_EXIST
+                - gridcell "商圈不存在" [ref=e2068]:
+                  - generic [ref=e2069]: 商圈不存在
+                - gridcell "请检查商圈信息" [ref=e2070]:
+                  - generic [ref=e2071]: 请检查商圈信息
+              - row "isv.biz-error:ALREADY_EXIST_SHOTEL 该卖家已经有酒店匹配了该标准酒店 请检查酒店信息，不要重复匹配" [ref=e2072]:
+                - gridcell "isv.biz-error:ALREADY_EXIST_SHOTEL" [ref=e2073]:
+                  - generic [ref=e2074]: isv.biz-error:ALREADY_EXIST_SHOTEL
+                - gridcell "该卖家已经有酒店匹配了该标准酒店" [ref=e2075]:
+                  - generic [ref=e2076]: 该卖家已经有酒店匹配了该标准酒店
+                - gridcell "请检查酒店信息，不要重复匹配" [ref=e2077]:
+                  - generic [ref=e2078]: 请检查酒店信息，不要重复匹配
+              - row "isv.permission-error:NO_PERMISSIONS_ERROR 权限不够、非法访问 请申请权限" [ref=e2079]:
+                - gridcell "isv.permission-error:NO_PERMISSIONS_ERROR" [ref=e2080]:
+                  - generic [ref=e2081]: isv.permission-error:NO_PERMISSIONS_ERROR
+                - gridcell "权限不够、非法访问" [ref=e2082]:
+                  - generic [ref=e2083]: 权限不够、非法访问
+                - gridcell "请申请权限" [ref=e2084]:
+                  - generic [ref=e2085]: 请申请权限
+              - row "isv.remote-service:CONVERT_ERROR 转换对象时出错 请检查输入参数" [ref=e2086]:
+                - gridcell "isv.remote-service:CONVERT_ERROR" [ref=e2087]:
+                  - generic [ref=e2088]: isv.remote-service:CONVERT_ERROR
+                - gridcell "转换对象时出错" [ref=e2089]:
+                  - generic [ref=e2090]: 转换对象时出错
+                - gridcell "请检查输入参数" [ref=e2091]:
+                  - generic [ref=e2092]: 请检查输入参数
+              - row "isv.invalid-parameter:LENGTH_OVERRANGE 长度非法 长度非法" [ref=e2093]:
+                - gridcell "isv.invalid-parameter:LENGTH_OVERRANGE" [ref=e2094]:
+                  - generic [ref=e2095]: isv.invalid-parameter:LENGTH_OVERRANGE
+                - gridcell "长度非法" [ref=e2096]:
+                  - generic [ref=e2097]: 长度非法
+                - gridcell "长度非法" [ref=e2098]:
+                  - generic [ref=e2099]: 长度非法
+              - row "isv.biz-error:UPDATE_HOTEL_CITY_ERROR 城市编码错误 需要传输正确的城市编码，编码在这里查找 http://kezhan.trip.taobao.com/area.html" [ref=e2100]:
+                - gridcell "isv.biz-error:UPDATE_HOTEL_CITY_ERROR" [ref=e2101]:
+                  - generic [ref=e2102]: isv.biz-error:UPDATE_HOTEL_CITY_ERROR
+                - gridcell "城市编码错误" [ref=e2103]:
+                  - generic [ref=e2104]: 城市编码错误
+                - gridcell "需要传输正确的城市编码，编码在这里查找 http://kezhan.trip.taobao.com/area.html" [ref=e2105]:
+                  - generic [ref=e2106]: 需要传输正确的城市编码，编码在这里查找 http://kezhan.trip.taobao.com/area.html
+              - row "biz-error:PUBLISH_FORBIDDEN 酒店发布数量超限，请联系飞猪业务 请联系飞猪业务" [ref=e2107]:
+                - gridcell "biz-error:PUBLISH_FORBIDDEN" [ref=e2108]:
+                  - generic [ref=e2109]: biz-error:PUBLISH_FORBIDDEN
+                - gridcell "酒店发布数量超限，请联系飞猪业务" [ref=e2110]:
+                  - generic [ref=e2111]: 酒店发布数量超限，请联系飞猪业务
+                - gridcell "请联系飞猪业务" [ref=e2112]:
+                  - generic [ref=e2113]: 请联系飞猪业务
+        - generic [ref=e2114]:
+          - heading "API 工具" [level=2] [ref=e2116]
+          - generic [ref=e2119]:
+            - link "API测试工具" [ref=e2121] [cursor=pointer]:
+              - /url: /new/apitesttool?apiName=taobao.xhotel.add
+            - link "错误码查询工具" [ref=e2123] [cursor=pointer]:
+              - /url: /doc.htm?docId=1&docType=18
+            - link "SDK 下载" [ref=e2125] [cursor=pointer]:
+              - /url: /doc.htm?docId=101618&docType=1
+        - generic [ref=e2126]:
+          - heading "如何获得此API" [level=2] [ref=e2128]
+          - table [ref=e2132]:
+            - rowgroup [ref=e2136]:
+              - row "拥有此API的权限组 可获得/可申请此API权限组的应用类型" [ref=e2137]:
+                - gridcell "拥有此API的权限组" [ref=e2138]:
+                  - generic [ref=e2139]: 拥有此API的权限组
+                - gridcell "可获得/可申请此API权限组的应用类型" [ref=e2140]:
+                  - generic [ref=e2141]: 可获得/可申请此API权限组的应用类型
+            - rowgroup [ref=e2142]:
+              - row "酒店商品API 飞猪-新业务 飞猪-门票 飞猪-酒店 飞猪-度假" [ref=e2143]:
+                - gridcell "酒店商品API" [ref=e2144]:
+                  - generic [ref=e2145]: 酒店商品API
+                - gridcell "飞猪-新业务 飞猪-门票 飞猪-酒店 飞猪-度假" [ref=e2146]:
+                  - generic [ref=e2147]: 飞猪-新业务 飞猪-门票 飞猪-酒店 飞猪-度假
+        - generic [ref=e2148]:
+          - generic [ref=e2149]: 文档有帮助吗？
+          - group "评分选项" [ref=e2150]:
+            - generic [ref=e2151] [cursor=pointer]:
+              - generic [ref=e2152]:
+                - generic [ref=e2154]: 
+                - generic [ref=e2156]: 
+                - generic [ref=e2158]: 
+                - generic [ref=e2160]: 
+                - generic [ref=e2162]: 
+              - generic [ref=e2163]:
+                - generic [ref=e2165]: 
+                - generic [ref=e2167]: 
+                - generic [ref=e2169]: 
+                - generic [ref=e2171]: 
+                - generic [ref=e2173]: 
+      - generic [ref=e2177]:
+        - generic [ref=e2179]: 公共参数
+        - generic [ref=e2181]: 请求参数
+        - generic [ref=e2183]: 响应参数
+        - generic [ref=e2185]: 请求示例
+        - generic [ref=e2187]: 响应示例
+        - generic [ref=e2189]: 异常示例
+        - generic [ref=e2191]: 错误码解释
+        - generic [ref=e2193]: API 工具
+        - generic [ref=e2195]: 如何获得此API
+  - link "咨询小开" [ref=e2196] [cursor=pointer]:
+    - /url: javascript:void(0);
+    - generic [ref=e2198]: 咨询小开

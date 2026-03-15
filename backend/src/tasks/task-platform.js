@@ -114,6 +114,17 @@ class TaskPlatform {
     this.recovering = false;
     this.redisHealthFailures = 0;
     this.queueIdleCounters = new Map();
+    this.lastSelfHeal = {
+      inProgress: false,
+      lastAttemptAtMs: null,
+      lastSuccessAtMs: null,
+      lastResult: "never",
+      lastReason: null,
+      lastDurationMs: null,
+      consecutiveFailures: 0,
+      totalRecoveries: 0,
+      lastError: null
+    };
   }
 
   createRedisClient(label) {
@@ -299,18 +310,163 @@ class TaskPlatform {
     if (this.recovering) {
       return;
     }
+    const attemptStartedAt = Date.now();
+    const normalizedReason = String(reason || "unknown").slice(0, 240);
+    this.lastSelfHeal.inProgress = true;
+    this.lastSelfHeal.lastAttemptAtMs = attemptStartedAt;
+    this.lastSelfHeal.lastReason = normalizedReason;
+    this.lastSelfHeal.lastDurationMs = null;
+    this.lastSelfHeal.lastError = null;
     this.recovering = true;
-    console.warn("[task-platform] self-heal restart triggered:", reason);
+    console.warn("[task-platform] self-heal restart triggered:", normalizedReason);
     try {
       const consume = this.consumeEnabled;
       const mode = this.workerMode;
       await this.stop();
       await this.start({ consume, strict: true, workerMode: mode });
+      this.lastSelfHeal.inProgress = false;
+      this.lastSelfHeal.lastResult = "success";
+      this.lastSelfHeal.lastSuccessAtMs = Date.now();
+      this.lastSelfHeal.lastDurationMs = Date.now() - attemptStartedAt;
+      this.lastSelfHeal.consecutiveFailures = 0;
+      this.lastSelfHeal.totalRecoveries += 1;
     } catch (err) {
+      this.lastSelfHeal.inProgress = false;
+      this.lastSelfHeal.lastResult = "fail";
+      this.lastSelfHeal.lastDurationMs = Date.now() - attemptStartedAt;
+      this.lastSelfHeal.consecutiveFailures += 1;
+      this.lastSelfHeal.lastError = {
+        name: String(err?.name || "Error"),
+        message: String(err?.message || "self-heal failed").slice(0, 240)
+      };
       console.error("[task-platform] self-heal restart failed:", err?.message || err);
     } finally {
       this.recovering = false;
+      this.lastSelfHeal.inProgress = false;
     }
+  }
+
+  getRuntimeSnapshot() {
+    return {
+      enabled: this.enabled,
+      started: this.started,
+      consumeEnabled: this.consumeEnabled,
+      workerMode: this.workerMode,
+      queueCount: this.queues.size,
+      workerCount: this.workers.size,
+      queueEventCount: this.queueEvents.size,
+      recovering: this.recovering,
+      redisHealthFailures: this.redisHealthFailures,
+      selfHeal: {
+        inProgress: this.lastSelfHeal.inProgress,
+        lastAttemptAt: this.lastSelfHeal.lastAttemptAtMs ? new Date(this.lastSelfHeal.lastAttemptAtMs).toISOString() : null,
+        lastSuccessAt: this.lastSelfHeal.lastSuccessAtMs ? new Date(this.lastSelfHeal.lastSuccessAtMs).toISOString() : null,
+        lastResult: this.lastSelfHeal.lastResult,
+        lastReason: this.lastSelfHeal.lastReason,
+        lastDurationMs: this.lastSelfHeal.lastDurationMs,
+        consecutiveFailures: this.lastSelfHeal.consecutiveFailures,
+        totalRecoveries: this.lastSelfHeal.totalRecoveries,
+        lastError: this.lastSelfHeal.lastError
+      }
+    };
+  }
+
+  async getHealthSnapshot() {
+    const now = new Date().toISOString();
+    const runtime = this.getRuntimeSnapshot();
+    if (!runtime.enabled) {
+      return {
+        status: "disabled",
+        time: now,
+        tasks: {
+          ...runtime,
+          worker: {
+            ready: false,
+            runningWorkers: runtime.workerCount,
+            knownWorkers: runtime.workerCount,
+            notes: ["task system disabled"]
+          },
+          queues: {
+            snapshotAt: now,
+            totals: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 },
+            byQueue: [],
+            truncated: false,
+            error: null
+          }
+        }
+      };
+    }
+
+    const notes = [];
+    if (!runtime.started) {
+      notes.push("task platform not started");
+    }
+    if (!runtime.consumeEnabled) {
+      notes.push("consume disabled");
+    }
+    if (runtime.recovering) {
+      notes.push("self-heal in progress");
+    }
+
+    let queueItems = [];
+    let queueError = null;
+    try {
+      queueItems = await withTimeout(this.listQueues(), 2000, "listQueues timeout");
+    } catch (err) {
+      queueError = String(err?.message || "failed to query queues").slice(0, 240);
+      notes.push("queue snapshot unavailable");
+    }
+
+    const totals = queueItems.reduce((acc, item) => ({
+      waiting: acc.waiting + Number(item.waiting || 0),
+      active: acc.active + Number(item.active || 0),
+      completed: acc.completed + Number(item.completed || 0),
+      failed: acc.failed + Number(item.failed || 0),
+      delayed: acc.delayed + Number(item.delayed || 0),
+      paused: acc.paused + Number(item.paused || 0)
+    }), { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 });
+
+    const workerReady = runtime.started && runtime.consumeEnabled && runtime.workerCount > 0;
+    const hasStuckSignal = totals.waiting > 0 && totals.active === 0 && runtime.workerCount === 0;
+    if (hasStuckSignal) {
+      notes.push("waiting backlog without active workers");
+    }
+
+    let status = "ok";
+    if (!workerReady || queueError) {
+      status = "down";
+    } else if (runtime.recovering || runtime.redisHealthFailures > 0 || hasStuckSignal || totals.failed > 0) {
+      status = "degraded";
+    }
+
+    return {
+      status,
+      time: now,
+      tasks: {
+        ...runtime,
+        worker: {
+          ready: workerReady,
+          runningWorkers: runtime.workerCount,
+          knownWorkers: runtime.workerCount,
+          notes
+        },
+        queues: {
+          snapshotAt: now,
+          totals,
+          byQueue: queueItems.map((item) => ({
+            name: item.queueName,
+            waiting: Number(item.waiting || 0),
+            active: Number(item.active || 0),
+            completed: Number(item.completed || 0),
+            failed: Number(item.failed || 0),
+            delayed: Number(item.delayed || 0),
+            paused: Number(item.paused || 0)
+          })),
+          truncated: false,
+          error: queueError
+        }
+      }
+    };
   }
 
   async refreshRelatedOrderStatus({ orderGroupId, orderItemId }) {
@@ -333,6 +489,9 @@ class TaskPlatform {
     }
     const orderItem = await prismaStore.getOrderItemById(orderItemId);
     if (!orderItem || orderItem.status === "CANCELLED") {
+      return;
+    }
+    if (orderItem.atourOrderId || ["ORDERED", "DONE"].includes(String(orderItem.executionStatus || ""))) {
       return;
     }
     await prismaStore.updateOrderItem(orderItemId, {

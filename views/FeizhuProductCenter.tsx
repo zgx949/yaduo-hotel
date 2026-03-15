@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 interface StrategyNode {
   platformHotelId: string;
@@ -25,6 +25,10 @@ interface RoomNode {
 interface HotelNode {
   platformHotelId: string;
   hotelName: string;
+  cityId?: string;
+  city?: string;
+  address?: string;
+  tel?: string;
   rooms: RoomNode[];
   mapping?: {
     platformHotelName?: string;
@@ -50,9 +54,28 @@ interface AtourPlaceItem {
   chainName?: string;
   title?: string;
   subTitle?: string;
+  cityId?: string;
   cityName?: string;
   type?: number;
   address?: string;
+  tel?: string;
+}
+
+interface HotelUpsertDraft {
+  platformHotelId: string;
+  name: string;
+  cityId: string;
+  city: string;
+  address: string;
+  tel: string;
+  status: string;
+}
+
+interface RoomUpsertDraft {
+  platformHotelId: string;
+  platformRoomTypeId: string;
+  name: string;
+  bedType: string;
 }
 
 const TOKEN_KEY = 'skyhotel_auth_token';
@@ -66,6 +89,23 @@ const defaultDraft = (): StrategyDraft => ({
   breakfastCount: 0,
   guaranteeType: 0,
   cancelPolicyCal: ''
+});
+
+const defaultHotelUpsertDraft = (): HotelUpsertDraft => ({
+  platformHotelId: '',
+  name: '',
+  cityId: '',
+  city: '',
+  address: '',
+  tel: '',
+  status: 'ONLINE'
+});
+
+const defaultRoomUpsertDraft = (): RoomUpsertDraft => ({
+  platformHotelId: '',
+  platformRoomTypeId: '',
+  name: '',
+  bedType: ''
 });
 
 const safeJsonStringify = (value: unknown) => {
@@ -146,8 +186,14 @@ export const FeizhuProductCenter: React.FC = () => {
   const [atourResults, setAtourResults] = useState<AtourPlaceItem[]>([]);
   const [mappingSaving, setMappingSaving] = useState(false);
   const [hotelShid, setHotelShid] = useState('');
+  const [hotelUpsertSaving, setHotelUpsertSaving] = useState(false);
+  const [roomUpsertSaving, setRoomUpsertSaving] = useState(false);
+  const [hotelDeleteSaving, setHotelDeleteSaving] = useState(false);
+  const [roomDeleteSaving, setRoomDeleteSaving] = useState(false);
+  const [hotelUpsertDraft, setHotelUpsertDraft] = useState<HotelUpsertDraft>(defaultHotelUpsertDraft());
+  const [roomUpsertDraft, setRoomUpsertDraft] = useState<RoomUpsertDraft>(defaultRoomUpsertDraft());
 
-  const fetchWithAuth = async (url: string, options?: RequestInit) => {
+  const fetchWithAuth = useCallback(async (url: string, options?: RequestInit) => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
       throw new Error('登录已过期，请重新登录');
@@ -158,15 +204,23 @@ export const FeizhuProductCenter: React.FC = () => {
       headers.set('Content-Type', 'application/json');
     }
     const response = await fetch(url, { ...options, headers });
-    const data = await response.json().catch(() => ({}));
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    let data: any = {};
+    if (contentType.includes('application/json')) {
+      data = await response.json().catch(() => ({}));
+    } else {
+      const text = await response.text().catch(() => '');
+      data = { message: text ? text.slice(0, 200) : '' };
+    }
     if (!response.ok) {
       const prefix = data?.code ? `${data.code}: ` : '';
-      throw new Error(`${prefix}${data.message || '请求失败'}`);
+      const fallbackMessage = data?.message || `请求失败（HTTP ${response.status}）`;
+      throw new Error(`${prefix}${fallbackMessage}`);
     }
     return data;
-  };
+  }, []);
 
-  const loadTree = async () => {
+  const loadTree = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -177,11 +231,11 @@ export const FeizhuProductCenter: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchWithAuth]);
 
   useEffect(() => {
     loadTree();
-  }, []);
+  }, [loadTree]);
 
   const selectedHotel = useMemo(
     () => items.find((hotel) => hotel.platformHotelId === selectedHotelId) || null,
@@ -201,6 +255,19 @@ export const FeizhuProductCenter: React.FC = () => {
     setCollapsedHotels((prev) => prev.filter((it) => it !== hotelId));
     const hotel = items.find((it) => it.platformHotelId === hotelId);
     setHotelShid(String(hotel?.mapping?.shid || ''));
+    setHotelUpsertDraft((prev) => ({
+      ...prev,
+      platformHotelId: hotelId,
+      name: hotel ? getHotelDisplayName(hotel) : prev.name,
+      cityId: String(hotel?.cityId || '').trim(),
+      city: String(hotel?.city || '').trim(),
+      address: String(hotel?.address || '').trim(),
+      tel: String(hotel?.tel || '').trim()
+    }));
+    setRoomUpsertDraft((prev) => ({
+      ...prev,
+      platformHotelId: hotelId
+    }));
   };
 
   const handleSelectRoom = (hotelId: string, roomId: string) => {
@@ -223,6 +290,12 @@ export const FeizhuProductCenter: React.FC = () => {
     });
     setCollapsedHotels((prev) => prev.filter((it) => it !== hotelId));
     setCollapsedRooms((prev) => prev.filter((it) => it !== `${hotelId}::${roomId}`));
+    setRoomUpsertDraft((prev) => ({
+      ...prev,
+      platformHotelId: hotelId,
+      platformRoomTypeId: roomId,
+      name: room ? getRoomDisplayName(room) : prev.name
+    }));
   };
 
   const handleSelectStrategy = (hotelId: string, roomId: string, strategy: StrategyNode) => {
@@ -344,20 +417,39 @@ export const FeizhuProductCenter: React.FC = () => {
   const handleImportAtour = async (item: AtourPlaceItem) => {
     setError('');
     setNotice('');
+    const inferredChainId = String(item.chainId || '').trim() || (String(item.title || '').match(/\d{6,}/)?.[0] || '');
+    if (!inferredChainId) {
+      setError('无法识别亚朵酒店 chainId，请换一条记录再试');
+      return;
+    }
+
     try {
       await fetchWithAuth('/api/ota/product-center/import-atour', {
         method: 'POST',
         body: JSON.stringify({
           platform: 'FLIGGY',
           atour: {
-            chainId: item.chainId || '',
+            chainId: inferredChainId,
             chainName: item.chainName || '',
             title: item.title || '',
             subTitle: item.subTitle || '',
-            cityName: item.cityName || ''
+            cityId: item.cityId || '',
+            cityName: item.cityName || '',
+            address: item.address || '',
+            tel: item.tel || ''
           }
         })
       });
+      setHotelUpsertDraft((prev) => ({
+        ...prev,
+        platformHotelId: inferredChainId,
+        name: getAtourPlaceName(item),
+        cityId: String(item.cityId || '').trim(),
+        city: String(item.cityName || '').trim(),
+        address: String(item.address || '').trim(),
+        tel: String(item.tel || '').trim()
+      }));
+      setSelectedHotelId(inferredChainId);
       setNotice('导入成功');
       await loadTree();
     } catch (err) {
@@ -374,7 +466,7 @@ export const FeizhuProductCenter: React.FC = () => {
     setError('');
     setNotice('');
     try {
-      await fetchWithAuth('/api/ota/product-center/mappings/hotel-shid', {
+      const result = await fetchWithAuth('/api/ota/product-center/mappings/hotel-shid', {
         method: 'POST',
         body: JSON.stringify({
           platform: 'FLIGGY',
@@ -385,7 +477,14 @@ export const FeizhuProductCenter: React.FC = () => {
           internalHotelName: ''
         })
       });
-      setNotice('酒店 SHID 已保存');
+      const remotePushed = Boolean(result?.remotePushed);
+      const remoteError = result?.remoteError;
+      if (remotePushed) {
+        setNotice('酒店 SHID 已保存并推送飞猪成功');
+      } else {
+        const remoteMessage = String(remoteError?.message || '').trim();
+        setNotice(`酒店 SHID 已保存，本次飞猪推送未成功${remoteMessage ? `：${remoteMessage}` : ''}`);
+      }
       await loadTree();
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存酒店 SHID 失败');
@@ -431,6 +530,170 @@ export const FeizhuProductCenter: React.FC = () => {
       setError(err instanceof Error ? err.message : '重试发布失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpsertHotelInfo = async () => {
+    const platformHotelId = hotelUpsertDraft.platformHotelId.trim();
+    if (!platformHotelId) {
+      setError('请填写酒店 outer_id');
+      return;
+    }
+    if (!hotelUpsertDraft.name.trim()) {
+      setError('请填写酒店名称');
+      return;
+    }
+    if (!hotelUpsertDraft.tel.trim()) {
+      setError('请填写酒店联系电话 tel');
+      return;
+    }
+
+    setHotelUpsertSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      await fetchWithAuth('/api/ota/product-center/hotels/upsert', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform: 'FLIGGY',
+          product: {
+            platformHotelId,
+            outer_id: platformHotelId,
+            name: hotelUpsertDraft.name.trim(),
+            city: hotelUpsertDraft.cityId.trim() || hotelUpsertDraft.city.trim(),
+            cityId: hotelUpsertDraft.cityId.trim(),
+            cityName: hotelUpsertDraft.city.trim(),
+            address: hotelUpsertDraft.address.trim(),
+            tel: hotelUpsertDraft.tel.trim(),
+            status: hotelUpsertDraft.status.trim().toUpperCase() || 'ONLINE'
+          }
+        })
+      });
+      setNotice('酒店信息已提交飞猪并同步本地');
+      await loadTree();
+      setSelectedHotelId(platformHotelId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '酒店新增/编辑失败');
+    } finally {
+      setHotelUpsertSaving(false);
+    }
+  };
+
+  const handleUpsertRoomTypeInfo = async () => {
+    const platformHotelId = roomUpsertDraft.platformHotelId.trim() || selectedHotelId;
+    const platformRoomTypeId = roomUpsertDraft.platformRoomTypeId.trim();
+
+    if (!platformHotelId) {
+      setError('请先选择酒店或填写酒店 outer_id');
+      return;
+    }
+    if (!platformRoomTypeId) {
+      setError('请填写房型 outer_id');
+      return;
+    }
+    if (!roomUpsertDraft.name.trim()) {
+      setError('请填写房型名称');
+      return;
+    }
+
+    setRoomUpsertSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      await fetchWithAuth('/api/ota/product-center/room-types/upsert', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform: 'FLIGGY',
+          product: {
+            platformHotelId,
+            hotel_outer_id: platformHotelId,
+            platformRoomTypeId,
+            room_outer_id: platformRoomTypeId,
+            out_rid: platformRoomTypeId,
+            outer_id: platformRoomTypeId,
+            name: roomUpsertDraft.name.trim(),
+            bed_type: roomUpsertDraft.bedType.trim()
+          }
+        })
+      });
+      setNotice('房型信息已提交飞猪并同步本地');
+      await loadTree();
+      setSelectedHotelId(platformHotelId);
+      setSelectedRoomId(platformRoomTypeId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '房型新增/编辑失败');
+    } finally {
+      setRoomUpsertSaving(false);
+    }
+  };
+
+  const handleDeleteHotelInfo = async () => {
+    const platformHotelId = hotelUpsertDraft.platformHotelId.trim() || selectedHotelId;
+    if (!platformHotelId) {
+      setError('请先选择酒店或填写酒店 outer_id');
+      return;
+    }
+
+    setHotelDeleteSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      await fetchWithAuth('/api/ota/product-center/hotels/delete', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform: 'FLIGGY',
+          product: {
+            platformHotelId,
+            outer_id: platformHotelId
+          }
+        })
+      });
+      setNotice('酒店删除已执行');
+      setSelectedHotelId('');
+      setSelectedRoomId('');
+      setSelectedStrategyKey('');
+      await loadTree();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除酒店失败');
+    } finally {
+      setHotelDeleteSaving(false);
+    }
+  };
+
+  const handleDeleteRoomTypeInfo = async () => {
+    const platformHotelId = roomUpsertDraft.platformHotelId.trim() || selectedHotelId;
+    const platformRoomTypeId = roomUpsertDraft.platformRoomTypeId.trim() || selectedRoomId;
+    if (!platformHotelId || !platformRoomTypeId) {
+      setError('请先选择房型或填写酒店/房型 outer_id');
+      return;
+    }
+
+    setRoomDeleteSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      await fetchWithAuth('/api/ota/product-center/room-types/delete', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform: 'FLIGGY',
+          product: {
+            platformHotelId,
+            platformRoomTypeId,
+            hotel_outer_id: platformHotelId,
+            room_outer_id: platformRoomTypeId,
+            out_rid: platformRoomTypeId,
+            outer_id: platformRoomTypeId
+          }
+        })
+      });
+      setNotice('房型删除已执行');
+      setSelectedRoomId('');
+      setSelectedStrategyKey('');
+      await loadTree();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除房型失败');
+    } finally {
+      setRoomDeleteSaving(false);
     }
   };
 
@@ -540,6 +803,123 @@ export const FeizhuProductCenter: React.FC = () => {
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="text-sm font-semibold text-gray-900">飞猪酒店 / 房型新增编辑</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded border border-gray-200 bg-white p-3">
+                <div className="text-xs font-semibold text-gray-700">酒店信息</div>
+                <div className="mt-2 space-y-2">
+                  <input
+                    value={hotelUpsertDraft.platformHotelId}
+                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, platformHotelId: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="酒店 outer_id"
+                  />
+                  <input
+                    value={hotelUpsertDraft.name}
+                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="酒店名称"
+                  />
+                  <input
+                    value={hotelUpsertDraft.cityId}
+                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, cityId: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="城市编码 cityId(优先)"
+                  />
+                  <input
+                    value={hotelUpsertDraft.city}
+                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, city: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="城市名称(自动匹配失败时可手填)"
+                  />
+                  <input
+                    value={hotelUpsertDraft.address}
+                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, address: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="地址(可选)"
+                  />
+                  <input
+                    value={hotelUpsertDraft.tel}
+                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, tel: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="联系电话 tel(必填)"
+                  />
+                  <select
+                    value={hotelUpsertDraft.status}
+                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, status: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                  >
+                    <option value="ONLINE">ONLINE</option>
+                    <option value="OFFLINE">OFFLINE</option>
+                  </select>
+                  <button
+                    type="button"
+                    disabled={hotelUpsertSaving}
+                    onClick={handleUpsertHotelInfo}
+                    className="rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {hotelUpsertSaving ? '提交中...' : '提交酒店新增/编辑'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={hotelDeleteSaving}
+                    onClick={handleDeleteHotelInfo}
+                    className="rounded border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {hotelDeleteSaving ? '删除中...' : '删除酒店'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded border border-gray-200 bg-white p-3">
+                <div className="text-xs font-semibold text-gray-700">房型信息</div>
+                <div className="mt-2 space-y-2">
+                  <input
+                    value={roomUpsertDraft.platformHotelId}
+                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, platformHotelId: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="所属酒店 outer_id"
+                  />
+                  <input
+                    value={roomUpsertDraft.platformRoomTypeId}
+                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, platformRoomTypeId: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="房型 outer_id (建议 ATOUR{chainId}_{roomTypeId})"
+                  />
+                  <input
+                    value={roomUpsertDraft.name}
+                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="房型名称"
+                  />
+                  <input
+                    value={roomUpsertDraft.bedType}
+                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, bedType: e.target.value }))}
+                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                    placeholder="床型(可选)"
+                  />
+                  <button
+                    type="button"
+                    disabled={roomUpsertSaving}
+                    onClick={handleUpsertRoomTypeInfo}
+                    className="rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {roomUpsertSaving ? '提交中...' : '提交房型新增/编辑'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={roomDeleteSaving}
+                    onClick={handleDeleteRoomTypeInfo}
+                    className="rounded border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {roomDeleteSaving ? '删除中...' : '删除房型'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
             <div className="text-sm font-semibold text-gray-900">亚朵酒店导入</div>
             <div className="mt-2 flex gap-2">

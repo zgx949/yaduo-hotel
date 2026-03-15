@@ -91,6 +91,54 @@ otaProductCenterRoutes.post("/mappings/room-srid", async (req, res) => {
   }
 });
 
+otaProductCenterRoutes.post("/hotels/upsert", async (req, res) => {
+  try {
+    const result = await otaIntegrationService.upsertHotelInfo({
+      platform: req.body?.platform,
+      product: req.body?.product || req.body
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    return respondServiceError(res, err, "upsert hotel info failed");
+  }
+});
+
+otaProductCenterRoutes.post("/room-types/upsert", async (req, res) => {
+  try {
+    const result = await otaIntegrationService.upsertRoomTypeInfo({
+      platform: req.body?.platform,
+      product: req.body?.product || req.body
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    return respondServiceError(res, err, "upsert room type info failed");
+  }
+});
+
+otaProductCenterRoutes.post("/hotels/delete", async (req, res) => {
+  try {
+    const result = await otaIntegrationService.deleteHotelProduct({
+      platform: req.body?.platform,
+      product: req.body?.product || req.body
+    });
+    return res.status(200).json(result);
+  } catch (err) {
+    return respondServiceError(res, err, "delete hotel product failed");
+  }
+});
+
+otaProductCenterRoutes.post("/room-types/delete", async (req, res) => {
+  try {
+    const result = await otaIntegrationService.deleteRoomTypeProduct({
+      platform: req.body?.platform,
+      product: req.body?.product || req.body
+    });
+    return res.status(200).json(result);
+  } catch (err) {
+    return respondServiceError(res, err, "delete room type product failed");
+  }
+});
+
 otaProductCenterRoutes.post("/strategies/save-and-publish", async (req, res) => {
   try {
     const result = await otaIntegrationService.saveStrategyAndAutoPublish({

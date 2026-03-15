@@ -138,11 +138,17 @@ const normalizeHotel = (item = {}) => {
   const hotelName = String(
     item.name || item.hotel_name || item.hotelName || basic.name || basic.hotel_name || basic.hotelName || platformHotelId
   ).trim();
+  const cityId = String(item.city_id || item.cityId || basic.city_id || basic.cityId || "").trim();
   const city = String(item.city || item.city_name || item.cityName || basic.city || basic.city_name || basic.cityName || "").trim();
+  const address = String(item.address || basic.address || "").trim();
+  const tel = String(item.tel || item.phone || item.telephone || basic.tel || basic.phone || basic.telephone || "").trim();
   return {
     platformHotelId,
     hotelName,
+    cityId,
     city,
+    address,
+    tel,
     status: normalizeStatus(item.status || item.state || "ONLINE"),
     rawPayload: item
   };
@@ -490,6 +496,7 @@ export const taobaoTopAdapter = {
       name: body.name || body.hotelName || undefined,
       city: body.city || undefined,
       address: body.address || undefined,
+      tel: body.tel || body.phone || body.telephone || undefined,
       status: body.status || undefined,
       vendor: body.vendor || undefined
     };
@@ -841,7 +848,10 @@ export const taobaoTopAdapter = {
       hotels: Array.from(hotelMap.values()).map((it) => ({
         platformHotelId: it.platformHotelId,
         hotelName: it.hotelName,
+        cityId: it.cityId || "",
         city: it.city,
+        address: it.address || "",
+        tel: it.tel || "",
         status: it.status,
         rooms: Array.isArray(it.rooms) ? it.rooms : [],
         rawPayload: it.rawPayload || {}

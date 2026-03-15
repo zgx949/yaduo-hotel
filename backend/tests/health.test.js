@@ -16,3 +16,16 @@ test("GET /api/health returns service health payload", async () => {
   assert.equal(typeof response.body.time, "string");
   assert.equal(Number.isNaN(Date.parse(response.body.time)), false);
 });
+
+test("GET /api/health/tasks returns worker and queue health snapshot", async () => {
+  const { app } = await import("../src/app.js");
+
+  const response = await request(app).get("/api/health/tasks");
+
+  assert.equal([200, 503].includes(response.status), true);
+  assert.equal(typeof response.body?.status, "string");
+  assert.equal(typeof response.body?.time, "string");
+  assert.equal(typeof response.body?.tasks?.worker?.ready, "boolean");
+  assert.equal(typeof response.body?.tasks?.queues?.totals?.waiting, "number");
+  assert.equal(typeof response.body?.tasks?.selfHeal?.lastResult, "string");
+});

@@ -5,8 +5,7 @@ import { getInternalRequestContext } from "./internal-resource.service.js";
 import { runCouponScanTask } from "./atour-maintenance.service.js";
 import { fetchWithProxy } from "./proxied-fetch.service.js";
 
-const ALIPAY_APP_ID = "2021003121605466";
-const ALIPAY_APP_BRIDGE_ID = "20000067";
+const ALIPAY_URL_BRIDGE_APP_ID = "20000067";
 const NEW_GUEST_API_BASE = "https://miniapp.yaduo.com/atourlife";
 const ENC_API_URL = "http://81.68.144.211:5002/yaduoapi/get_enc_str";
 
@@ -46,7 +45,34 @@ const calcNights = (checkInDate, checkOutDate) => {
   return Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)));
 };
 
-const resolveBoundSubmitAccount = async ({ order, item }) => {
+const isSyntheticAtourOrderId = (value) => {
+  const text = String(value || "").trim();
+  return /^AT-\d{13}-[A-Za-z0-9]{4}$/.test(text);
+};
+
+const markOrderItemSubmitFailedSafely = async (orderItemId, options = {}) => {
+  const latest = await prismaStore.getOrderItemById(orderItemId);
+  if (!latest) {
+    return { updated: false, latest: null };
+  }
+  if (
+    latest.status === "CANCELLED"
+    || latest.atourOrderId
+    || ["ORDERED", "DONE"].includes(String(latest.executionStatus || ""))
+  ) {
+    return { updated: false, latest };
+  }
+
+  await prismaStore.updateOrderItem(orderItemId, {
+    status: "FAILED",
+    executionStatus: "FAILED",
+    ...(options.clearBinding ? { accountId: null, accountPhone: null } : {})
+  });
+  const refreshed = await prismaStore.getOrderItemById(orderItemId);
+  return { updated: true, latest: refreshed || latest };
+};
+
+const resolveBoundSubmitAccount = async ({ order, item, preferredAccountId, excludeAccountIds = [] }) => {
   const bookingChannel = parseBookingTier(item?.bookingTier || undefined);
   const nights = calcNights(item?.checkInDate, item?.checkOutDate);
   const needSilverNewUser = isSilverRequiredNewUserRate(item);
@@ -60,7 +86,8 @@ const resolveBoundSubmitAccount = async ({ order, item }) => {
   const ctx = await getInternalRequestContext({
     tier: bookingChannel.tier,
     corporateName: bookingChannel.corporateName,
-    preferredAccountId: item?.accountId || undefined,
+    preferredAccountId: preferredAccountId || item?.accountId || undefined,
+    excludeAccountIds,
     minDailyOrdersLeft: Math.max(1, nights),
     minCouponWallet,
     candidateLimit: 120,
@@ -909,7 +936,7 @@ const buildAddOrderPayloadFromItem = async ({
   };
 };
 
-export const runAtourOrderWorkflow = async ({ token, proxy, calculatePayload }) => {
+export const runAtourOrderWorkflow = async ({ token, proxy, calculatePayload, includePayWorkflow = true }) => {
   const calculateResult = await calculateOrderV2({ token, proxy, payload: calculatePayload });
   const createPayload = calculatePayload.createPayload || {};
   const couponCodes = await buildCouponsForAddOrder({
@@ -936,23 +963,27 @@ export const runAtourOrderWorkflow = async ({ token, proxy, calculatePayload }) 
     ...(createPayload.overrideAddPayload || {})
   };
   const addResult = await addAppOrder({ token, proxy, payload: addPayload });
-  const payOrderPayload = {
-    chainId: String(calculatePayload.chainId),
-    source: "order",
-    orderNo: addResult.orderId,
-    busType: "room_order",
-    ...(createPayload.overridePayOrderPayload || {})
-  };
-  const payOrderResult = await createPayOrder({ token, proxy, payload: payOrderPayload });
-  const cashierPayload = {
-    appFlag: "1",
-    reqSeqId: String(Date.now()),
-    appVersion: "1.0.3",
-    token: payOrderResult.token,
-    payTermType: "APP",
-    ...(createPayload.overrideCashierPayload || {})
-  };
-  const cashierInformation = await getCashierInformation({ token, proxy, payload: cashierPayload });
+  let payOrderResult = null;
+  let cashierInformation = null;
+  if (includePayWorkflow) {
+    const payOrderPayload = {
+      chainId: String(calculatePayload.chainId),
+      source: "order",
+      orderNo: addResult.orderId,
+      busType: "room_order",
+      ...(createPayload.overridePayOrderPayload || {})
+    };
+    payOrderResult = await createPayOrder({ token, proxy, payload: payOrderPayload });
+    const cashierPayload = {
+      appFlag: "1",
+      reqSeqId: String(Date.now()),
+      appVersion: "1.0.3",
+      token: payOrderResult.token,
+      payTermType: "APP",
+      ...(createPayload.overrideCashierPayload || {})
+    };
+    cashierInformation = await getCashierInformation({ token, proxy, payload: cashierPayload });
+  }
 
   return {
     calculateResult,
@@ -1018,68 +1049,121 @@ export const submitOrderItemToAtour = async ({ orderItemId }) => {
     customerPhone: order.contactPhone
   });
 
-  const binding = await resolveBoundSubmitAccount({ order, item });
-  const boundToken = binding.token;
-  const proxy = binding.proxy;
+  const submitAttempts = 3;
+  const attemptedAccountIds = new Set();
+  let currentItem = item;
+  let lastError = null;
 
-  const bookingChannel = parseBookingTier(item.bookingTier || undefined);
-  const accountInfo = await prismaStore.getPoolAccount(binding.accountId).catch(() => null);
-  const accountPoints = Math.max(0, Number(accountInfo?.points) || 0);
+  for (let attempt = 1; attempt <= submitAttempts; attempt += 1) {
+    const preferredAccountId = attempt === 1 ? (currentItem?.accountId || null) : null;
+    try {
+      const binding = await resolveBoundSubmitAccount({
+        order,
+        item: currentItem,
+        preferredAccountId,
+        excludeAccountIds: Array.from(attemptedAccountIds)
+      });
+      attemptedAccountIds.add(String(binding.accountId));
 
-  await runCouponScanTask({
-    payload: { accountId: binding.accountId, chainId: order.chainId },
-    proxy
-  }).catch(() => undefined);
+      const boundToken = binding.token;
+      const proxy = binding.proxy;
+      const bookingChannel = parseBookingTier(currentItem?.bookingTier || undefined);
 
-  if (bookingChannel.tier === "NEW_USER") {
-    await runNewGuestIdentityUpdate({
-      token: boundToken,
-      proxy,
-      chainId: order.chainId,
-      realName: order.customerName || "刘三"
-    });
-  }
+      const accountInfo = await prismaStore.getPoolAccount(binding.accountId).catch(() => null);
+      const accountPoints = Math.max(0, Number(accountInfo?.points) || 0);
 
-  const workflow = await runAtourOrderWorkflow({
-    token: boundToken,
-    proxy,
-    calculatePayload: {
-      ...calculatePayload,
-      createPayload: {
-        customerName: order.customerName,
-        customerPhone: binding.accountPhone || order.contactPhone,
-        accountPoints,
-        orderItem: {
-          remark: item.remark || order.remark || "",
-          breakfastCount: Number(item.breakfastCount) || 0,
-          roomLevelUpCount: Number(item.roomLevelUpCount) || 0,
-          delayedCheckOutCount: Number(item.delayedCheckOutCount) || 0,
-          shooseCount: Number(item.shooseCount) || 0
+      await runCouponScanTask({
+        payload: { accountId: binding.accountId, chainId: order.chainId },
+        proxy
+      }).catch(() => undefined);
+
+      if (bookingChannel.tier === "NEW_USER") {
+        await runNewGuestIdentityUpdate({
+          token: boundToken,
+          proxy,
+          chainId: order.chainId,
+          realName: order.customerName || "刘三"
+        });
+      }
+
+      const workflow = await runAtourOrderWorkflow({
+        token: boundToken,
+        proxy,
+        includePayWorkflow: false,
+        calculatePayload: {
+          ...calculatePayload,
+          createPayload: {
+            customerName: order.customerName,
+            customerPhone: binding.accountPhone || order.contactPhone,
+            accountPoints,
+            orderItem: {
+              remark: currentItem?.remark || order.remark || "",
+              breakfastCount: Number(currentItem?.breakfastCount) || 0,
+              roomLevelUpCount: Number(currentItem?.roomLevelUpCount) || 0,
+              delayedCheckOutCount: Number(currentItem?.delayedCheckOutCount) || 0,
+              shooseCount: Number(currentItem?.shooseCount) || 0
+            }
+          }
         }
+      });
+
+      await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
+        atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
+        accountId: binding.accountId,
+        accountPhone: binding.accountPhone,
+        status: "CONFIRMED",
+        executionStatus: "ORDERED"
+      });
+      await prismaStore.refreshOrderStatus(item.groupId);
+
+      await runCouponScanTask({
+        payload: { accountId: binding.accountId, chainId: order.chainId },
+        proxy
+      }).catch(() => undefined);
+
+      return {
+        tokenSource: "bound-account",
+        tokenAccountId: binding.accountId,
+        proxyId: proxy?.id || null,
+        ...workflow
+      };
+    } catch (err) {
+      lastError = err;
+      const latest = await prismaStore.getOrderItemById(orderItemId);
+      if (latest?.status === "CANCELLED") {
+        return {
+          skipped: true,
+          alreadyProcessed: true,
+          atourOrderId: latest.atourOrderId || null,
+          reason: "order-item-cancelled"
+        };
+      }
+      if (latest?.atourOrderId || ["ORDERED", "DONE"].includes(String(latest?.executionStatus || ""))) {
+        throw err;
+      }
+
+      await markOrderItemSubmitFailedSafely(orderItemId, { clearBinding: true }).catch(() => undefined);
+
+      currentItem = await prismaStore.getOrderItemById(orderItemId) || currentItem;
+      if (attempt >= submitAttempts) {
+        break;
       }
     }
-  });
+  }
 
-  await prismaStore.applyOrderItemSubmitSuccess(orderItemId, {
-    atourOrderId: workflow.addResult.orderId ? String(workflow.addResult.orderId) : null,
-    accountId: binding.accountId,
-    accountPhone: binding.accountPhone,
-    status: "CONFIRMED",
-    executionStatus: "ORDERED"
-  });
-  await prismaStore.refreshOrderStatus(item.groupId);
-
-  await runCouponScanTask({
-    payload: { accountId: binding.accountId, chainId: order.chainId },
-    proxy
-  }).catch(() => undefined);
-
-  return {
-    tokenSource: "bound-account",
-    tokenAccountId: binding.accountId,
-    proxyId: proxy?.id || null,
-    ...workflow
-  };
+  const finalState = await markOrderItemSubmitFailedSafely(orderItemId, { clearBinding: false }).catch(() => ({
+    updated: false,
+    latest: null
+  }));
+  if (finalState?.latest?.status === "CANCELLED") {
+    return {
+      skipped: true,
+      alreadyProcessed: true,
+      atourOrderId: finalState.latest.atourOrderId || null,
+      reason: "order-item-cancelled"
+    };
+  }
+  throw new Error(`下单失败，已自动尝试更换账号 ${attemptedAccountIds.size} 次：${lastError?.message || "unknown"}`);
 };
 
 const normalizePaymentLinkRaw = (value) => {
@@ -1101,47 +1185,54 @@ const isValidAlipayPaymentLink = (value) => {
   if (!link) {
     return false;
   }
-  if (!link.startsWith("paalipays://platformapi/startapp?")) {
+  if (!link.startsWith("alipays://platformapi/startapp?")) {
     return false;
   }
-  const appIdMatched = /(?:\?|&)appId=2021003121605466(?:&|$)/.test(link);
-  const schemaMatched = /(?:\?|&)thirdPartSchema=atourlifeALiPay:\/\/(?:&|$)/.test(link);
-  const pageMatched = /(?:\?|&)page=pages\/cashier\/cashier\?p=[^&]+&s=app(?:&|$)/.test(link);
-  return appIdMatched && schemaMatched && pageMatched;
+  return true;
 };
 
-const buildAlipayDeepLink = ({ paymentOrderNo, payOrgMerId }) => {
-  const page = `pages/cashier/cashier?p=${encodeURIComponent(String(paymentOrderNo || ""))}&s=app`;
-  const params = [
-    `appId=${ALIPAY_APP_ID}`,
-    "thirdPartSchema=atourlifeALiPay://",
-    `page=${page}`,
-    "bank_switch=Y"
-  ];
-  if (payOrgMerId) {
-    params.push(`payOrgMerId=${encodeURIComponent(String(payOrgMerId))}`);
+const buildAlipayPayInfoLink = (payInfo) => {
+  const raw = normalizePaymentLinkRaw(payInfo);
+  if (!raw) {
+    return "";
   }
-  return `paalipays://platformapi/startapp?${params.join("&")}`;
+  if (raw.startsWith("alipays://")) {
+    return raw;
+  }
+  return raw;
 };
 
-const pickValidPaymentLink = ({ payInfo, paymentOrderNo, payOrgMerId }) => {
-  const payInfoLink = normalizePaymentLinkRaw(payInfo);
+const pickValidPaymentLink = ({ payInfo }) => {
+  const payInfoLink = buildAlipayPayInfoLink(payInfo);
   if (isValidAlipayPaymentLink(payInfoLink)) {
     return {
       paymentLink: payInfoLink,
       linkSource: "payInfo"
     };
   }
-  return {
-    paymentLink: buildAlipayDeepLink({ paymentOrderNo, payOrgMerId }),
-    linkSource: payInfoLink ? "fallback.deep-link.invalid-payInfo" : "fallback.deep-link.empty-payInfo"
-  };
+  return null;
 };
 
 export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
-  const item = await prismaStore.getOrderItemById(orderItemId);
+  let item = await prismaStore.getOrderItemById(orderItemId);
   if (!item) {
     throw new Error("order item not found");
+  }
+  if (isSyntheticAtourOrderId(item.atourOrderId)) {
+    await prismaStore.updateOrderItem(item.id, {
+      atourOrderId: null,
+      status: "FAILED",
+      executionStatus: "FAILED"
+    });
+    await prismaStore.refreshOrderStatus(item.groupId);
+    const resubmitted = await submitOrderItemToAtour({ orderItemId: item.id });
+    if (resubmitted?.inProgress) {
+      throw new Error("检测到历史假单号，已自动重提下单，请稍后重试支付链接");
+    }
+    item = await prismaStore.getOrderItemById(orderItemId);
+    if (!item?.atourOrderId) {
+      throw new Error("检测到历史假单号，已自动重提下单，请稍后重试支付链接");
+    }
   }
   if (!item.atourOrderId) {
     throw new Error("order item has no atour order id");
@@ -1171,85 +1262,100 @@ export const generateOrderItemPaymentLink = async ({ orderItemId }) => {
   const maxAttempts = 3;
   let lastAttempt = null;
 
+  let lastAttemptError = null;
+
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const payOrderResult = await createPayOrder({
-      token: boundToken,
-      proxy,
-      payload: {
-        chainId: String(order.chainId),
-        source: "order",
-        orderNo: item.atourOrderId,
-        busType: "room_order"
-      }
-    });
-
-    const cashierInformation = await getCashierInformation({
-      token: boundToken,
-      proxy,
-      payload: {
-        appFlag: "1",
-        reqSeqId: String(Date.now()),
-        appVersion: "1.0.3",
-        token: String(payOrderResult.token || ""),
-        payTermType: "APP"
-      }
-    });
-
-    const merConfigList = Array.isArray(cashierInformation.merConfigInfoList)
-      ? cashierInformation.merConfigInfoList
-      : [];
-    const alipayConfig = merConfigList.find((it) => String(it?.payType || "") === "A") || merConfigList[0] || null;
-
-    const paymentOrderNo = String(
-      cashierInformation.paymentOrderNo ||
-      cashierInformation.payOrderNo ||
-      payOrderResult.token ||
-      cashierInformation.busiOrderId ||
-      item.atourOrderId
-    );
-    const payOrgMerId = alipayConfig?.payOrgMerId ? String(alipayConfig.payOrgMerId) : "";
-    const channelType = alipayConfig?.channelType ? String(alipayConfig.channelType) : "I004";
-
-    let payData = null;
-    if (payOrgMerId && payOrderResult.token) {
-      payData = await payByCashier({
+    try {
+      const payOrderResult = await createPayOrder({
         token: boundToken,
         proxy,
         payload: {
-          channelType,
-          payType: "A",
-          isPreAtourAsset: String(cashierInformation.isPreAtourAsset || "N"),
-          partner: payOrgMerId,
-          reqSeqId: String(Date.now()),
-          appId: "",
-          token: String(payOrderResult.token),
-          termType: "APP"
+          chainId: String(order.chainId),
+          source: "order",
+          orderNo: item.atourOrderId,
+          busType: "room_order"
         }
       });
-    }
 
-    const payInfo = payData?.payInfo ? String(payData.payInfo) : "";
-    const picked = pickValidPaymentLink({ payInfo, paymentOrderNo, payOrgMerId });
-    const attemptResult = {
-      paymentLink: picked.paymentLink,
-      paymentOrderNo,
-      payOrgMerId,
-      channelType,
-      payInfo,
-      linkSource: picked.linkSource,
-      payOrderResult,
-      cashierInformation,
-      payData
-    };
-    lastAttempt = attemptResult;
+      const cashierInformation = await getCashierInformation({
+        token: boundToken,
+        proxy,
+        payload: {
+          appFlag: "1",
+          reqSeqId: String(Date.now()),
+          appVersion: "1.0.3",
+          token: String(payOrderResult.token || ""),
+          payTermType: "APP"
+        }
+      });
 
-    if (isValidAlipayPaymentLink(attemptResult.paymentLink)) {
-      break;
+      const merConfigList = Array.isArray(cashierInformation.merConfigInfoList)
+        ? cashierInformation.merConfigInfoList
+        : [];
+      const alipayConfig = merConfigList.find((it) => String(it?.payType || "") === "A") || merConfigList[0] || null;
+
+      const paymentOrderNo = String(
+        cashierInformation.paymentOrderNo ||
+        cashierInformation.payOrderNo ||
+        payOrderResult.token ||
+        cashierInformation.busiOrderId ||
+        item.atourOrderId
+      );
+      const payOrgMerId = alipayConfig?.payOrgMerId ? String(alipayConfig.payOrgMerId) : "";
+      const channelType = alipayConfig?.channelType ? String(alipayConfig.channelType) : "I004";
+
+      let payData = null;
+      if (payOrgMerId && payOrderResult.token) {
+        payData = await payByCashier({
+          token: boundToken,
+          proxy,
+          payload: {
+            channelType,
+            payType: "A",
+            isPreAtourAsset: String(cashierInformation.isPreAtourAsset || "N"),
+            partner: payOrgMerId,
+            reqSeqId: String(Date.now()),
+            appId: "",
+            token: String(payOrderResult.token),
+            termType: "APP"
+          }
+        });
+      }
+
+      const payInfo = payData?.payInfo ? String(payData.payInfo) : "";
+      const picked = pickValidPaymentLink({ payInfo });
+      if (!picked) {
+        if (attempt >= maxAttempts) {
+          lastAttemptError = new Error("payInfo 缺失或格式无效，无法生成 alipay:// 支付链接");
+        }
+        continue;
+      }
+      const attemptResult = {
+        paymentLink: picked.paymentLink,
+        paymentOrderNo,
+        payOrgMerId,
+        channelType,
+        payInfo,
+        linkSource: picked.linkSource,
+        payOrderResult,
+        cashierInformation,
+        payData
+      };
+      lastAttempt = attemptResult;
+
+      if (isValidAlipayPaymentLink(attemptResult.paymentLink)) {
+        break;
+      }
+    } catch (err) {
+      lastAttemptError = err;
+      if (attempt >= maxAttempts) {
+        break;
+      }
     }
   }
 
   if (!lastAttempt) {
-    throw new Error("生成支付链接失败");
+    throw new Error(`生成支付链接失败：${lastAttemptError?.message || "unknown"}`);
   }
 
   return {

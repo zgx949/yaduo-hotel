@@ -296,7 +296,10 @@ model OtaHotel {
   platform        String
   platformHotelId String
   hotelName       String
+  cityId          String?
   city            String?
+  address         String?
+  tel             String?
   status          String
   source          String      @default("SYNC")
   rawPayload      Json?

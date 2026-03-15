@@ -5,6 +5,7 @@ import {
   encryptPoolToken,
   resolvePemFromEnvValue
 } from "../services/token-crypto.service.js";
+import { taskPlatform } from "../tasks/task-platform.js";
 
 export const healthRoutes = Router();
 const isDevelopment = env.nodeEnv === "development";
@@ -23,6 +24,12 @@ healthRoutes.get("/health", (req, res) => {
     service: "skyhotel-agent-pro-backend",
     time: new Date().toISOString()
   });
+});
+
+healthRoutes.get("/health/tasks", async (req, res) => {
+  const report = await taskPlatform.getHealthSnapshot();
+  const statusCode = report.status === "down" ? 503 : 200;
+  return res.status(statusCode).json(report);
 });
 
 healthRoutes.get("/health/keys", (req, res) => {

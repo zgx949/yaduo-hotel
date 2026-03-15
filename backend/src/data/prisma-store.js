@@ -1300,9 +1300,9 @@ export const prismaStore = {
         accountId: payload.accountId || null,
         accountPhone: payload.accountPhone || null,
         amount: Number(payload.price) || 0,
-        atourOrderId: payload.atourOrderId || null,
-        status: payload.status || (submitNow ? "PROCESSING" : "WAIT_CONFIRM"),
-        paymentStatus: payload.paymentStatus || "UNPAID",
+        atourOrderId: null,
+        status: submitNow ? "PROCESSING" : "WAIT_CONFIRM",
+        paymentStatus: "UNPAID",
         executionStatus: submitNow ? "QUEUED" : "PLAN_PENDING"
       }];
 
@@ -1320,8 +1320,8 @@ export const prismaStore = {
         totalNights: nights,
         totalAmount,
         currency: payload.currency || "CNY",
-        status: payload.status || (submitNow ? "PROCESSING" : "WAIT_CONFIRM"),
-        paymentStatus: payload.paymentStatus || "UNPAID",
+        status: submitNow ? "PROCESSING" : "WAIT_CONFIRM",
+        paymentStatus: "UNPAID",
         creatorId: creator.id,
         creatorName: creator.name,
         remark: payload.remark ? String(payload.remark) : null,
@@ -1329,7 +1329,7 @@ export const prismaStore = {
           create: splitItems.map((it, idx) => ({
             checkInDate: it.checkInDate ? new Date(it.checkInDate) : checkInDate,
             checkOutDate: it.checkOutDate ? new Date(it.checkOutDate) : checkOutDate,
-            atourOrderId: it.atourOrderId ? String(it.atourOrderId) : null,
+            atourOrderId: null,
             bookingTier: String(it.bookingTier || payload.bookingTier || "NORMAL"),
             roomTypeId: it.roomTypeId ? String(it.roomTypeId) : null,
             rateCode: it.rateCode ? String(it.rateCode) : null,
@@ -1347,9 +1347,9 @@ export const prismaStore = {
             accountId: it.accountId || null,
             accountPhone: it.accountPhone ? String(it.accountPhone) : null,
             amount: Number(it.amount) || 0,
-            status: String(it.status || (submitNow ? "PROCESSING" : "WAIT_CONFIRM")),
-            paymentStatus: String(it.paymentStatus || "UNPAID"),
-            executionStatus: String(it.executionStatus || (submitNow ? "QUEUED" : "PLAN_PENDING")),
+            status: submitNow ? "PROCESSING" : "WAIT_CONFIRM",
+            paymentStatus: "UNPAID",
+            executionStatus: submitNow ? "QUEUED" : "PLAN_PENDING",
             splitIndex: idx + 1,
             splitTotal: splitItems.length
           }))
@@ -1815,9 +1815,11 @@ export const prismaStore = {
     if (latestTask) {
       patch.executionStatus = taskStateToExecution(latestTask.state);
       if (latestTask.state === "completed" && item.status !== "CANCELLED") {
-        patch.status = "CONFIRMED";
-        if (!item.atourOrderId) {
-          patch.atourOrderId = `AT-${Date.now()}-${itemId.slice(-4)}`;
+        if (item.atourOrderId) {
+          patch.status = "CONFIRMED";
+        } else {
+          patch.status = "FAILED";
+          patch.executionStatus = "FAILED";
         }
       }
       if (latestTask.state === "failed") {

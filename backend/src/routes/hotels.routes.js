@@ -125,6 +125,7 @@ const normalizePlaces = (raw) => {
     id: `${item.type || "x"}-${item.chainId || item.poiId || item.title || randomUUID()}`,
     type: Number(item.type ?? -1),
     chainId: item.chainId ? String(item.chainId) : null,
+    cityId: item.cityId !== undefined && item.cityId !== null ? String(item.cityId) : "",
     title: String(item.title || ""),
     subTitle: String(item.subTitle || ""),
     cityName: String(item.cityName || ""),

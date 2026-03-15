@@ -366,10 +366,17 @@ const enqueueOrderItemTask = async (orderItem) => {
       state: "failed",
       error: err.message || "Task failed"
     });
-    await prismaStore.updateOrderItem(orderItem.id, {
-      status: "FAILED",
-      executionStatus: "FAILED"
-    });
+    const latest = await prismaStore.getOrderItemById(orderItem.id);
+    const safeToMarkFailed = latest
+      && latest.status !== "CANCELLED"
+      && !["ORDERED", "DONE"].includes(String(latest.executionStatus || ""))
+      && !latest.atourOrderId;
+    if (safeToMarkFailed) {
+      await prismaStore.updateOrderItem(orderItem.id, {
+        status: "FAILED",
+        executionStatus: "FAILED"
+      });
+    }
     await prismaStore.refreshOrderStatus(orderItem.groupId);
   });
   return fallbackTask;
@@ -1131,15 +1138,8 @@ ordersRoutes.get("/items/:itemId/payment-link", requireAuth, async (req, res) =>
     if (env.nodeEnv !== "production") {
       console.warn("generate payment link failed, fallback to stored link:", err?.message || err);
     }
-    const paymentOrderNo = item.atourOrderId || item.id;
-    const page = `pages/cashier/cashier?p=${encodeURIComponent(paymentOrderNo)}&s=app`;
-    const fallbackLink = `paalipays://platformapi/startapp?appId=2021003121605466&thirdPartSchema=atourlifeALiPay://&page=${page}&bank_switch=Y`;
-    return res.json({
-      paymentLink: fallbackLink,
-      paymentOrderNo,
-      payOrgMerId: "",
-      amount: Number(item.amount) || 0,
-      linkSource: "route-fallback"
+    return res.status(502).json({
+      message: "支付链接生成失败：仅支持 alipays://platformapi/startapp?appId=20000067&url=... 格式，请重试"
     });
   }
 });
