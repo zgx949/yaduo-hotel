@@ -76,6 +76,7 @@ interface RoomUpsertDraft {
   platformRoomTypeId: string;
   name: string;
   bedType: string;
+  srid: string;
 }
 
 const TOKEN_KEY = 'skyhotel_auth_token';
@@ -105,7 +106,8 @@ const defaultRoomUpsertDraft = (): RoomUpsertDraft => ({
   platformHotelId: '',
   platformRoomTypeId: '',
   name: '',
-  bedType: ''
+  bedType: '',
+  srid: ''
 });
 
 const safeJsonStringify = (value: unknown) => {
@@ -294,7 +296,8 @@ export const FeizhuProductCenter: React.FC = () => {
       ...prev,
       platformHotelId: hotelId,
       platformRoomTypeId: roomId,
-      name: room ? getRoomDisplayName(room) : prev.name
+      name: room ? getRoomDisplayName(room) : prev.name,
+      srid: String(first?.srid || prev.srid || '').trim()
     }));
   };
 
@@ -595,6 +598,10 @@ export const FeizhuProductCenter: React.FC = () => {
       setError('请填写房型名称');
       return;
     }
+    if (!roomUpsertDraft.srid.trim()) {
+      setError('请填写房型 SRID');
+      return;
+    }
 
     setRoomUpsertSaving(true);
     setError('');
@@ -612,7 +619,8 @@ export const FeizhuProductCenter: React.FC = () => {
             out_rid: platformRoomTypeId,
             outer_id: platformRoomTypeId,
             name: roomUpsertDraft.name.trim(),
-            bed_type: roomUpsertDraft.bedType.trim()
+            bed_type: roomUpsertDraft.bedType.trim(),
+            srid: roomUpsertDraft.srid.trim() || undefined
           }
         })
       });
@@ -638,7 +646,7 @@ export const FeizhuProductCenter: React.FC = () => {
     setError('');
     setNotice('');
     try {
-      await fetchWithAuth('/api/ota/product-center/hotels/delete', {
+      const result = await fetchWithAuth('/api/ota/product-center/hotels/delete', {
         method: 'POST',
         body: JSON.stringify({
           platform: 'FLIGGY',
@@ -648,7 +656,11 @@ export const FeizhuProductCenter: React.FC = () => {
           }
         })
       });
-      setNotice('酒店删除已执行');
+      const remoteDeleted = Boolean(result?.remoteDeleted);
+      const remoteError = String(result?.remoteError || '').trim();
+      setNotice(remoteDeleted
+        ? '酒店删除已同步飞猪'
+        : `酒店删除已执行，但飞猪删除失败${remoteError ? `：${remoteError}` : ''}`);
       setSelectedHotelId('');
       setSelectedRoomId('');
       setSelectedStrategyKey('');
@@ -672,7 +684,7 @@ export const FeizhuProductCenter: React.FC = () => {
     setError('');
     setNotice('');
     try {
-      await fetchWithAuth('/api/ota/product-center/room-types/delete', {
+      const result = await fetchWithAuth('/api/ota/product-center/room-types/delete', {
         method: 'POST',
         body: JSON.stringify({
           platform: 'FLIGGY',
@@ -686,7 +698,11 @@ export const FeizhuProductCenter: React.FC = () => {
           }
         })
       });
-      setNotice('房型删除已执行');
+      const remoteDeleted = Boolean(result?.remoteDeleted);
+      const remoteError = String(result?.remoteError || '').trim();
+      setNotice(remoteDeleted
+        ? '房型删除已同步飞猪'
+        : `房型删除已执行，但飞猪删除失败${remoteError ? `：${remoteError}` : ''}`);
       setSelectedRoomId('');
       setSelectedStrategyKey('');
       await loadTree();
@@ -805,113 +821,208 @@ export const FeizhuProductCenter: React.FC = () => {
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
             <div className="text-sm font-semibold text-gray-900">飞猪酒店 / 房型新增编辑</div>
+
             <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="text-sm font-semibold text-gray-900">亚朵酒店导入</div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                      value={atourKeyword}
+                      onChange={(e) => setAtourKeyword(e.target.value)}
+                      className="flex-1 rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="输入关键词搜索亚朵酒店"
+                  />
+                  <button
+                      type="button"
+                      onClick={handleAtourSearch}
+                      className="rounded border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-white"
+                  >
+                    {atourSearching ? '搜索中...' : '搜索'}
+                  </button>
+                </div>
+                {atourResults.length > 0 && (
+                    <div
+                        className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded border border-gray-100 bg-white p-2">
+                      {atourResults.map((item) => (
+                          <div
+                              key={`${item.id || ''}-${item.chainId || ''}-${item.title || ''}-${item.chainName || ''}`}
+                              className="flex items-center justify-between rounded border border-gray-100 px-2 py-2 text-xs">
+                            <div>
+                              <div className="font-medium text-gray-800">{getAtourPlaceName(item)}</div>
+                              <div className="font-mono text-[11px] text-gray-400">{item.chainId || '-'}</div>
+                              <div className="text-gray-500">{item.cityName || '-'} {item.address || ''}</div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleImportAtour(item)}
+                                className="rounded border border-blue-200 px-2 py-1 text-blue-700 hover:bg-blue-50"
+                            >
+                              导入
+                            </button>
+                          </div>
+                      ))}
+                    </div>
+                )}
+              </div>
               <div className="rounded border border-gray-200 bg-white p-3">
                 <div className="text-xs font-semibold text-gray-700">酒店信息</div>
                 <div className="mt-2 space-y-2">
+                  <label className="text-xs text-gray-500" htmlFor="hotel-outer-id">酒店 outer_id *</label>
                   <input
-                    value={hotelUpsertDraft.platformHotelId}
-                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, platformHotelId: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="酒店 outer_id"
+                      id="hotel-outer-id"
+                      value={hotelUpsertDraft.platformHotelId}
+                      onChange={(e) => setHotelUpsertDraft((prev) => ({...prev, platformHotelId: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="酒店 outer_id"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="hotel-name">酒店名称 *</label>
                   <input
-                    value={hotelUpsertDraft.name}
-                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, name: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="酒店名称"
+                      id="hotel-name"
+                      value={hotelUpsertDraft.name}
+                      onChange={(e) => setHotelUpsertDraft((prev) => ({...prev, name: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="酒店名称"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="hotel-city-id">城市编码 cityId</label>
                   <input
-                    value={hotelUpsertDraft.cityId}
-                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, cityId: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="城市编码 cityId(优先)"
+                      id="hotel-city-id"
+                      value={hotelUpsertDraft.cityId}
+                      onChange={(e) => setHotelUpsertDraft((prev) => ({...prev, cityId: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="城市编码 cityId(优先)"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="hotel-city-name">城市名称</label>
                   <input
-                    value={hotelUpsertDraft.city}
-                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, city: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="城市名称(自动匹配失败时可手填)"
+                      id="hotel-city-name"
+                      value={hotelUpsertDraft.city}
+                      onChange={(e) => setHotelUpsertDraft((prev) => ({...prev, city: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="城市名称(自动匹配失败时可手填)"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="hotel-address">酒店地址</label>
                   <input
-                    value={hotelUpsertDraft.address}
-                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, address: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="地址(可选)"
+                      id="hotel-address"
+                      value={hotelUpsertDraft.address}
+                      onChange={(e) => setHotelUpsertDraft((prev) => ({...prev, address: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="地址(可选)"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="hotel-tel">联系电话 tel *</label>
                   <input
-                    value={hotelUpsertDraft.tel}
-                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, tel: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="联系电话 tel(必填)"
+                      id="hotel-tel"
+                      value={hotelUpsertDraft.tel}
+                      onChange={(e) => setHotelUpsertDraft((prev) => ({...prev, tel: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="联系电话 tel(必填)"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="hotel-status">上下架状态</label>
                   <select
-                    value={hotelUpsertDraft.status}
-                    onChange={(e) => setHotelUpsertDraft((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      id="hotel-status"
+                      value={hotelUpsertDraft.status}
+                      onChange={(e) => setHotelUpsertDraft((prev) => ({...prev, status: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
                   >
                     <option value="ONLINE">ONLINE</option>
                     <option value="OFFLINE">OFFLINE</option>
                   </select>
                   <button
-                    type="button"
-                    disabled={hotelUpsertSaving}
-                    onClick={handleUpsertHotelInfo}
-                    className="rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      disabled={hotelUpsertSaving}
+                      onClick={handleUpsertHotelInfo}
+                      className="rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {hotelUpsertSaving ? '提交中...' : '提交酒店新增/编辑'}
                   </button>
                   <button
-                    type="button"
-                    disabled={hotelDeleteSaving}
-                    onClick={handleDeleteHotelInfo}
-                    className="rounded border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      disabled={hotelDeleteSaving}
+                      onClick={handleDeleteHotelInfo}
+                      className="rounded border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {hotelDeleteSaving ? '删除中...' : '删除酒店'}
                   </button>
                 </div>
               </div>
 
+              <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="text-sm font-semibold text-gray-900">酒店映射维护（SHID）</div>
+                <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-500" htmlFor="hotel-shid">SHID *</label>
+                    <input
+                        id="hotel-shid"
+                        value={hotelShid}
+                        onChange={(e) => setHotelShid(e.target.value)}
+                        className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                        placeholder="输入 SHID（先在左侧选择酒店）"
+                    />
+                  </div>
+                  <button
+                      type="button"
+                      disabled={mappingSaving}
+                      onClick={handleSaveHotelShid}
+                      className="rounded border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    保存 SHID
+                  </button>
+                </div>
+              </div>
               <div className="rounded border border-gray-200 bg-white p-3">
                 <div className="text-xs font-semibold text-gray-700">房型信息</div>
                 <div className="mt-2 space-y-2">
+                  <label className="text-xs text-gray-500" htmlFor="room-hotel-id">所属酒店 outer_id *</label>
                   <input
-                    value={roomUpsertDraft.platformHotelId}
-                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, platformHotelId: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="所属酒店 outer_id"
+                      id="room-hotel-id"
+                      value={roomUpsertDraft.platformHotelId}
+                      onChange={(e) => setRoomUpsertDraft((prev) => ({...prev, platformHotelId: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="所属酒店 outer_id"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="room-outer-id">房型 outer_id *</label>
                   <input
-                    value={roomUpsertDraft.platformRoomTypeId}
-                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, platformRoomTypeId: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="房型 outer_id (建议 ATOUR{chainId}_{roomTypeId})"
+                      id="room-outer-id"
+                      value={roomUpsertDraft.platformRoomTypeId}
+                      onChange={(e) => setRoomUpsertDraft((prev) => ({...prev, platformRoomTypeId: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="房型 outer_id (建议 ATOUR{chainId}_{roomTypeId})"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="room-name">房型名称 *</label>
                   <input
-                    value={roomUpsertDraft.name}
-                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, name: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="房型名称"
+                      id="room-name"
+                      value={roomUpsertDraft.name}
+                      onChange={(e) => setRoomUpsertDraft((prev) => ({...prev, name: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="房型名称"
                   />
+                  <label className="text-xs text-gray-500" htmlFor="room-bed-type">床型</label>
                   <input
-                    value={roomUpsertDraft.bedType}
-                    onChange={(e) => setRoomUpsertDraft((prev) => ({ ...prev, bedType: e.target.value }))}
-                    className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="床型(可选)"
+                      id="room-bed-type"
+                      value={roomUpsertDraft.bedType}
+                      onChange={(e) => setRoomUpsertDraft((prev) => ({...prev, bedType: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="床型(可选)"
+                  />
+                  <label className="text-xs text-gray-500" htmlFor="room-srid">SRID *</label>
+                  <input
+                      id="room-srid"
+                      value={roomUpsertDraft.srid}
+                      onChange={(e) => setRoomUpsertDraft((prev) => ({...prev, srid: e.target.value}))}
+                      className="w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                      placeholder="标准房型ID（srid）"
                   />
                   <button
-                    type="button"
-                    disabled={roomUpsertSaving}
-                    onClick={handleUpsertRoomTypeInfo}
-                    className="rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      disabled={roomUpsertSaving}
+                      onClick={handleUpsertRoomTypeInfo}
+                      className="rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {roomUpsertSaving ? '提交中...' : '提交房型新增/编辑'}
                   </button>
                   <button
-                    type="button"
-                    disabled={roomDeleteSaving}
-                    onClick={handleDeleteRoomTypeInfo}
-                    className="rounded border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      disabled={roomDeleteSaving}
+                      onClick={handleDeleteRoomTypeInfo}
+                      className="rounded border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {roomDeleteSaving ? '删除中...' : '删除房型'}
                   </button>
@@ -920,105 +1031,51 @@ export const FeizhuProductCenter: React.FC = () => {
             </div>
           </div>
 
-          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div className="text-sm font-semibold text-gray-900">亚朵酒店导入</div>
-            <div className="mt-2 flex gap-2">
-              <input
-                value={atourKeyword}
-                onChange={(e) => setAtourKeyword(e.target.value)}
-                className="flex-1 rounded border border-gray-200 px-2 py-2 text-sm"
-                placeholder="输入关键词搜索亚朵酒店"
-              />
-              <button
-                type="button"
-                onClick={handleAtourSearch}
-                className="rounded border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-white"
-              >
-                {atourSearching ? '搜索中...' : '搜索'}
-              </button>
-            </div>
-            {atourResults.length > 0 && (
-              <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded border border-gray-100 bg-white p-2">
-                {atourResults.map((item) => (
-                  <div key={`${item.id || ''}-${item.chainId || ''}-${item.title || ''}-${item.chainName || ''}`} className="flex items-center justify-between rounded border border-gray-100 px-2 py-2 text-xs">
-                    <div>
-                      <div className="font-medium text-gray-800">{getAtourPlaceName(item)}</div>
-                      <div className="font-mono text-[11px] text-gray-400">{item.chainId || '-'}</div>
-                      <div className="text-gray-500">{item.cityName || '-'} {item.address || ''}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleImportAtour(item)}
-                      className="rounded border border-blue-200 px-2 py-1 text-blue-700 hover:bg-blue-50"
-                    >
-                      导入
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div className="text-sm font-semibold text-gray-900">酒店映射维护（SHID）</div>
-            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
-              <input
-                value={hotelShid}
-                onChange={(e) => setHotelShid(e.target.value)}
-                className="rounded border border-gray-200 px-2 py-2 text-sm"
-                placeholder="输入 SHID（先在左侧选择酒店）"
-              />
-              <button
-                type="button"
-                disabled={mappingSaving}
-                onClick={handleSaveHotelShid}
-                className="rounded border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                保存 SHID
-              </button>
-            </div>
-          </div>
 
           <h2 className="text-sm font-semibold text-gray-900">策略编辑与发布</h2>
           {!selectedRoom ? (
-            <div className="mt-4 rounded border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
-              请先在左侧选择一个房型
-            </div>
+              <div
+                  className="mt-4 rounded border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+                请先在左侧选择一个房型
+              </div>
           ) : (
-            <div className="mt-4 space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <div className="text-xs text-gray-500">酒店</div>
-                  <div className="mt-1 rounded border border-gray-200 bg-gray-50 px-2 py-2 text-sm">
-                    {selectedHotel ? getHotelDisplayName(selectedHotel) : draft.platformHotelId}
-                    <span className="ml-2 text-xs text-gray-400">{draft.platformHotelId}</span>
+              <div className="mt-4 space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs text-gray-500">酒店</div>
+                    <div className="mt-1 rounded border border-gray-200 bg-gray-50 px-2 py-2 text-sm">
+                      {selectedHotel ? getHotelDisplayName(selectedHotel) : draft.platformHotelId}
+                      <span className="ml-2 text-xs text-gray-400">{draft.platformHotelId}</span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">房型</div>
-                  <div className="mt-1 rounded border border-gray-200 bg-gray-50 px-2 py-2 text-sm">
-                    {selectedRoom ? getRoomDisplayName(selectedRoom) : draft.platformRoomTypeId}
-                    <span className="ml-2 text-xs text-gray-400">{draft.platformRoomTypeId}</span>
+                  <div>
+                    <div className="text-xs text-gray-500">房型</div>
+                    <div className="mt-1 rounded border border-gray-200 bg-gray-50 px-2 py-2 text-sm">
+                      {selectedRoom ? getRoomDisplayName(selectedRoom) : draft.platformRoomTypeId}
+                      <span className="ml-2 text-xs text-gray-400">{draft.platformRoomTypeId}</span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500" htmlFor="rateplan-code">价格政策编码 *</label>
-                  <input
-                    id="rateplan-code"
-                    data-testid="input-rateplan-code"
-                    value={draft.rateCode}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, rateCode: e.target.value }))}
-                    className="mt-1 w-full rounded border border-gray-200 px-2 py-2 text-sm"
-                    placeholder="如：RATE_DEFAULT"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500" htmlFor="platform-channel">渠道</label>
-                  <input
-                    id="platform-channel"
-                    value={draft.platformChannel}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, platformChannel: e.target.value.toUpperCase() || 'DEFAULT' }))}
-                    className="mt-1 w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                  <div>
+                    <label className="text-xs text-gray-500" htmlFor="rateplan-code">价格政策编码 *</label>
+                    <input
+                        id="rateplan-code"
+                        data-testid="input-rateplan-code"
+                        value={draft.rateCode}
+                        onChange={(e) => setDraft((prev) => ({...prev, rateCode: e.target.value}))}
+                        className="mt-1 w-full rounded border border-gray-200 px-2 py-2 text-sm"
+                        placeholder="如：RATE_DEFAULT"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500" htmlFor="platform-channel">渠道</label>
+                    <input
+                        id="platform-channel"
+                        value={draft.platformChannel}
+                        onChange={(e) => setDraft((prev) => ({
+                          ...prev,
+                          platformChannel: e.target.value.toUpperCase() || 'DEFAULT'
+                        }))}
+                        className="mt-1 w-full rounded border border-gray-200 px-2 py-2 text-sm"
                     placeholder="DEFAULT"
                   />
                 </div>

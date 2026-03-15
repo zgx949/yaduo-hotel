@@ -513,7 +513,8 @@ test("POST /api/ota/product-center/room-types/upsert returns PUBLISH_DISABLED wh
       product: {
         platformHotelId: `H-UPSERT-${suffix}`,
         platformRoomTypeId: `ATOURH-UPSERT-${suffix}_${suffix}`,
-        name: `Room Upset ${suffix}`
+        name: `Room Upset ${suffix}`,
+        srid: `SRID-${suffix}`
       }
     });
 

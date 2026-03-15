@@ -536,7 +536,7 @@ export const taobaoTopAdapter = {
 
     const request = {
       ...body,
-      hid: body.hid || body.hotel_id || platformHotelId || undefined,
+      out_hid: body.hid || body.hotel_id || platformHotelId || undefined,
       out_rid: body.out_rid || body.outRid || platformRoomTypeId || undefined,
       outer_id: body.outer_id || platformRoomTypeId || undefined,
       name: body.name || body.roomTypeName || undefined,
@@ -544,9 +544,7 @@ export const taobaoTopAdapter = {
       vendor: body.vendor || undefined
     };
 
-    const response =
-      (await tryExecute("taobao.xhotel.roomtype.add", request)) ||
-      (await execute("taobao.xhotel.roomtype.update", request));
+    const response = await execute("taobao.xhotel.roomtype.add", request);
 
     return {
       ok: true,
